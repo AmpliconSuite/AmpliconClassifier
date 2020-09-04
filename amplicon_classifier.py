@@ -2,6 +2,7 @@
 
 import argparse
 from collections import defaultdict
+import copy
 from math import log
 import operator
 import os
@@ -66,7 +67,7 @@ def isRearranged(cycle, segSeqD):
     # check if it contains regions from multiple chroms
     chromList = [segSeqD[abs(ind)][0] for ind in cycle if ind != 0]
     if len(set(chromList)) > 1:
-        print("multichrom")
+        #print("multichrom")
         return True
 
     max_del_size = 0
@@ -74,22 +75,22 @@ def isRearranged(cycle, segSeqD):
         if cycle[i] == 0 or cycle[i + 1] == 0:
             continue
         if cycle[i] < 0 and cycle[i + 1] > 0 or cycle[i] > 0 and cycle[i + 1] < 0:
-            print(cycle[i], cycle[i + 1])
-            print("alternating dir")
+            # print(cycle[i], cycle[i + 1])
+            # print("alternating dir")
             return True
 
         dist_diff = get_diff(cycle[i], cycle[i + 1], segSeqD)
-        print(dist_diff)
+        # print(dist_diff)
         max_del_size = max(dist_diff, max_del_size)
         # tot_del_size += dist_diff
         # if tot_del_size > tot_min_del:
         #     print("Delsize")
         #     return True
     if max_del_size > tot_min_del:
-        print("rearranged")
+        # print("rearranged")
         return True
 
-    print("not rearranged")
+    # print("not rearranged")
     return False
 
 
@@ -208,23 +209,35 @@ def compute_f_from_AA_graph(graphf, add_chr_tag):
     return fbCount / max(1.0, fbCount + nonFbCount), maxCN
 
 
+def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs):
+    for ind in non_bfb_cycle_inds:
+        cycle = cycleList[ind]
+        length = get_size(cycle, segSeqD)
+        print(cycle, length, cycleCNs[ind])
+
+        if length > minCycleSize and cycleCNs[ind] > 5:
+            return True
+
+    return False
+
+
 # proportion of cycles with foldbacks
-def cycles_file_foldback_props(cycleList, segSeqD, cycleCNs):
+def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs):
     FB_breaks = 0.0
     distal_breaks = 0.0
     lin_breaks = 0.0
 
     bfb_weight = 0.0
-    nonBFB_cycle_weight = 0.0
+    non_bfb_cycle_weight = 0.0
     tot_bfb_supp_cycles = 0
 
-    for ind, cycle in enumerate(cycleList):
+    non_bfb_cycle_inds = []
+
+    for ind, ocycle in enumerate(cycleList):
+        cycle = copy.copy(ocycle)
         if cycle[0] != 0:
             cycle.append(cycle[0])
-        # if len(cycle) == 1:
 
-        # fbSupport = 0
-        # nfbSupport = 0
         hit = False
         isBFBelem = False
         for a, b in zip(cycle[:-1], cycle[1:]):
@@ -251,17 +264,16 @@ def cycles_file_foldback_props(cycleList, segSeqD, cycleCNs):
             bfb_weight += cycleCNs[ind]
 
         elif cycle[0] != 0 and get_size(cycle[:-1], segSeqD) > 30000:
-            nonBFB_cycle_weight += cycleCNs[ind]
+            non_bfb_cycle_weight += cycleCNs[ind]
+            non_bfb_cycle_inds.append(ind)
 
-        # else:
-        #     print(cycle)
-        #     tot_distal_breaks += cycleCNs[ind]
+    hasEC = nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs)
 
     if FB_breaks > 1.5 and tot_bfb_supp_cycles > 1:
         tot = FB_breaks + distal_breaks + lin_breaks
-        return FB_breaks / tot, distal_breaks / tot, bfb_weight / (nonBFB_cycle_weight + bfb_weight)
+        return FB_breaks / tot, distal_breaks / tot, bfb_weight / (non_bfb_cycle_weight + bfb_weight), hasEC
 
-    return 0, 0, 0
+    return 0, 0, 0, False
 
 
 # ------------------------------------------------------------
@@ -276,7 +288,7 @@ def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN):
         scale = 2.5
 
     if (cn <= scale) or (maxCN < min_upper_cn):
-        print("invalid", cycle, cn, isSingleton, maxCN)
+        #print("invalid", cycle, cn, isSingleton, maxCN)
         return True
 
     length = get_size(cycle, segSeqD)
@@ -340,10 +352,10 @@ def classifyBFB(fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN):
         return None
 
     if bfb_cyc_ratio < 0.85:
-        if nonbfb_sig > 0.55:
-            return None
+        # if nonbfb_sig > 0.55:
+        #     return None
 
-        elif args.use_BFB_linked_cyclic_class:
+        if args.use_BFB_linked_cyclic_class:
             return "BFB-linked cyclic"
 
 
@@ -400,14 +412,14 @@ def parseCycle(cyclef, add_chr_tag):
                 cd = dict(cf)
                 ss = cd["Segments"]
                 num_ss = [int(x[-1] + x[:-1]) for x in ss.rsplit(",")]
-                print(num_ss)
+                #print(num_ss)
                 # if any([segSeqD[abs(x)][0] == "hs37d5" for x in num_ss if x != 0]):
                 #     continue
                 lcCycle = False
                 for seg in num_ss:
                     t = segSeqD[abs(seg)]
                     if lcD[t[0]].overlaps(t[1], t[2]):
-                        print("Cycle was LC", str(t[0]), str(t[1]), str(t[2]))
+                        #print("Cycle was LC", str(t[0]), str(t[1]), str(t[2]))
                         lcCycle = True
                         break
 
@@ -621,7 +633,7 @@ if __name__ == "__main__":
         rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
         totalCompCyclicCont = 0
         for ind, cycle in enumerate(cycleList):
-            print("cycle", ind + 1)
+            #print("cycle", ind + 1)
             hasNonCircLen1 = True if len(cycle) == 3 and cycle[0] == 0 else False
             oneCycle = (len(cycleList) == 1)
             isSingleton = hasNonCircLen1 or oneCycle
@@ -659,7 +671,7 @@ if __name__ == "__main__":
         # first compute some properties
         fb_prop, maxCN = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
 
-        fb_bwp, nfb_bwp, bfb_cwp = cycles_file_foldback_props(cycleList, segSeqD, cycleCNs)
+        fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC = cycles_file_bfb_props(cycleList, segSeqD, cycleCNs)
         # "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp"
         AMP_dvaluesDict["foldback_read_prop"] = fb_prop
         AMP_dvaluesDict["BFB_bwp"] = fb_bwp
@@ -668,10 +680,20 @@ if __name__ == "__main__":
 
         bfbClass = classifyBFB(fb_prop, fb_bwp, nfb_bwp, bfb_cwp, maxCN)
 
-        if bfbClass:
-            ampClass = bfbClass
+        ecStat = "None detected"
+        bfbStat = "None detected"
+        if ampClass == "Cyclic" and not bfbClass:
+            ecStat = "Positive"
 
-        AMP_classifications.append(ampClass)
+        elif bfbClass:
+            bfbStat = "Positive"
+            if bfbHasEC:
+                print("hasec")
+                ecStat = "Positive"
+
+            #ampClass = bfbClass
+
+        AMP_classifications.append((ampClass, ecStat, bfbStat))
 
         dvalues = [AMP_dvaluesDict[x] for x in categories]
         AMP_dvaluesList.append(dvalues)
@@ -717,13 +739,13 @@ if __name__ == "__main__":
     # print(len(AMP_dvaluesList[-1]),len(EDGE_dvaluesList[-1]))
     with open(args.o + "_amplicon_classification_profiles.tsv", 'w') as outfile:
         # outfile.write("#Amplicon classifications\n")
-        outfile.write("\t".join(["sample_name", "amplicon_number", "amplicon_classification"] + categories) + "\n")
+        outfile.write("\t".join(["sample_name", "amplicon_number", "amplicon_classification", "ecDNA+", "BFB+"] + categories) + "\n")
         for ind, sname in enumerate(sampNames):
             ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
             # print([str(x) for x in AMP_dvaluesList[ind]])
-            ampClass = AMP_classifications[ind]
+            ampClass, ecStat, bfbStat = AMP_classifications[ind]
             outfile.write("\t".join(
-                [sname.rsplit("_amplicon")[0], ampN, ampClass] + [str(x) for x in AMP_dvaluesList[ind]]) + "\n")
+                [sname.rsplit("_amplicon")[0], ampN, ampClass, ecStat, bfbStat] + [str(x) for x in AMP_dvaluesList[ind]]) + "\n")
 
     with open(args.o + "_edge_classification_profiles.tsv", 'w') as outfile:
         # outfile.write("#Edge classifications\n")
