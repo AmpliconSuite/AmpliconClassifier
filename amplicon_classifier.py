@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+__version__ = "0.2.1"
+__author__ = "Jens Luebeck"
+
 import argparse
 from collections import defaultdict
 import copy
@@ -215,7 +218,7 @@ def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs):
         length = get_size(cycle, segSeqD)
         print(cycle, length, cycleCNs[ind])
 
-        if length > minCycleSize and cycleCNs[ind] > 5:
+        if length > 100000 and cycleCNs[ind] > 5:
             return True
 
     return False
@@ -240,9 +243,15 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs):
 
         hit = False
         isBFBelem = False
+        illegalBFB = False
         for a, b in zip(cycle[:-1], cycle[1:]):
             # changes direction on same chrom
             diff = get_diff(a, b, segSeqD)
+            aSize = get_size([a,], segSeqD)
+            bSize = get_size([b,], segSeqD)
+            if aSize < minCycleSize and bSize < minCycleSize:
+                continue
+
             if a * b < 0 and segSeqD[abs(a)][0] == segSeqD[abs(b)][0]:
                 hit = True
                 if diff < 50000:
@@ -255,6 +264,12 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs):
             elif diff > tot_min_del:
                 hit = True
                 distal_breaks += cycleCNs[ind]
+
+            if segSeqD[abs(a)][0] != segSeqD[abs(b)][0] and not (a == 0 or b == 0):
+                illegalBFB = True
+
+        if illegalBFB:
+            isBFBelem = False
 
         if cycle[0] == 0 and not hit:
             lin_breaks += cycleCNs[ind]
@@ -269,11 +284,18 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs):
 
     hasEC = nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs)
 
-    if FB_breaks > 1.5 and tot_bfb_supp_cycles > 1:
-        tot = FB_breaks + distal_breaks + lin_breaks
-        return FB_breaks / tot, distal_breaks / tot, bfb_weight / (non_bfb_cycle_weight + bfb_weight), hasEC
+    # if len(cycleList) >= 5:
+    #     minBFBCyclesRequired = 2
+    # else:
+    minBFBCyclesRequired = 2
 
-    return 0, 0, 0, False
+
+    if FB_breaks > 1.5 and tot_bfb_supp_cycles >= minBFBCyclesRequired:
+        tot = FB_breaks + distal_breaks + lin_breaks
+        return FB_breaks / tot, distal_breaks / tot, bfb_weight / (non_bfb_cycle_weight + bfb_weight), hasEC, \
+               non_bfb_cycle_inds
+
+    return 0, 0, 0, False, []
 
 
 # ------------------------------------------------------------
@@ -348,26 +370,35 @@ def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCycCont, force=False)
 
 
 def classifyBFB(fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN):
-    if fb < min_score_for_bfb or cyc_sig < 0.3 or maxCN < 4:
+    if fb < min_score_for_bfb or cyc_sig < 0.295 or maxCN < 4:
         return None
 
-    if bfb_cyc_ratio < 0.85:
-        # if nonbfb_sig > 0.55:
-        #     return None
+    # dominated by non-classical BFB cycles
+    elif nonbfb_sig > 0.5 and bfb_cyc_ratio < 0.6:
+        return None
 
-        if args.use_BFB_linked_cyclic_class:
-            return "BFB-linked cyclic"
-
+    # if bfb_cyc_ratio < 0.85:
+    #     # if nonbfb_sig > 0.55:
+    #     #     return None
+    #
+    #     if args.use_BFB_linked_cyclic_class:
+    #         return "BFB-linked cyclic"
 
     return "BFB"
 
 
-# TODO: Implement
-# def hasLowNonBFBSig(bfb_cyc_ratio, nonbfb_sig, cycles):
-#     if bfb_cyc_ratio < 0.85 and nonbfb_sig > 0.55:
-#         return False
+# ------------------------------------------------------------
+# # structure metanalysis
+# def clusterECCycles(cycleList, segSeqD, predefinedCycleIndexList = None):
+#     if predefinedCycleIndexList is None:
+#         indices = range(len(cycleList))
 #
-#     # check for multichromosomal cycles over
+#     else:
+#         indices = predefinedCycleIndexList
+#     
+#     for ind in indices:
+#
+
 
 
 # ------------------------------------------------------------
@@ -568,8 +599,8 @@ if __name__ == "__main__":
     parser.add_argument("--plotStyle", help="Type of visualizations to produce",
                         choices=["grouped", "individual", "noplot"], default="noplot")
     parser.add_argument("--force", help="Disable No amp/Invalid class if possible", action='store_true')
-    parser.add_argument("--use_BFB_linked_cyclic_class", help="Include the \'BFB-linked cyclic\' class",
-                        action='store_true')
+    # parser.add_argument("--use_BFB_linked_cyclic_class", help="Include the \'BFB-linked cyclic\' class",
+    #                     action='store_true')
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files",
                         action='store_true')
 
@@ -671,7 +702,7 @@ if __name__ == "__main__":
         # first compute some properties
         fb_prop, maxCN = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
 
-        fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC = cycles_file_bfb_props(cycleList, segSeqD, cycleCNs)
+        fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC, non_bfb_cycle_inds = cycles_file_bfb_props(cycleList, segSeqD, cycleCNs)
         # "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp"
         AMP_dvaluesDict["foldback_read_prop"] = fb_prop
         AMP_dvaluesDict["BFB_bwp"] = fb_bwp
@@ -692,6 +723,7 @@ if __name__ == "__main__":
                 ecStat = "Positive"
 
             #ampClass = bfbClass
+        # now
 
         AMP_classifications.append((ampClass, ecStat, bfbStat))
 
