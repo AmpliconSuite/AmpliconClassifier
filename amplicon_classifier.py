@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.2.1"
+__version__ = "0.2.3"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -235,6 +235,7 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs):
     tot_bfb_supp_cycles = 0
 
     non_bfb_cycle_inds = []
+    bfb_cycle_inds = []
 
     for ind, ocycle in enumerate(cycleList):
         cycle = copy.copy(ocycle)
@@ -277,6 +278,7 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs):
         if isBFBelem:
             tot_bfb_supp_cycles += 1
             bfb_weight += cycleCNs[ind]
+            bfb_cycle_inds.append(ind)
 
         elif cycle[0] != 0 and get_size(cycle[:-1], segSeqD) > 30000:
             non_bfb_cycle_weight += cycleCNs[ind]
@@ -293,9 +295,9 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs):
     if FB_breaks > 1.5 and tot_bfb_supp_cycles >= minBFBCyclesRequired:
         tot = FB_breaks + distal_breaks + lin_breaks
         return FB_breaks / tot, distal_breaks / tot, bfb_weight / (non_bfb_cycle_weight + bfb_weight), hasEC, \
-               non_bfb_cycle_inds
+               non_bfb_cycle_inds, bfb_cycle_inds
 
-    return 0, 0, 0, False, []
+    return 0, 0, 0, False, [], []
 
 
 # ------------------------------------------------------------
@@ -389,16 +391,61 @@ def classifyBFB(fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN):
 
 # ------------------------------------------------------------
 # # structure metanalysis
-# def clusterECCycles(cycleList, segSeqD, predefinedCycleIndexList = None):
-#     if predefinedCycleIndexList is None:
-#         indices = range(len(cycleList))
-#
-#     else:
-#         indices = predefinedCycleIndexList
-#     
-#     for ind in indices:
-#
+def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices = None):
+    padding = 500000
+    indices = [x for x in range(len(cycleList)) if cycleList[x][0] != 0 and x not in excludableCycleIndices]
+    clusters = []
+    seenSegs = set()
+    for ind in indices:
+        cycle = cycleList[ind]
+        if cycleCNs[ind] < args.min_cn_flow:
+            continue
 
+        cIndsToMerge = set()
+        s_set = set([segSeqD[abs(s_num)] for s_num in cycle])
+        s_set -= seenSegs
+        if not s_set:
+            continue
+
+        for c_ind, clust_dict in enumerate(clusters):
+            for s in s_set:
+                if clust_dict[s[0]][s[1]-padding:s[2]+padding]:
+                    cIndsToMerge.add(c_ind)
+                    break
+
+        # if cIndsToMerge:
+        #     for s in s_set:
+        #         clusters[cIndsToMerge
+        newClusters = []
+        newClust = defaultdict(IntervalTree)
+        for s in s_set:
+            newClust[s[0]].addi(s[1],s[2], ind)
+
+        for c_ind, currClust in enumerate(clusters):
+            if c_ind in cIndsToMerge:
+                for k, v in currClust.items():
+                    for ival in v:
+                        newClust[k].addi(ival.begin, ival.end, ival.data)
+
+
+            else:
+                newClusters.append(currClust)
+
+        newClusters.append(newClust)
+        clusters = newClusters
+        seenSegs |= s_set
+
+    indexClusters = []
+    # extract only the cycle indices from each cluster and return
+    for clust in clusters:
+        currIndexSet = set()
+        for k, v in clust.items():
+            for ival in v:
+                currIndexSet.add(ival.data + 1) # set to 1-based
+
+        indexClusters.append(currIndexSet)
+
+    return indexClusters
 
 
 # ------------------------------------------------------------
@@ -660,6 +707,7 @@ if __name__ == "__main__":
 
         cycleTypes = []
         cycleWeights = []
+        invalidInds = []
         fb_prop, maxCN = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
         rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
         totalCompCyclicCont = 0
@@ -669,6 +717,7 @@ if __name__ == "__main__":
             oneCycle = (len(cycleList) == 1)
             isSingleton = hasNonCircLen1 or oneCycle
             if cycleIsNoAmpInvalid(cycle, cycleCNs[ind], segSeqD, isSingleton, maxCN) and not args.force:
+                invalidInds.append(ind)
                 cycleTypes.append("No amp/Invalid")
 
             else:
@@ -702,7 +751,8 @@ if __name__ == "__main__":
         # first compute some properties
         fb_prop, maxCN = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
 
-        fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC, non_bfb_cycle_inds = cycles_file_bfb_props(cycleList, segSeqD, cycleCNs)
+        fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC, non_bfb_cycle_inds,\
+                                                    bfb_cycle_inds = cycles_file_bfb_props(cycleList, segSeqD, cycleCNs)
         # "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp"
         AMP_dvaluesDict["foldback_read_prop"] = fb_prop
         AMP_dvaluesDict["BFB_bwp"] = fb_bwp
@@ -724,8 +774,16 @@ if __name__ == "__main__":
 
             #ampClass = bfbClass
         # now
+        if ecStat == "Positive":
+            excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
+            ecIndexClusters = clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices)
+            print(ecIndexClusters)
+            ecAmpliconCount = len(ecIndexClusters)
 
-        AMP_classifications.append((ampClass, ecStat, bfbStat))
+        else:
+            ecAmpliconCount = 0
+
+        AMP_classifications.append((ampClass, ecStat, bfbStat, ecAmpliconCount))
 
         dvalues = [AMP_dvaluesDict[x] for x in categories]
         AMP_dvaluesList.append(dvalues)
@@ -771,13 +829,14 @@ if __name__ == "__main__":
     # print(len(AMP_dvaluesList[-1]),len(EDGE_dvaluesList[-1]))
     with open(args.o + "_amplicon_classification_profiles.tsv", 'w') as outfile:
         # outfile.write("#Amplicon classifications\n")
-        outfile.write("\t".join(["sample_name", "amplicon_number", "amplicon_classification", "ecDNA+", "BFB+"] + categories) + "\n")
+        outfile.write("\t".join(["sample_name", "amplicon_number", "amplicon_classification", "ecDNA+", "BFB+", "ecDNA_amplicons"] + categories) + "\n")
         for ind, sname in enumerate(sampNames):
             ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
             # print([str(x) for x in AMP_dvaluesList[ind]])
-            ampClass, ecStat, bfbStat = AMP_classifications[ind]
+            ampClass, ecStat, bfbStat, ecAmpliconCount = AMP_classifications[ind]
             outfile.write("\t".join(
-                [sname.rsplit("_amplicon")[0], ampN, ampClass, ecStat, bfbStat] + [str(x) for x in AMP_dvaluesList[ind]]) + "\n")
+                [sname.rsplit("_amplicon")[0], ampN, ampClass, ecStat, bfbStat, str(ecAmpliconCount)] +
+                [str(x) for x in AMP_dvaluesList[ind]]) + "\n")
 
     with open(args.o + "_edge_classification_profiles.tsv", 'w') as outfile:
         # outfile.write("#Edge classifications\n")
