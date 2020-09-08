@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.2.3"
+__version__ = "0.2.4"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -778,7 +778,7 @@ if __name__ == "__main__":
             excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
             ecIndexClusters = clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices)
             print(ecIndexClusters)
-            ecAmpliconCount = len(ecIndexClusters)
+            ecAmpliconCount = max(len(ecIndexClusters),1)
 
         else:
             ecAmpliconCount = 0
