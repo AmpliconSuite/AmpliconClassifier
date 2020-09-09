@@ -419,7 +419,7 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices = None)
         newClusters = []
         newClust = defaultdict(IntervalTree)
         for s in s_set:
-            newClust[s[0]].addi(s[1],s[2], ind)
+            newClust[s[0]].addi(s[1],s[2]+1, ind)
 
         for c_ind, currClust in enumerate(clusters):
             if c_ind in cIndsToMerge:
