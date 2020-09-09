@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.2.4"
+__version__ = "0.2.5"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -70,7 +70,7 @@ def isRearranged(cycle, segSeqD):
     # check if it contains regions from multiple chroms
     chromList = [segSeqD[abs(ind)][0] for ind in cycle if ind != 0]
     if len(set(chromList)) > 1:
-        #print("multichrom")
+        # print("multichrom")
         return True
 
     max_del_size = 0
@@ -131,19 +131,19 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD):
             if line.startswith("sequence"):
                 fields = line.rsplit()
                 cn = float(fields[3])
-                size = float(fields[5])/1000
+                size = float(fields[5]) / 1000.
                 # if cn > 1:
-                segs+=1
-                totalGraphWeight += (size*cn)
+                segs += 1
+                totalGraphWeight += (size * cn)
 
             elif line.startswith("BreakpointEdge"):
                 break
 
-    cycleWeights = [0]*len(cycleList)
+    cycleWeights = [0] * len(cycleList)
     for ind, cycle in enumerate(cycleList):
         cycleWeights[ind] = weightedCycleAmount(cycle, cycleCNs[ind], segSeqD)
 
-    #scW = sorted(cycleWeights, reverse=True)
+    # scW = sorted(cycleWeights, reverse=True)
 
     # cf = cycleWeights[0]/totalGraphWeight
     cf = 0
@@ -153,16 +153,16 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD):
     while cf + added_cf < hf_cut and cInd < len(cycleWeights):
         cf += added_cf
         if added_cf > 0:
-            fe_ent += (added_cf*log(added_cf))
+            fe_ent += (added_cf * log(added_cf))
 
-        added_cf = cycleWeights[cInd]/totalGraphWeight
+        added_cf = cycleWeights[cInd] / float(totalGraphWeight)
         cInd += 1
 
     rf = (1 - cf)
-    fu_ent = -1*rf*log(rf)
+    fu_ent = -1 * rf * log(rf)
 
-    seg_ent = log(1/segs)
-    return fu_ent - fe_ent - seg_ent, fu_ent - fe_ent, -1*seg_ent
+    seg_ent = log(1.0 / segs)
+    return fu_ent - fe_ent - seg_ent, fu_ent - fe_ent, -1 * seg_ent
 
 
 # Compute f (foldback fraction) from the edges in the AA graph alone
@@ -248,8 +248,8 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs):
         for a, b in zip(cycle[:-1], cycle[1:]):
             # changes direction on same chrom
             diff = get_diff(a, b, segSeqD)
-            aSize = get_size([a,], segSeqD)
-            bSize = get_size([b,], segSeqD)
+            aSize = get_size([a, ], segSeqD)
+            bSize = get_size([b, ], segSeqD)
             if aSize < minCycleSize and bSize < minCycleSize:
                 continue
 
@@ -291,9 +291,8 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs):
     # else:
     minBFBCyclesRequired = 2
 
-
     if FB_breaks > 1.5 and tot_bfb_supp_cycles >= minBFBCyclesRequired:
-        tot = FB_breaks + distal_breaks + lin_breaks
+        tot = float(FB_breaks + distal_breaks + lin_breaks)
         return FB_breaks / tot, distal_breaks / tot, bfb_weight / (non_bfb_cycle_weight + bfb_weight), hasEC, \
                non_bfb_cycle_inds, bfb_cycle_inds
 
@@ -312,7 +311,7 @@ def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN):
         scale = 2.5
 
     if (cn <= scale) or (maxCN < min_upper_cn):
-        #print("invalid", cycle, cn, isSingleton, maxCN)
+        # print("invalid", cycle, cn, isSingleton, maxCN)
         return True
 
     length = get_size(cycle, segSeqD)
@@ -391,7 +390,7 @@ def classifyBFB(fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN):
 
 # ------------------------------------------------------------
 # # structure metanalysis
-def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices = None):
+def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices=None):
     padding = 500000
     indices = [x for x in range(len(cycleList)) if cycleList[x][0] != 0 and x not in excludableCycleIndices]
     clusters = []
@@ -409,7 +408,7 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices = None)
 
         for c_ind, clust_dict in enumerate(clusters):
             for s in s_set:
-                if clust_dict[s[0]][s[1]-padding:s[2]+padding]:
+                if clust_dict[s[0]][s[1] - padding:s[2] + padding]:
                     cIndsToMerge.add(c_ind)
                     break
 
@@ -419,7 +418,7 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices = None)
         newClusters = []
         newClust = defaultdict(IntervalTree)
         for s in s_set:
-            newClust[s[0]].addi(s[1],s[2]+1, ind)
+            newClust[s[0]].addi(s[1], s[2] + 1, ind)
 
         for c_ind, currClust in enumerate(clusters):
             if c_ind in cIndsToMerge:
@@ -441,7 +440,7 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices = None)
         currIndexSet = set()
         for k, v in clust.items():
             for ival in v:
-                currIndexSet.add(ival.data + 1) # set to 1-based
+                currIndexSet.add(ival.data + 1)  # set to 1-based
 
         indexClusters.append(currIndexSet)
 
@@ -490,14 +489,14 @@ def parseCycle(cyclef, add_chr_tag):
                 cd = dict(cf)
                 ss = cd["Segments"]
                 num_ss = [int(x[-1] + x[:-1]) for x in ss.rsplit(",")]
-                #print(num_ss)
+                # print(num_ss)
                 # if any([segSeqD[abs(x)][0] == "hs37d5" for x in num_ss if x != 0]):
                 #     continue
                 lcCycle = False
                 for seg in num_ss:
                     t = segSeqD[abs(seg)]
                     if lcD[t[0]].overlaps(t[1], t[2]):
-                        #print("Cycle was LC", str(t[0]), str(t[1]), str(t[2]))
+                        # print("Cycle was LC", str(t[0]), str(t[1]), str(t[2]))
                         lcCycle = True
                         break
 
@@ -712,7 +711,7 @@ if __name__ == "__main__":
         rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
         totalCompCyclicCont = 0
         for ind, cycle in enumerate(cycleList):
-            #print("cycle", ind + 1)
+            # print("cycle", ind + 1)
             hasNonCircLen1 = True if len(cycle) == 3 and cycle[0] == 0 else False
             oneCycle = (len(cycleList) == 1)
             isSingleton = hasNonCircLen1 or oneCycle
@@ -751,8 +750,8 @@ if __name__ == "__main__":
         # first compute some properties
         fb_prop, maxCN = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
 
-        fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC, non_bfb_cycle_inds,\
-                                                    bfb_cycle_inds = cycles_file_bfb_props(cycleList, segSeqD, cycleCNs)
+        fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC, non_bfb_cycle_inds, \
+        bfb_cycle_inds = cycles_file_bfb_props(cycleList, segSeqD, cycleCNs)
         # "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp"
         AMP_dvaluesDict["foldback_read_prop"] = fb_prop
         AMP_dvaluesDict["BFB_bwp"] = fb_bwp
@@ -772,13 +771,13 @@ if __name__ == "__main__":
                 print("hasec")
                 ecStat = "Positive"
 
-            #ampClass = bfbClass
+            # ampClass = bfbClass
         # now
         if ecStat == "Positive":
             excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
             ecIndexClusters = clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices)
             print(ecIndexClusters)
-            ecAmpliconCount = max(len(ecIndexClusters),1)
+            ecAmpliconCount = max(len(ecIndexClusters), 1)
 
         else:
             ecAmpliconCount = 0
@@ -809,19 +808,22 @@ if __name__ == "__main__":
         EDGE_dvaluesList.append(dvalues)
 
     textCategories = ["No amp/Invalid", "Linear\namplification", "Trivial\ncycle", "Complex\nnon-cyclic",
-                      "Complex\ncyclic","BFB\nfoldback"]
+                      "Complex\ncyclic", "BFB\nfoldback"]
     if args.plotStyle == "grouped":
         from radar_plotting import *
+
         print("plotting")
         make_classification_radar(textCategories, AMP_dvaluesList, args.o + "_amp_class", sampNames)
         make_classification_radar(mixing_cats, EDGE_dvaluesList, args.o + "_edge_class", sampNames)
 
     elif args.plotStyle == "individual":
         from radar_plotting import *
+
         print("plotting")
         for a, e, s in zip(AMP_dvaluesList, EDGE_dvaluesList, sampNames):
             print(textCategories, a)
-            make_classification_radar(textCategories, [a[:len(textCategories)], ], args.o + "_" + s + "_amp_class", sampNames)
+            make_classification_radar(textCategories, [a[:len(textCategories)], ], args.o + "_" + s + "_amp_class",
+                                      sampNames)
             make_classification_radar(mixing_cats, [e, ], args.o + "_" + s + "_edge_class", sampNames)
 
     print("writing output files")
@@ -829,7 +831,8 @@ if __name__ == "__main__":
     # print(len(AMP_dvaluesList[-1]),len(EDGE_dvaluesList[-1]))
     with open(args.o + "_amplicon_classification_profiles.tsv", 'w') as outfile:
         # outfile.write("#Amplicon classifications\n")
-        outfile.write("\t".join(["sample_name", "amplicon_number", "amplicon_classification", "ecDNA+", "BFB+", "ecDNA_amplicons"] + categories) + "\n")
+        outfile.write("\t".join(["sample_name", "amplicon_number", "amplicon_classification", "ecDNA+", "BFB+",
+                                 "ecDNA_amplicons"] + categories) + "\n")
         for ind, sname in enumerate(sampNames):
             ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
             # print([str(x) for x in AMP_dvaluesList[ind]])
