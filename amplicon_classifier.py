@@ -398,7 +398,7 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices = None)
     seenSegs = set()
     for ind in indices:
         cycle = cycleList[ind]
-        if cycleCNs[ind] < args.min_cn_flow:
+        if cycleCNs[ind] < args.min_cn_flow and get_size(cycle, segSeqD) < minCycleSize:
             continue
 
         cIndsToMerge = set()
