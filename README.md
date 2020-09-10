@@ -46,6 +46,7 @@ OR running on multiple amplicons
 
 Other arguments
 - `--ref [hg19, GRCh37 or GRCh38]`: (Required) Choose reference genome version used in generating AA output.
+- `-v/--version`: Print version ane exit.
 - `-o`: Output filename prefix. Default is prefix of `-i` or `-c`.
 - `--add_chr_tag`: If you have a mix of hg19 and GRCh37 amplicons, you can set `--ref hg19` and `--add_chr_tag` to classify them all together.
 - `--min_cn_flow`: Minumum cycle CN flow to consider as an amplification (default=1).

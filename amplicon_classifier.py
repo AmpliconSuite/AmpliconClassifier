@@ -649,8 +649,13 @@ if __name__ == "__main__":
     #                     action='store_true')
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files",
                         action='store_true')
+    parser.add_argument("-v", "--version", action='version', version='amplicon_classifier {version} \n Author: Jens \
+                        Luebeck (jluebeck [at] ucsd.edu)'.format(version=__version__))
 
     args = parser.parse_args()
+
+    if args.v:
+        print("AmpliconClassifier version " + __version__ + "\nAuthor: Jens Luebeck\nContact: jluebeck [at] ucsd.edu")
 
     if not (args.cycles and args.graph) and not args.input:
         print("Need to specify (--cycles & --graph) or --input\n")
