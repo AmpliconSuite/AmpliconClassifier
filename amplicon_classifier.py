@@ -654,9 +654,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.v:
-        print("AmpliconClassifier version " + __version__ + "\nAuthor: Jens Luebeck\nContact: jluebeck [at] ucsd.edu")
-
     if not (args.cycles and args.graph) and not args.input:
         print("Need to specify (--cycles & --graph) or --input\n")
         sys.exit(1)
