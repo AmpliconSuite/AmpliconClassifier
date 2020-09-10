@@ -2,7 +2,7 @@
 
 #### Classify AmpliconArchitect output to determine types of focal amplification is present.
 
-**Current version: 0.2.5**
+**Current version: 0.2.5 (stable)**
 
 For the legacy version used in Kim et al., *Nature Genetics*, 2020 please see the scripts and REAMDE in the legacy_natgen_2020 folder.
 This version is only recommended for recommended for reproducing the paper results, and not for state-of-the-art amplicon classification. The legacy version was developed by Nam Nguyen, Jens Luebeck, and Hoon Kim.
@@ -10,10 +10,10 @@ The current version is developed and maintained by Jens Luebeck.
 
 If using AmpliconClassifier, please cite:
 
-Kim H, Nguyen N, et al. [“Extrachromosomal DNA is associated with oncogene amplification and poor outcome across multiple cancers.”](https://www.nature.com/articles/s41588-020-0678-2)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Kim H, Nguyen N, et al. [“Extrachromosomal DNA is associated with oncogene amplification and poor outcome across multiple cancers.”](https://www.nature.com/articles/s41588-020-0678-2)
 *Nature Genetics*. 2020.
 
-***Please note that this software is still actively being developed. Stable versions are released on the main branch.***
+***Please note that this software is actively being developed. Stable versions are released on the main branch.***
 
 **1. Prerequisites**: 
 - Supports both python2 and python3.
