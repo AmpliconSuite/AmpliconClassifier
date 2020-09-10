@@ -1,8 +1,19 @@
 ## AmpliconClassifier
 
-#### Classify AmpliconArchitect amplicons to determine what type of focal amplification is present.
+#### Classify AmpliconArchitect output to determine types of focal amplification is present.
 
 **Current version: 0.2.5**
+
+For the legacy version used in Kim et al., *Nature Genetics*, 2020 please see the scripts and REAMDE in the legacy_natgen_2020 folder.
+This version is only recommended for recommended for reproducing the paper results, and not for state-of-the-art amplicon classification. The legacy version was developed by Nam Nguyen, Jens Luebeck, and Hoon Kim.
+The current version is developed and maintained by Jens Luebeck.
+
+If using AmpliconClassifier, please cite:
+
+Kim H, Nguyen N, et al. [“Extrachromosomal DNA is associated with oncogene amplification and poor outcome across multiple cancers.”](https://www.nature.com/articles/s41588-020-0678-2)
+*Nature Genetics*. 2020.
+
+***Please note that this software is still actively being developed. Stable versions are released on the main branch.***
 
 **1. Prerequisites**: 
 - Supports both python2 and python3.
@@ -12,17 +23,19 @@
 
 **2. Usage**:
 
-To generate classifications for a list of amplicons, I recommend doing
+`amplicon_classifier.py` takes an AA graph file and an AA cycles file as input.
+
+To classify a single amplicon,
+
+`python amplicon_classifier.py --ref [hg19, GRCh37, or GRCh38] --cycles [/path/to/amplicon_cycles.txt] --graph [/path/to/amplicon_graph.txt] > classifier_stdout.log`
+
+Alternatively you can generate classifications for a list of amplicons:
 
 `python amplicon_classifier.py --ref [hg19, GRCh37, or GRCh38] --input [file with list of your amplicons] > classifier_stdout.log`
 
-the `--input` argument must be formatted as follows, with one amplicon per line:
+If passing a list of amplicons, the `--input` argument must be formatted as follows, with one amplicon per line:
 
 `sample_name_amplicon1   /path/to/sample_name_amplicon1_cycles.txt   /path/to/sample_name_amplicon1_graph.txt`
-
-Alternatively, you can just classify one amplicon at a time
-
-`python amplicon_classifier.py --ref [hg19, GRCh37, or GRCh38] --cycles [/path/to/amplicon_cycles.txt] --graph [/path/to/amplicon_graph.txt] > classifier_stdout.log`
 
 There is also an experimental option you can set to visualize the strength of each amplicon class assigned to an amplicon, which can be turned on by setting `--plotStyle individual`.
 
@@ -32,8 +45,9 @@ If you have data from both GRCh37 and hg19 that you are combining, you can set t
 
 The most important file will be the file `[output_prefix]_amplicon_classification_profiles.tsv`. 
 This contains an abstract classification of the amplicon, and also indicates in separate columns "BFB+" and "ecDNA+" status.
+Note that amplicons receiving a "Cyclic" classification may be ecDNA+, BFB+ or both.
 
-**4. Command line arguments**:
+**4. Description of command line arguments**:
 
 Running on a single AA amplicon:
 - `-c/--cycles`: AA cycles file
@@ -46,7 +60,7 @@ OR running on multiple amplicons
 
 Other arguments
 - `--ref [hg19, GRCh37 or GRCh38]`: (Required) Choose reference genome version used in generating AA output.
-- `-v/--version`: Print version ane exit.
+- `-v/--version`: Print version and exit.
 - `-o`: Output filename prefix. Default is prefix of `-i` or `-c`.
 - `--add_chr_tag`: If you have a mix of hg19 and GRCh37 amplicons, you can set `--ref hg19` and `--add_chr_tag` to classify them all together.
 - `--min_cn_flow`: Minumum cycle CN flow to consider as an amplification (default=1).
