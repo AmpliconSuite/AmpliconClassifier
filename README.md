@@ -1,11 +1,11 @@
 ## AmpliconClassifier
 
-#### Classify AmpliconArchitect output to determine types of focal amplification is present.
+#### Classify AmpliconArchitect output to detect types of focal amplifications present.
 
 **Current version: 0.2.5 (stable)**
 
-For the legacy version used in Kim et al., *Nature Genetics*, 2020 please see the scripts and REAMDE in the legacy_natgen_2020 folder.
-This version is only recommended for recommended for reproducing the paper results, and not for state-of-the-art amplicon classification. The legacy version was developed by Nam Nguyen, Jens Luebeck, and Hoon Kim.
+For the legacy version used in Kim et al., *Nature Genetics*, 2020 please see the scripts and REAMDE in the "legacy_natgen_2020" folder.
+The legacy version is only recommended for reproducing the paper results, and not for state-of-the-art amplicon classification. The legacy version was developed by Nam Nguyen, Jens Luebeck, and Hoon Kim.
 The current version is developed and maintained by Jens Luebeck.
 
 If using AmpliconClassifier, please cite:
