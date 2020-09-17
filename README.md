@@ -1,6 +1,6 @@
 ## AmpliconClassifier
 
-#### Classify AmpliconArchitect output to detect types of focal amplifications present.
+### Classify AmpliconArchitect output to detect types of focal amplifications present.
 
 **Info about accessing the legacy version:** For the legacy version used in Kim et al., *Nature Genetics*, 2020 please see the scripts and README in the "legacy_natgen_2020" folder.
 The legacy version is only recommended for reproducing the paper results, and not for state-of-the-art amplicon classification. The legacy version was developed by Nam Nguyen, Jens Luebeck, and Hoon Kim.
@@ -11,7 +11,7 @@ If using AmpliconClassifier, please cite:
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Kim H, Nguyen N, et al. [“Extrachromosomal DNA is associated with oncogene amplification and poor outcome across multiple cancers.”](https://www.nature.com/articles/s41588-020-0678-2)
 *Nature Genetics*. 2020.
 
-##### Current version: 0.2.5 (stable)
+#### Current version: 0.2.5 (stable)
 
 ***Please note that this software is actively being developed. Stable versions are released on the main branch.***
 
