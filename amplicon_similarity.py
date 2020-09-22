@@ -108,6 +108,7 @@ def score_to_pval(s, background_scores):
     pval = 1 - ind/len(background_scores)
     return pval
 
+
 def parseBPG(bpgf):
     bps = []
     segTree = defaultdict(IntervalTree)
@@ -209,12 +210,12 @@ if __name__ == "__main__":
     # parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon",
     #                     default=5000)
     parser.add_argument("-o", help="Output filename prefix")
-    parser.add_argument("-i","--input", help="Path to list of files to use. Each line formatted as: \
+    parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: \
     samplename_amplicon1 /path/to/sample_amplicon1_cycles.txt /path/to/sample_amplicon1_graph.txt", required=True)
     # parser.add_argument("-p","--pairs", help="Amplicons to compute similarity for. Each line formatted as: \
     # samplename_amplicon1 samplename_amplicon2 ...", required=True)
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files",
-                        action='store_true',default=False)
+                        action='store_true', default=False)
 
     args = parser.parse_args()
     add_chr_tag = args.add_chr_tag
