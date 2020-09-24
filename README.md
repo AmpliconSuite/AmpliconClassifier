@@ -11,7 +11,7 @@ If using AmpliconClassifier, please cite:
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Kim H, Nguyen N, et al. [“Extrachromosomal DNA is associated with oncogene amplification and poor outcome across multiple cancers.”](https://www.nature.com/articles/s41588-020-0678-2)
 *Nature Genetics*. 2020.
 
-#### Current version: 0.2.5 (stable)
+#### Current version: 0.3.0 (stable)
 
 ***Please note that this software is actively being developed. Stable versions are released on the main branch.***
 
@@ -43,9 +43,16 @@ If you have data from both GRCh37 and hg19 that you are combining, you can set t
 
 **3. Output**:
 
-The most important file will be the file `[output_prefix]_amplicon_classification_profiles.tsv`. 
+****`[output_prefix]_amplicon_classification_profiles.tsv`**** 
+
 This contains an abstract classification of the amplicon, and also indicates in separate columns "BFB+" and "ecDNA+" status.
 Note that amplicons receiving a "Cyclic" classification may be ecDNA+, BFB+ or both.
+
+****`[output_prefix]_gene_list.tsv`****
+ 
+If `--extract_genes` is set, this will report the genes present on amplicons with that classification, and which genomic feature (e.g. ecDNA_1, BFB_1, etc), it is located on.  
+
+ 
 
 **4. Description of command line arguments**:
 
@@ -65,5 +72,6 @@ Other arguments
 - `--add_chr_tag`: If you have a mix of hg19 and GRCh37 amplicons, you can set `--ref hg19` and `--add_chr_tag` to classify them all together.
 - `--min_cn_flow`: Minumum cycle CN flow to consider as an amplification (default=1).
 - `--min_size`: Minimum cycle size (in bp) to consider as valid amplicon (default=5000).
+- `--extract_genes [ecdna, bfb, both]`: Extract list of genes from amplicons with given classification.
 - `--force`: Disable No amp/Invalid class, if possible. Use only when extremely large CN seeds were used in AA amplicon generation.
 - `--plotStyle [noplot, individual]`: Produce a radar-style plot of classification strenghts. Default `noplot`. 

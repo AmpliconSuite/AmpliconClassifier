@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.2.5"
+__version__ = "0.3.0"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -426,7 +426,6 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices=None):
                     for ival in v:
                         newClust[k].addi(ival.begin, ival.end, ival.data)
 
-
             else:
                 newClusters.append(currClust)
 
@@ -649,6 +648,8 @@ if __name__ == "__main__":
     #                     action='store_true')
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files",
                         action='store_true')
+    parser.add_argument("--extract_genes", help="Extract list of genes from amplicons with given classification.",
+                        choices=["ecdna", "bfb", "both"], default=[])
     parser.add_argument("-v", "--version", action='version', version='amplicon_classifier {version} \n Author: Jens \
                         Luebeck (jluebeck [at] ucsd.edu)'.format(version=__version__))
 
@@ -676,6 +677,19 @@ if __name__ == "__main__":
         sys.stderr.write("$AA_DATA_REPO not set. Please see AA installation instructions.\n")
         sys.exit(1)
 
+    gene_lookup = {}
+    ftgd_list = []
+    if args.extract_genes:
+        # read the gene list and import
+        import get_genes
+        gene_file_location_lookup = {"hg19": "human_hg19_september_2011/Genes_July_2010_hg19.gff",
+                                     "GRCh38": "genes_hg38.gff",
+                                     "GRCh37": "human_hg19_september_2011/Genes_July_2010_hg19.gff"}
+
+        refGeneFileLoc = AA_DATA_REPO + gene_file_location_lookup[args.ref]
+        gene_lookup = get_genes.parse_genes(refGeneFileLoc)
+
+
     if not args.input:
         tempName = args.cycles.rsplit("/")[-1].rsplit(".")[0]
         flist = [[tempName, args.cycles, args.graph]]
@@ -686,6 +700,7 @@ if __name__ == "__main__":
         flist = readFlist(args.input)
         if not args.o:
             args.o = os.path.basename(args.input).rsplit(".")[0]
+
 
     minCycleSize = args.min_size
 
@@ -732,7 +747,7 @@ if __name__ == "__main__":
             currWt = weightedCycleAmount(cycle, cycleCNs[ind], segSeqD)
             cycleWeights.append(currWt)
 
-        print(totalCompCyclicCont, "total comp. cyc. content")
+        # print(totalCompCyclicCont, "total comp. cyc. content")
         totalWeight = max(sum(cycleWeights), 1)
         AMP_dvaluesDict = {x: 0.0 for x in categories}
         for i, wt in zip(cycleTypes, cycleWeights):
@@ -770,11 +785,10 @@ if __name__ == "__main__":
         elif bfbClass:
             bfbStat = "Positive"
             if bfbHasEC:
-                print("hasec")
                 ecStat = "Positive"
 
-            # ampClass = bfbClass
-        # now
+        # determine number of ecDNA present
+        ecIndexClusters = []
         if ecStat == "Positive":
             excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
             ecIndexClusters = clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices)
@@ -784,8 +798,16 @@ if __name__ == "__main__":
         else:
             ecAmpliconCount = 0
 
-        AMP_classifications.append((ampClass, ecStat, bfbStat, ecAmpliconCount))
+        # write genes
+        if args.extract_genes:
+            feat_genes = get_genes.extract_gene_list(gene_lookup, args.extract_genes, cycleList, segSeqD,
+                                                     bfb_cycle_inds, ecIndexClusters, invalidInds)
 
+            ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
+            ftgd_list.append([sName, ampN, feat_genes])
+
+        # store this additional information
+        AMP_classifications.append((ampClass, ecStat, bfbStat, ecAmpliconCount))
         dvalues = [AMP_dvaluesDict[x] for x in categories]
         AMP_dvaluesList.append(dvalues)
 
@@ -829,8 +851,10 @@ if __name__ == "__main__":
             make_classification_radar(mixing_cats, [e, ], args.o + "_" + s + "_edge_class", sampNames)
 
     print("writing output files")
-    # print(len(sampNames),len(AMP_dvaluesList),len(EDGE_dvaluesList))
-    # print(len(AMP_dvaluesList[-1]),len(EDGE_dvaluesList[-1]))
+    if args.extract_genes:
+        gene_extraction_outname = args.o + "_gene_list.tsv"
+        get_genes.write_results(gene_extraction_outname, ftgd_list)
+
     with open(args.o + "_amplicon_classification_profiles.tsv", 'w') as outfile:
         # outfile.write("#Amplicon classifications\n")
         outfile.write("\t".join(["sample_name", "amplicon_number", "amplicon_classification", "ecDNA+", "BFB+",
