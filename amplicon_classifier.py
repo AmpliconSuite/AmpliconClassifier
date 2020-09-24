@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -790,7 +790,11 @@ if __name__ == "__main__":
         # determine number of ecDNA present
         ecIndexClusters = []
         if ecStat == "Positive":
-            excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
+            if bfbStat == "Positive":
+                excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
+            else:
+                excludableCycleIndices = set(invalidInds)
+
             ecIndexClusters = clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices)
             print(ecIndexClusters)
             ecAmpliconCount = max(len(ecIndexClusters), 1)
