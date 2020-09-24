@@ -439,7 +439,7 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices=None):
         currIndexSet = set()
         for k, v in clust.items():
             for ival in v:
-                currIndexSet.add(ival.data + 1)  # set to 1-based
+                currIndexSet.add(ival.data)  # set to 1-based
 
         indexClusters.append(currIndexSet)
 
@@ -801,7 +801,7 @@ if __name__ == "__main__":
         # write genes
         if args.extract_genes:
             feat_genes = get_genes.extract_gene_list(gene_lookup, args.extract_genes, cycleList, segSeqD,
-                                                     bfb_cycle_inds, ecIndexClusters, invalidInds)
+                                                     bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat)
 
             ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
             ftgd_list.append([sName, ampN, feat_genes])

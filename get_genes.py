@@ -94,9 +94,11 @@ def write_results(outname, ftg_list):
                     outfile.write("\t".join([sname, anum, feat_name, gname, ts]) + "\n")
 
 
-def extract_gene_list(gene_lookup, classes_to_get, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds):
+def extract_gene_list(gene_lookup, classes_to_get, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters,
+                      invalidInds, bfbStat, ecStat):
+
     feature_dict = {}
-    if "bfb" in classes_to_get or "both" in classes_to_get:
+    if ("bfb" in classes_to_get or "both" in classes_to_get) and bfbStat == "Positive":
         # collect unmerged genomic intervals comprising the feature
         bfb_interval_dict = defaultdict(list)
         for b_ind in bfb_cycle_inds:
@@ -107,8 +109,10 @@ def extract_gene_list(gene_lookup, classes_to_get, cycleList, segSeqD, bfb_cycle
 
         feature_dict["BFB_1"] = bfb_interval_dict
 
-    if "ecdna" in classes_to_get or "both" in classes_to_get:
+    if ("ecdna" in classes_to_get or "both" in classes_to_get) and ecStat == "Positive":
         # collect unmerged genomic intervals comprising the feature
+        print("looking up ecdna")
+        print(ecIndexClusters, invalidInds, len(cycleList))
         for amp_ind, ec_cycle_inds in enumerate(ecIndexClusters):
             ec_interval_dict = defaultdict(list)
             for e_ind in ec_cycle_inds:
