@@ -3,6 +3,7 @@
 # This is imported by amplicon_classifier.py to get genes
 
 from collections import defaultdict
+import os
 
 from intervaltree import IntervalTree
 
@@ -29,6 +30,7 @@ def parse_genes(gene_file):
                 seenNames.add(gname)
                 t[chrom][s:e] = (gname, strand)
 
+    print("read " + str(len(seenNames)) + " genes\n")
     return t
 
 
@@ -94,7 +96,22 @@ def write_results(outname, ftg_list):
                     outfile.write("\t".join([sname, anum, feat_name, gname, ts]) + "\n")
 
 
-def extract_gene_list(gene_lookup, classes_to_get, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters,
+#print all the intervals to bed files
+def write_interval_beds(sname, feature_dict):
+    outdir = "classification_bed_files/"
+    os.makedirs(outdir,exist_ok=True)
+    for feat_name, curr_fd in feature_dict.items():
+        with open(outdir + sname + "_" + feat_name + "_intervals.bed", 'w') as outfile:
+            for chrom, ilist in curr_fd.items():
+                if not chrom:
+                    continue
+
+                for i in ilist:
+                    l = map(str, [chrom, i[0], i[1]])
+                    outfile.write("\t".join(l) + "\n")
+
+
+def extract_gene_list(sname, gene_lookup, classes_to_get, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters,
                       invalidInds, bfbStat, ecStat):
 
     feature_dict = {}
@@ -130,4 +147,5 @@ def extract_gene_list(gene_lookup, classes_to_get, cycleList, segSeqD, bfb_cycle
     print("Gene extraction: started with " + str(tot_init_intervals) + " unmerged intervals, finished with " + str(
         tot_final_intervals) + " intervals")
 
+    write_interval_beds(sname, feature_dict)
     return get_genes_from_intervals(gene_lookup, feature_dict)

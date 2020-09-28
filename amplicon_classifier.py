@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -804,7 +804,7 @@ if __name__ == "__main__":
 
         # write genes
         if args.extract_genes:
-            feat_genes = get_genes.extract_gene_list(gene_lookup, args.extract_genes, cycleList, segSeqD,
+            feat_genes = get_genes.extract_gene_list(sName, gene_lookup, args.extract_genes, cycleList, segSeqD,
                                                      bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat)
 
             ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
