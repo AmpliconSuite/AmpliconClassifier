@@ -100,8 +100,9 @@ def write_results(outname, ftg_list):
 def write_interval_beds(sname, feature_dict):
     outdir = "classification_bed_files/"
     os.makedirs(outdir,exist_ok=True)
+    trim_sname = sname.rsplit("/")[-1]
     for feat_name, curr_fd in feature_dict.items():
-        with open(outdir + sname + "_" + feat_name + "_intervals.bed", 'w') as outfile:
+        with open(outdir + trim_sname + "_" + feat_name + "_intervals.bed", 'w') as outfile:
             for chrom, ilist in curr_fd.items():
                 if not chrom:
                     continue
