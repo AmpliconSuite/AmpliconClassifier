@@ -11,7 +11,7 @@ If using AmpliconClassifier, please cite:
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Kim H, Nguyen N, et al. [“Extrachromosomal DNA is associated with oncogene amplification and poor outcome across multiple cancers.”](https://www.nature.com/articles/s41588-020-0678-2)
 *Nature Genetics*. 2020.
 
-#### Current version: 0.3.2 (stable)
+#### Current version: 0.3.3 (stable)
 
 ***Please note that this software is actively being developed. Stable versions are released on the main branch.***
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -70,7 +70,6 @@ def isRearranged(cycle, segSeqD):
     # check if it contains regions from multiple chroms
     chromList = [segSeqD[abs(ind)][0] for ind in cycle if ind != 0]
     if len(set(chromList)) > 1:
-        # print("multichrom")
         return True
 
     max_del_size = 0
@@ -78,22 +77,17 @@ def isRearranged(cycle, segSeqD):
         if cycle[i] == 0 or cycle[i + 1] == 0:
             continue
         if cycle[i] < 0 and cycle[i + 1] > 0 or cycle[i] > 0 and cycle[i + 1] < 0:
-            # print(cycle[i], cycle[i + 1])
-            # print("alternating dir")
             return True
 
         dist_diff = get_diff(cycle[i], cycle[i + 1], segSeqD)
-        # print(dist_diff)
         max_del_size = max(dist_diff, max_del_size)
         # tot_del_size += dist_diff
         # if tot_del_size > tot_min_del:
         #     print("Delsize")
         #     return True
     if max_del_size > tot_min_del:
-        # print("rearranged")
         return True
 
-    # print("not rearranged")
     return False
 
 
@@ -216,7 +210,6 @@ def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs):
     for ind in non_bfb_cycle_inds:
         cycle = cycleList[ind]
         length = get_size(cycle, segSeqD)
-        print(cycle, length, cycleCNs[ind])
 
         if length > 100000 and cycleCNs[ind] > 5:
             return True
@@ -285,12 +278,10 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs):
             non_bfb_cycle_inds.append(ind)
 
     hasEC = nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs)
-
     # if len(cycleList) >= 5:
     #     minBFBCyclesRequired = 2
     # else:
     minBFBCyclesRequired = 2
-
     if FB_breaks > 1.5 and tot_bfb_supp_cycles >= minBFBCyclesRequired:
         tot = float(FB_breaks + distal_breaks + lin_breaks)
         return FB_breaks / tot, distal_breaks / tot, bfb_weight / (non_bfb_cycle_weight + bfb_weight), hasEC, \
@@ -311,7 +302,6 @@ def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN):
         scale = 2.5
 
     if (cn <= scale) or (maxCN < min_upper_cn):
-        # print("invalid", cycle, cn, isSingleton, maxCN)
         return True
 
     length = get_size(cycle, segSeqD)
@@ -492,15 +482,25 @@ def parseCycle(cyclef, add_chr_tag):
                 # if any([segSeqD[abs(x)][0] == "hs37d5" for x in num_ss if x != 0]):
                 #     continue
                 lcCycle = False
-                for seg in num_ss:
+                pop_inds = []
+                for seg_ind, seg in enumerate(num_ss):
                     t = segSeqD[abs(seg)]
                     if lcD[t[0]].overlaps(t[1], t[2]):
-                        # print("Cycle was LC", str(t[0]), str(t[1]), str(t[2]))
-                        lcCycle = True
-                        break
+                        if num_ss[0] == 0 and (seg_ind == 1 or seg_ind == len(num_ss) - 2):
+                            pop_inds.append(seg_ind)
+                            continue
+
+                        else:
+                            print("Cycle was LC", str(t[0]), str(t[1]), str(t[2]))
+                            lcCycle = True
+                            break
 
                 if lcCycle:
                     continue
+
+                elif pop_inds:
+                    for seg_ind in pop_inds:
+                        num_ss.pop(seg_ind)
 
                 currCycle = repair_cycle(num_ss)
                 uid = ss + "," + cd["Copy_count"]
@@ -728,7 +728,6 @@ if __name__ == "__main__":
         rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
         totalCompCyclicCont = 0
         for ind, cycle in enumerate(cycleList):
-            # print("cycle", ind + 1)
             hasNonCircLen1 = True if len(cycle) == 3 and cycle[0] == 0 else False
             oneCycle = (len(cycleList) == 1)
             isSingleton = hasNonCircLen1 or oneCycle
@@ -747,7 +746,6 @@ if __name__ == "__main__":
             currWt = weightedCycleAmount(cycle, cycleCNs[ind], segSeqD)
             cycleWeights.append(currWt)
 
-        # print(totalCompCyclicCont, "total comp. cyc. content")
         totalWeight = max(sum(cycleWeights), 1)
         AMP_dvaluesDict = {x: 0.0 for x in categories}
         for i, wt in zip(cycleTypes, cycleWeights):
@@ -796,7 +794,6 @@ if __name__ == "__main__":
                 excludableCycleIndices = set(invalidInds)
 
             ecIndexClusters = clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices)
-            print(ecIndexClusters)
             ecAmpliconCount = max(len(ecIndexClusters), 1)
 
         else:
@@ -860,19 +857,16 @@ if __name__ == "__main__":
         get_genes.write_results(gene_extraction_outname, ftgd_list)
 
     with open(args.o + "_amplicon_classification_profiles.tsv", 'w') as outfile:
-        # outfile.write("#Amplicon classifications\n")
         outfile.write("\t".join(["sample_name", "amplicon_number", "amplicon_classification", "ecDNA+", "BFB+",
                                  "ecDNA_amplicons"] + categories) + "\n")
         for ind, sname in enumerate(sampNames):
             ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
-            # print([str(x) for x in AMP_dvaluesList[ind]])
             ampClass, ecStat, bfbStat, ecAmpliconCount = AMP_classifications[ind]
             outfile.write("\t".join(
                 [sname.rsplit("_amplicon")[0], ampN, ampClass, ecStat, bfbStat, str(ecAmpliconCount)] +
                 [str(x) for x in AMP_dvaluesList[ind]]) + "\n")
 
     with open(args.o + "_edge_classification_profiles.tsv", 'w') as outfile:
-        # outfile.write("#Edge classifications\n")
         outfile.write("\t".join(["sample_name", "amplicon_number"] + mixing_cats) + "\n")
         for ind, sname in enumerate(sampNames):
             ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
