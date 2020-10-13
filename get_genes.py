@@ -97,12 +97,12 @@ def write_results(outname, ftg_list):
 
 
 #print all the intervals to bed files
-def write_interval_beds(sname, feature_dict):
+def write_interval_beds(sname, ampN, feature_dict):
     outdir = "classification_bed_files/"
     os.makedirs(outdir,exist_ok=True)
     trim_sname = sname.rsplit("/")[-1]
     for feat_name, curr_fd in feature_dict.items():
-        with open(outdir + trim_sname + "_" + feat_name + "_intervals.bed", 'w') as outfile:
+        with open(outdir + trim_sname + "_" + ampN + "_" + feat_name + "_intervals.bed", 'w') as outfile:
             for chrom, ilist in curr_fd.items():
                 if not chrom:
                     continue
@@ -112,7 +112,7 @@ def write_interval_beds(sname, feature_dict):
                     outfile.write("\t".join(l) + "\n")
 
 
-def extract_gene_list(sname, gene_lookup, classes_to_get, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters,
+def extract_gene_list(sname, ampN, gene_lookup, classes_to_get, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters,
                       invalidInds, bfbStat, ecStat):
 
     feature_dict = {}
@@ -148,5 +148,5 @@ def extract_gene_list(sname, gene_lookup, classes_to_get, cycleList, segSeqD, bf
     print("Gene extraction: started with " + str(tot_init_intervals) + " unmerged intervals, finished with " + str(
         tot_final_intervals) + " intervals")
 
-    write_interval_beds(sname, feature_dict)
+    write_interval_beds(sname, ampN, feature_dict)
     return get_genes_from_intervals(gene_lookup, feature_dict)

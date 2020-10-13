@@ -801,10 +801,10 @@ if __name__ == "__main__":
 
         # write genes
         if args.extract_genes:
-            feat_genes = get_genes.extract_gene_list(sName, gene_lookup, args.extract_genes, cycleList, segSeqD,
+            ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
+            feat_genes = get_genes.extract_gene_list(sName, ampN, gene_lookup, args.extract_genes, cycleList, segSeqD,
                                                      bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat)
 
-            ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
             ftgd_list.append([sName, ampN, feat_genes])
 
         # store this additional information
