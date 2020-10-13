@@ -4,6 +4,7 @@ import argparse
 import bisect
 from collections import defaultdict
 import os
+import sys
 
 from intervaltree import IntervalTree
 
@@ -11,14 +12,12 @@ add_chr_tag = False
 bpweight = 0.75
 d = 250
 cn_cut = 4.5
-
+min_de = 1
+min_de_size = 2500
 '''
 input:
-1. pairwise comparisons:
-  each line in the input file specifies a list amplicons to compare for similarity
-  format: amplicon_a, amplicon_b, amplicon_c, ...
-
-2. amplicon name to cycles & graph path
+tab-separated file listing for each amplicon/sample 
+amplicon_name    amplicon_graph.txt    amplicon_cycles.txt
 
 
 output:
@@ -109,6 +108,29 @@ def score_to_pval(s, background_scores):
     return pval
 
 
+def buildLCDatabase(mappabilityFile):
+    lcD = defaultdict(IntervalTree)
+    with open(mappabilityFile) as infile:
+        for line in infile:
+            fields = line.rstrip().rsplit()
+            chrom, s, e = fields[0], int(fields[1]), int(fields[2])
+            if e - s > 7500:
+                lcD[chrom].addi(s, e)
+
+    return lcD
+
+
+def build_CG5_database(cg5_file):
+    cg5D = defaultdict(IntervalTree)
+    with open(cg5_file) as infile:
+        for line in infile:
+            fields = line.rstrip().rsplit()
+            chrom, s, e = fields[0], int(fields[1]), int(fields[2])
+            cg5D[chrom].addi(s, e)
+
+    return cg5D
+
+
 def parseBPG(bpgf):
     bps = []
     segTree = defaultdict(IntervalTree)
@@ -125,6 +147,12 @@ def parseBPG(bpgf):
                     rchrom = "chr" + rchrom
 
                 lpos, rpos = int(lpos), int(rpos)
+                if lcD[lchrom][lpos] or lcD[rchrom][rpos]:
+                    continue
+
+                elif lchrom == rchrom and abs(lpos - rpos) < min_de_size:
+                    continue
+
                 cn = float(fields[2])
                 currBP = breakpoint(lchrom, lpos, rchrom, rpos, cn)
                 bps.append(currBP)
@@ -140,7 +168,15 @@ def parseBPG(bpgf):
                     lchrom = 'chr' + lchrom
                     rchrom = 'chr' + rchrom
 
-                segTree[lchrom].addi(lpos, rpos, float(fields[3]))
+                if lcD[lchrom][lpos:rpos] or cg5D[lchrom][lpos:rpos]:
+                    continue
+
+                cn = float(fields[3])
+                if cn > cn_cut:
+                    segTree[lchrom].addi(lpos, rpos, cn)
+
+    if not bps:
+        return bps, defaultdict(IntervalTree)
 
     return bps, segTree
 
@@ -191,7 +227,6 @@ def merge_pairs():
     pass
 
 
-
 # def readAPairs(pfile):
 #     pairs = []
 #     with open(pfile) as infile:
@@ -206,23 +241,46 @@ def merge_pairs():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Classify AA amplicon type")
-    parser.add_argument("--min_cn", type=float, help="Minimum CN to consider as amplification", default=4.5)
+    parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38",
+                        choices=["hg19", "GRCh37", "hg38", "GRCh38"], required=True)
     # parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon",
     #                     default=5000)
-    parser.add_argument("-o", help="Output filename prefix")
     parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: \
     samplename_amplicon1 /path/to/sample_amplicon1_cycles.txt /path/to/sample_amplicon1_graph.txt", required=True)
+    parser.add_argument("-o", help="Output filename prefix")
+    parser.add_argument("--min_cn", type=float, help="Minimum CN to consider as amplification", default=4.5)
     # parser.add_argument("-p","--pairs", help="Amplicons to compute similarity for. Each line formatted as: \
     # samplename_amplicon1 samplename_amplicon2 ...", required=True)
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files",
                         action='store_true', default=False)
-
     args = parser.parse_args()
+
     add_chr_tag = args.add_chr_tag
     cn_cut = args.min_cn
 
     if not args.o:
         args.o = os.path.basename(args.input).rsplit(".")[0]
+
+    if args.ref == "hg38": args.ref = "GRCh38"
+
+    # check if aa data repo set, construct LC datatabase
+    try:
+        AA_DATA_REPO = os.environ["AA_DATA_REPO"] + "/" + args.ref + "/"
+        fDict = {}
+        with open(AA_DATA_REPO + "file_list.txt") as infile:
+            for line in infile:
+                fields = line.strip().rsplit()
+                fDict[fields[0]] = fields[1]
+
+        lcPath = AA_DATA_REPO + fDict["mapability_exclude_filename"]
+        cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
+
+        lcD = buildLCDatabase(lcPath)
+        cg5D = build_CG5_database(cg5Path)
+
+    except KeyError:
+        sys.stderr.write("$AA_DATA_REPO not set. Please see AA installation instructions.\n")
+        sys.exit(1)
 
     s2a_graph = readFlist(args.input)
     pairs = get_pairs(s2a_graph)
