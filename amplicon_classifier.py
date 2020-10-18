@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.3.3"
+__version__ = "0.3.4"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -116,7 +116,16 @@ def tot_rearr_edges(graphf, add_chr_tag):
     return rearr_e
 
 
-def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD):
+def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, exclude_inds):
+    #construct intervaltree of valid regions
+    hit_region_it = defaultdict(IntervalTree)
+    for i in feature_inds:
+        cycle = cycleList[i-1]
+        for cv in cycle:
+            if cv != 0:
+                c, s, e = segSeqD[abs(cv)]
+                hit_region_it[c].addi(s, e)
+
     hf_cut = 0.8
     totalGraphWeight = 0
     segs = 0
@@ -124,6 +133,10 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD):
         for line in infile:
             if line.startswith("sequence"):
                 fields = line.rsplit()
+                c, s, e = fields[1].rsplit(":")[0], int(fields[1].rsplit(":")[1][:-1]), int(fields[2].rsplit(":")[1][:-1])+1
+                if not hit_region_it[c][s:e]:
+                    continue
+
                 cn = float(fields[3])
                 size = float(fields[5]) / 1000.
                 # if cn > 1:
@@ -133,9 +146,13 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD):
             elif line.startswith("BreakpointEdge"):
                 break
 
-    cycleWeights = [0] * len(cycleList)
-    for ind, cycle in enumerate(cycleList):
-        cycleWeights[ind] = weightedCycleAmount(cycle, cycleCNs[ind], segSeqD)
+    # cycleWeights = [0] * len(feature_inds)
+    # for ind, cycle in enumerate(cycleList):
+    cycleWeights = []
+    for ind in feature_inds:
+        if ind not in exclude_inds:
+            cycle = cycleList[ind]
+            cycleWeights.append(weightedCycleAmount(cycle, cycleCNs[ind], segSeqD))
 
     # scW = sorted(cycleWeights, reverse=True)
 
@@ -155,7 +172,7 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD):
     rf = (1 - cf)
     fu_ent = -1 * rf * log(rf)
 
-    seg_ent = log(1.0 / segs)
+    seg_ent = log(1.0 / segs) if segs > 0 else 0
     return fu_ent - fe_ent - seg_ent, fu_ent - fe_ent, -1 * seg_ent
 
 
@@ -486,7 +503,7 @@ def parseCycle(cyclef, add_chr_tag):
                 for seg_ind, seg in enumerate(num_ss):
                     t = segSeqD[abs(seg)]
                     if lcD[t[0]].overlaps(t[1], t[2]):
-                        if num_ss[0] == 0 and (seg_ind == 1 or seg_ind == len(num_ss) - 2):
+                        if num_ss[0] == 0 and (seg_ind == 1 or seg_ind == len(num_ss) - 2) and len(num_ss) > 3:
                             pop_inds.append(seg_ind)
                             continue
 
@@ -709,18 +726,21 @@ if __name__ == "__main__":
     AMP_classifications = []
     sampNames = []
     cyclesFiles = []
+    featEntropyD = {}
     for fpair in flist:
         if len(fpair) > 2:
             sName, cyclesFile, graphFile = fpair
             sampNames.append(sName)
-            print(sampNames[-1])
             cyclesFiles.append(cyclesFile)
             segSeqD, cycleList, cycleCNs = parseCycle(cyclesFile, args.add_chr_tag)
 
         else:
+            print(fpair)
             sys.stderr.write("File list not properly formatted\n")
             sys.exit(1)
 
+        ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
+        print(sName, ampN)
         cycleTypes = []
         cycleWeights = []
         invalidInds = []
@@ -756,7 +776,8 @@ if __name__ == "__main__":
         ampClass = classifyAmpliconProfile(AMP_dvaluesDict, rearr_e, totalCompCyclicCont)
 
         # decomposition/amplicon complexity
-        totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD)
+        totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
+                                                                range(len(cycleList)), set())
         AMP_dvaluesDict["Amp_entropy"] = totalEnt
         AMP_dvaluesDict["Amp_decomp_entropy"] = decompEnt
         AMP_dvaluesDict["Amp_nseg_entropy"] = nEnt
@@ -775,20 +796,20 @@ if __name__ == "__main__":
 
         bfbClass = classifyBFB(fb_prop, fb_bwp, nfb_bwp, bfb_cwp, maxCN)
 
-        ecStat = "None detected"
-        bfbStat = "None detected"
+        ecStat = False
+        bfbStat = False
         if ampClass == "Cyclic" and not bfbClass:
-            ecStat = "Positive"
+            ecStat = True
 
         elif bfbClass:
-            bfbStat = "Positive"
+            bfbStat = True
             if bfbHasEC:
-                ecStat = "Positive"
+                ecStat = True
 
         # determine number of ecDNA present
         ecIndexClusters = []
-        if ecStat == "Positive":
-            if bfbStat == "Positive":
+        if ecStat:
+            if bfbStat:
                 excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
             else:
                 excludableCycleIndices = set(invalidInds)
@@ -799,9 +820,26 @@ if __name__ == "__main__":
         else:
             ecAmpliconCount = 0
 
+        # write entropy for each feature
+        ecEntropies = []
+        if ecAmpliconCount == 1 and not ecIndexClusters:
+            ecEntropies.append((totalEnt, decompEnt, nEnt))
+
+        for ecCycleList in ecIndexClusters:
+            totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
+                                                                ecCycleList, bfb_cycle_inds)
+            ecEntropies.append((totalEnt, decompEnt, nEnt))
+
+        for ind, etup in enumerate(ecEntropies):
+            featEntropyD[(sName, ampN, "ecDNA_" + str(ind+1))] = etup
+
+        if bfbStat:
+            bfb_totalEnt, bfb_decompEnt, bfb_nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
+                                                                            bfb_cycle_inds, set())
+            featEntropyD[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
+
         # write genes
         if args.extract_genes:
-            ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
             feat_genes = get_genes.extract_gene_list(sName, ampN, gene_lookup, args.extract_genes, cycleList, segSeqD,
                                                      bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat)
 
@@ -832,6 +870,7 @@ if __name__ == "__main__":
         dvalues = [edgeTypeCountD[x] for x in mixing_cats]
         EDGE_dvaluesList.append(dvalues)
 
+    # PLOTTING
     textCategories = ["No amp/Invalid", "Linear\namplification", "Trivial\ncycle", "Complex\nnon-cyclic",
                       "Complex\ncyclic", "BFB\nfoldback"]
     if args.plotStyle == "grouped":
@@ -851,21 +890,34 @@ if __name__ == "__main__":
                                       sampNames)
             make_classification_radar(mixing_cats, [e, ], args.o + "_" + s + "_edge_class", sampNames)
 
+    #OUTPUT FILE WRITING
     print("writing output files")
+    # Genes
     if args.extract_genes:
         gene_extraction_outname = args.o + "_gene_list.tsv"
         get_genes.write_results(gene_extraction_outname, ftgd_list)
 
+    # Feature entropy
+    with open(args.o + "_feature_entropy.tsv",'w') as outfile:
+        outfile.write("sample\tamplicon\tfeature\ttotal_feature_entropy\tdecomp_entropy\tAmp_nseg_entropy\n")
+        for k, vt in featEntropyD.items():
+            ol = map(str, k + vt)
+            outfile.write("\t".join(ol) + "\n")
+
+    # Amplicon profiles
     with open(args.o + "_amplicon_classification_profiles.tsv", 'w') as outfile:
         outfile.write("\t".join(["sample_name", "amplicon_number", "amplicon_classification", "ecDNA+", "BFB+",
                                  "ecDNA_amplicons"] + categories) + "\n")
         for ind, sname in enumerate(sampNames):
             ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
             ampClass, ecStat, bfbStat, ecAmpliconCount = AMP_classifications[ind]
+            ecOut = "Positive" if ecStat else "None detected"
+            bfbOut = "Positive" if bfbStat else "None detected"
             outfile.write("\t".join(
-                [sname.rsplit("_amplicon")[0], ampN, ampClass, ecStat, bfbStat, str(ecAmpliconCount)] +
+                [sname.rsplit("_amplicon")[0], ampN, ampClass, ecOut, bfbOut, str(ecAmpliconCount)] +
                 [str(x) for x in AMP_dvaluesList[ind]]) + "\n")
 
+    # Edge profiles
     with open(args.o + "_edge_classification_profiles.tsv", 'w') as outfile:
         outfile.write("\t".join(["sample_name", "amplicon_number"] + mixing_cats) + "\n")
         for ind, sname in enumerate(sampNames):

@@ -116,7 +116,7 @@ def extract_gene_list(sname, ampN, gene_lookup, classes_to_get, cycleList, segSe
                       invalidInds, bfbStat, ecStat):
 
     feature_dict = {}
-    if ("bfb" in classes_to_get or "both" in classes_to_get) and bfbStat == "Positive":
+    if ("bfb" in classes_to_get or "both" in classes_to_get) and bfbStat:
         # collect unmerged genomic intervals comprising the feature
         bfb_interval_dict = defaultdict(list)
         for b_ind in bfb_cycle_inds:
@@ -127,10 +127,8 @@ def extract_gene_list(sname, ampN, gene_lookup, classes_to_get, cycleList, segSe
 
         feature_dict["BFB_1"] = bfb_interval_dict
 
-    if ("ecdna" in classes_to_get or "both" in classes_to_get) and ecStat == "Positive":
+    if ("ecdna" in classes_to_get or "both" in classes_to_get) and ecStat:
         # collect unmerged genomic intervals comprising the feature
-        print("looking up ecdna")
-        print(ecIndexClusters, invalidInds, len(cycleList))
         for amp_ind, ec_cycle_inds in enumerate(ecIndexClusters):
             ec_interval_dict = defaultdict(list)
             for e_ind in ec_cycle_inds:
@@ -145,8 +143,8 @@ def extract_gene_list(sname, ampN, gene_lookup, classes_to_get, cycleList, segSe
     tot_init_intervals = sum([len(ilist) for fd in feature_dict.values() for ilist in fd.values()])
     merge_intervals(feature_dict)
     tot_final_intervals = sum([len(ilist) for fd in feature_dict.values() for ilist in fd.values()])
-    print("Gene extraction: started with " + str(tot_init_intervals) + " unmerged intervals, finished with " + str(
-        tot_final_intervals) + " intervals")
+    # print("Feature extraction: started with " + str(tot_init_intervals) + " unmerged intervals, finished with " + str(
+    #     tot_final_intervals) + " intervals")
 
     write_interval_beds(sname, ampN, feature_dict)
     return get_genes_from_intervals(gene_lookup, feature_dict)
