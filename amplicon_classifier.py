@@ -120,7 +120,7 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
     #construct intervaltree of valid regions
     hit_region_it = defaultdict(IntervalTree)
     for i in feature_inds:
-        cycle = cycleList[i-1]
+        cycle = cycleList[i]
         for cv in cycle:
             if cv != 0:
                 c, s, e = segSeqD[abs(cv)]
@@ -133,12 +133,13 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
         for line in infile:
             if line.startswith("sequence"):
                 fields = line.rsplit()
-                c, s, e = fields[1].rsplit(":")[0], int(fields[1].rsplit(":")[1][:-1]), int(fields[2].rsplit(":")[1][:-1])+1
+                c, s, e = fields[1].rsplit(":")[0], int(fields[1].rsplit(":")[1][:-1]), int(fields[2].rsplit(":")[1][:-1])
                 if not hit_region_it[c][s:e]:
                     continue
 
                 cn = float(fields[3])
                 size = float(fields[5]) / 1000.
+
                 # if cn > 1:
                 segs += 1
                 totalGraphWeight += (size * cn)
@@ -149,28 +150,48 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
     # cycleWeights = [0] * len(feature_inds)
     # for ind, cycle in enumerate(cycleList):
     cycleWeights = []
-    for ind in feature_inds:
+    new_feat_inds = set()
+    for ind, cycle in enumerate(cycleList):
         if ind not in exclude_inds:
-            cycle = cycleList[ind]
-            cycleWeights.append(weightedCycleAmount(cycle, cycleCNs[ind], segSeqD))
+            hits = False
+            for cv in cycle:
+                if cv != 0:
+                    c, s, e = segSeqD[abs(cv)]
+                    if hit_region_it[c][s:e]:
+                        hits = True
+                        break
+            if hits:
+                wca = weightedCycleAmount(cycle, cycleCNs[ind], segSeqD)
+                if ind in feature_inds:
+                    new_feat_inds.add(len(cycleWeights))
+
+                cycleWeights.append(wca)
+
 
     # scW = sorted(cycleWeights, reverse=True)
-
     # cf = cycleWeights[0]/totalGraphWeight
     cf = 0
     fe_ent = 0
     added_cf = 0
     cInd = 0
     while cf + added_cf < hf_cut and cInd < len(cycleWeights):
-        cf += added_cf
-        if added_cf > 0:
-            fe_ent += (added_cf * log(added_cf))
+        if cInd in new_feat_inds:
+            cf += added_cf
+            if added_cf > 0:
+                fe_ent += (added_cf * log(added_cf))
 
-        added_cf = cycleWeights[cInd] / float(totalGraphWeight)
+            added_cf = cycleWeights[cInd] / float(totalGraphWeight)
+
         cInd += 1
 
+    cf+=added_cf
+    cf = round(cf, 5)
     rf = (1 - cf)
-    fu_ent = -1 * rf * log(rf)
+    # print(rf, cf, totalGraphWeight)
+    if rf > 0:
+        fu_ent = -1 * rf * log(rf)
+    else:
+        fu_ent = 0
 
     seg_ent = log(1.0 / segs) if segs > 0 else 0
     return fu_ent - fe_ent - seg_ent, fu_ent - fe_ent, -1 * seg_ent
@@ -826,8 +847,9 @@ if __name__ == "__main__":
             ecEntropies.append((totalEnt, decompEnt, nEnt))
 
         for ecCycleList in ecIndexClusters:
+            c_ex_I = bfb_cycle_inds if bfbStat else set()
             totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
-                                                                ecCycleList, bfb_cycle_inds)
+                                                                ecCycleList, c_ex_I)
             ecEntropies.append((totalEnt, decompEnt, nEnt))
 
         for ind, etup in enumerate(ecEntropies):
