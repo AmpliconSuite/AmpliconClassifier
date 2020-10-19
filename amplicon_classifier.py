@@ -537,8 +537,9 @@ def parseCycle(cyclef, add_chr_tag):
                     continue
 
                 elif pop_inds:
-                    for seg_ind in pop_inds:
+                    for seg_ind in pop_inds[::-1]:
                         num_ss.pop(seg_ind)
+
 
                 currCycle = repair_cycle(num_ss)
                 uid = ss + "," + cd["Copy_count"]
@@ -727,7 +728,6 @@ if __name__ == "__main__":
         refGeneFileLoc = AA_DATA_REPO + gene_file_location_lookup[args.ref]
         gene_lookup = get_genes.parse_genes(refGeneFileLoc)
 
-
     if not args.input:
         tempName = args.cycles.rsplit("/")[-1].rsplit(".")[0]
         flist = [[tempName, args.cycles, args.graph]]
@@ -760,6 +760,7 @@ if __name__ == "__main__":
             sys.stderr.write("File list not properly formatted\n")
             sys.exit(1)
 
+        print(cycleList, segSeqD, cycleCNs)
         ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
         print(sName, ampN)
         cycleTypes = []
