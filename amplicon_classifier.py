@@ -124,7 +124,7 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
         for cv in cycle:
             if cv != 0:
                 c, s, e = segSeqD[abs(cv)]
-                hit_region_it[c].addi(s, e)
+                hit_region_it[c].addi(s, e+1)
 
     hf_cut = 0.8
     totalGraphWeight = 0
@@ -133,7 +133,7 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
         for line in infile:
             if line.startswith("sequence"):
                 fields = line.rsplit()
-                c, s, e = fields[1].rsplit(":")[0], int(fields[1].rsplit(":")[1][:-1]), int(fields[2].rsplit(":")[1][:-1])
+                c, s, e = fields[1].rsplit(":")[0], int(fields[1].rsplit(":")[1][:-1]), int(fields[2].rsplit(":")[1][:-1])+1
                 if not hit_region_it[c][s:e]:
                     continue
 
