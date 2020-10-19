@@ -760,7 +760,6 @@ if __name__ == "__main__":
             sys.stderr.write("File list not properly formatted\n")
             sys.exit(1)
 
-        print(cycleList, segSeqD, cycleCNs)
         ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
         print(sName, ampN)
         cycleTypes = []
