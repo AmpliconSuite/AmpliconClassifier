@@ -99,7 +99,7 @@ def write_results(outname, ftg_list):
 #print all the intervals to bed files
 def write_interval_beds(sname, ampN, feature_dict):
     outdir = "classification_bed_files/"
-    os.makedirs(outdir,exist_ok=True)
+    os.makedirs(outdir, exist_ok=True)
     trim_sname = sname.rsplit("/")[-1]
     for feat_name, curr_fd in feature_dict.items():
         with open(outdir + trim_sname + "_" + ampN + "_" + feat_name + "_intervals.bed", 'w') as outfile:
@@ -116,7 +116,7 @@ def extract_gene_list(sname, ampN, gene_lookup, classes_to_get, cycleList, segSe
                       invalidInds, bfbStat, ecStat):
 
     feature_dict = {}
-    if ("bfb" in classes_to_get or "both" in classes_to_get) and bfbStat:
+    if ("bfb" in classes_to_get or "all" in classes_to_get) and bfbStat:
         # collect unmerged genomic intervals comprising the feature
         bfb_interval_dict = defaultdict(list)
         for b_ind in bfb_cycle_inds:
@@ -127,7 +127,7 @@ def extract_gene_list(sname, ampN, gene_lookup, classes_to_get, cycleList, segSe
 
         feature_dict["BFB_1"] = bfb_interval_dict
 
-    if ("ecdna" in classes_to_get or "both" in classes_to_get) and ecStat:
+    if ("ecdna" in classes_to_get or "all" in classes_to_get) and ecStat:
         # collect unmerged genomic intervals comprising the feature
         for amp_ind, ec_cycle_inds in enumerate(ecIndexClusters):
             ec_interval_dict = defaultdict(list)
@@ -138,6 +138,20 @@ def extract_gene_list(sname, ampN, gene_lookup, classes_to_get, cycleList, segSe
                         ec_interval_dict[chrom].append((l, r))
 
             feature_dict["ecDNA_" + str(amp_ind + 1)] = ec_interval_dict
+
+    if ("other" in classes_to_get or "all" in classes_to_get):
+        nonOther = invalidInds.union(bfb_cycle_inds)
+        for ecIC in ecIndexClusters:
+            nonOther|=set(ecIC)
+
+        other_interval_dict = defaultdict(list)
+        for o_ind in range(len(cycleList)):
+            if o_ind not in nonOther:
+                for c_id in cycleList[o_ind]:
+                    chrom, l, r = segSeqD[abs(c_id)]
+                    other_interval_dict[chrom].append((l, r))
+
+        feature_dict["other_1"] = other_interval_dict
 
     # merge all the intervals in each list of intervals
     tot_init_intervals = sum([len(ilist) for fd in feature_dict.values() for ilist in fd.values()])

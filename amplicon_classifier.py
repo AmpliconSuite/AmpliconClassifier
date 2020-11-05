@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.3.4"
+__version__ = "0.3.5"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -687,8 +687,12 @@ if __name__ == "__main__":
     #                     action='store_true')
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files",
                         action='store_true')
-    parser.add_argument("--extract_genes", help="Extract list of genes from amplicons with given classification.",
+    parser.add_argument("--report_genes", help="Extract list of genes from amplicons with given classification.",
                         choices=["ecdna", "bfb", "both"], default=[])
+    parser.add_argument("--report_complexity", help="Compute a measure of amplicon entropy for each amplicon.",
+                        action='store_true')
+    parser.add_argument("--verbose_classification", help="Generate verbose output with raw classification scores.",
+                        action='store_true')
     parser.add_argument("-v", "--version", action='version', version='amplicon_classifier {version} \n Author: Jens \
                         Luebeck (jluebeck [at] ucsd.edu)'.format(version=__version__))
 
@@ -718,7 +722,7 @@ if __name__ == "__main__":
 
     gene_lookup = {}
     ftgd_list = []
-    if args.extract_genes:
+    if args.report_genes:
         # read the gene list and import
         import get_genes
         gene_file_location_lookup = {"hg19": "human_hg19_september_2011/Genes_July_2010_hg19.gff",
@@ -861,8 +865,8 @@ if __name__ == "__main__":
             featEntropyD[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
 
         # write genes
-        if args.extract_genes:
-            feat_genes = get_genes.extract_gene_list(sName, ampN, gene_lookup, args.extract_genes, cycleList, segSeqD,
+        if args.report_genes:
+            feat_genes = get_genes.extract_gene_list(sName, ampN, gene_lookup, args.report_genes, cycleList, segSeqD,
                                                      bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat)
 
             ftgd_list.append([sName, ampN, feat_genes])
@@ -915,36 +919,44 @@ if __name__ == "__main__":
     #OUTPUT FILE WRITING
     print("writing output files")
     # Genes
-    if args.extract_genes:
+    if args.report_genes:
         gene_extraction_outname = args.o + "_gene_list.tsv"
         get_genes.write_results(gene_extraction_outname, ftgd_list)
 
     # Feature entropy
-    with open(args.o + "_feature_entropy.tsv",'w') as outfile:
-        outfile.write("sample\tamplicon\tfeature\ttotal_feature_entropy\tdecomp_entropy\tAmp_nseg_entropy\n")
-        for k, vt in featEntropyD.items():
-            ol = map(str, k + vt)
-            outfile.write("\t".join(ol) + "\n")
+    if args.report_complexity:
+        with open(args.o + "_feature_entropy.tsv",'w') as outfile:
+            outfile.write("sample\tamplicon\tfeature\ttotal_feature_entropy\tdecomp_entropy\tAmp_nseg_entropy\n")
+            for k, vt in featEntropyD.items():
+                ol = map(str, k + vt)
+                outfile.write("\t".join(ol) + "\n")
 
     # Amplicon profiles
     with open(args.o + "_amplicon_classification_profiles.tsv", 'w') as outfile:
-        outfile.write("\t".join(["sample_name", "amplicon_number", "amplicon_classification", "ecDNA+", "BFB+",
-                                 "ecDNA_amplicons"] + categories) + "\n")
+        oh = ["sample_name", "amplicon_number", "amplicon_decomposition_class", "ecDNA+", "BFB+", "ecDNA_amplicons"]
+        if args.verbose_classification:
+            oh += categories
+
+        outfile.write("\t".join(oh) + "\n")
         for ind, sname in enumerate(sampNames):
             ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
             ampClass, ecStat, bfbStat, ecAmpliconCount = AMP_classifications[ind]
             ecOut = "Positive" if ecStat else "None detected"
             bfbOut = "Positive" if bfbStat else "None detected"
-            outfile.write("\t".join(
-                [sname.rsplit("_amplicon")[0], ampN, ampClass, ecOut, bfbOut, str(ecAmpliconCount)] +
-                [str(x) for x in AMP_dvaluesList[ind]]) + "\n")
+            ov = [sname.rsplit("_amplicon")[0], ampN, ampClass, ecOut, bfbOut, str(ecAmpliconCount)]
+            if args.verbose_classification:
+                ov+=[str(x) for x in AMP_dvaluesList[ind]]
+
+            outfile.write("\t".join(ov) + "\n")
+
 
     # Edge profiles
-    with open(args.o + "_edge_classification_profiles.tsv", 'w') as outfile:
-        outfile.write("\t".join(["sample_name", "amplicon_number"] + mixing_cats) + "\n")
-        for ind, sname in enumerate(sampNames):
-            ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
-            outfile.write(
-                "\t".join([sname.rsplit("_amplicon")[0], ampN] + [str(x) for x in EDGE_dvaluesList[ind]]) + "\n")
+    if args.verbose_classification:
+        with open(args.o + "_edge_classification_profiles.tsv", 'w') as outfile:
+            outfile.write("\t".join(["sample_name", "amplicon_number"] + mixing_cats) + "\n")
+            for ind, sname in enumerate(sampNames):
+                ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
+                outfile.write(
+                    "\t".join([sname.rsplit("_amplicon")[0], ampN] + [str(x) for x in EDGE_dvaluesList[ind]]) + "\n")
 
     print("done")
