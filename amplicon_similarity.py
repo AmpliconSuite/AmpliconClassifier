@@ -246,7 +246,7 @@ if __name__ == "__main__":
     # parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon",
     #                     default=5000)
     parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: \
-    samplename_amplicon1 /path/to/sample_amplicon1_cycles.txt /path/to/sample_amplicon1_graph.txt", required=True)
+    samplename /path/to/sample_amplicon1_cycles.txt /path/to/sample_amplicon1_graph.txt", required=True)
     parser.add_argument("-o", help="Output filename prefix")
     parser.add_argument("--min_cn", type=float, help="Minimum CN to consider as amplification", default=4.5)
     # parser.add_argument("-p","--pairs", help="Amplicons to compute similarity for. Each line formatted as: \
