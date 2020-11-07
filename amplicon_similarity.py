@@ -253,6 +253,8 @@ if __name__ == "__main__":
     # samplename_amplicon1 samplename_amplicon2 ...", required=True)
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files",
                         action='store_true', default=False)
+    parser.add_argument("--no_LC_filter", help="Do not filter low-complexity cycles. Not recommended to set this flag.",
+                        action='store_true', default=False)
     args = parser.parse_args()
 
     add_chr_tag = args.add_chr_tag
@@ -275,8 +277,11 @@ if __name__ == "__main__":
         lcPath = AA_DATA_REPO + fDict["mapability_exclude_filename"]
         cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
 
-        lcD = buildLCDatabase(lcPath)
-        cg5D = build_CG5_database(cg5Path)
+        lcD = defaultdict(IntervalTree)
+        cg5D = defaultdict(IntervalTree)
+        if not args.no_LC_filter:
+            lcD = buildLCDatabase(lcPath)
+            cg5D = build_CG5_database(cg5Path)
 
     except KeyError:
         sys.stderr.write("$AA_DATA_REPO not set. Please see AA installation instructions.\n")
