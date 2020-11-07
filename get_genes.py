@@ -142,7 +142,7 @@ def extract_gene_list(sname, ampN, gene_lookup, classes_to_get, cycleList, segSe
 
             feature_dict["ecDNA_" + str(amp_ind + 1)] = ec_interval_dict
 
-    if ("other" in classes_to_get or "all" in classes_to_get) and ampClass != "No amp/Invalid":
+    if ("other" in classes_to_get or "all" in classes_to_get) and ampClass != "No amp/Invalid" and not ecStat and not bfbStat:
         other_interval_dict = defaultdict(list)
         for o_ind in range(len(cycleList)):
             if o_ind not in all_used:
