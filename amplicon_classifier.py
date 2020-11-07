@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.3.5"
+__version__ = "0.3.6"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -693,6 +693,8 @@ if __name__ == "__main__":
                         action='store_true')
     parser.add_argument("--verbose_classification", help="Generate verbose output with raw classification scores.",
                         action='store_true')
+    parser.add_argument("--no_LC_filter", help="Do not filter low-complexity cycles. Not recommended to set this flag.",
+                        action='store_true', default=False)
     parser.add_argument("-v", "--version", action='version', version='amplicon_classifier {version} \n Author: Jens \
                         Luebeck (jluebeck [at] ucsd.edu)'.format(version=__version__))
 
@@ -714,7 +716,10 @@ if __name__ == "__main__":
                 fDict[fields[0]] = fields[1]
 
         lcPath = AA_DATA_REPO + fDict["mapability_exclude_filename"]
-        lcD = buildLCDatabase(lcPath)
+        if not args.no_LC_filter:
+            lcD = buildLCDatabase(lcPath)
+        else:
+            lcD = {}
 
     except KeyError:
         sys.stderr.write("$AA_DATA_REPO not set. Please see AA installation instructions.\n")
