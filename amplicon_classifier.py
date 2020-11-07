@@ -688,7 +688,7 @@ if __name__ == "__main__":
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files",
                         action='store_true')
     parser.add_argument("--report_genes", help="Extract list of genes from amplicons with given classification.",
-                        choices=["ecdna", "bfb", "both"], default=[])
+                        choices=["ecdna", "bfb", "other", "all"], nargs='+', default=[])
     parser.add_argument("--report_complexity", help="Compute a measure of amplicon entropy for each amplicon.",
                         action='store_true')
     parser.add_argument("--verbose_classification", help="Generate verbose output with raw classification scores.",
