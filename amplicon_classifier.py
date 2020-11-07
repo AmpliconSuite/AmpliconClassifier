@@ -716,10 +716,10 @@ if __name__ == "__main__":
                 fDict[fields[0]] = fields[1]
 
         lcPath = AA_DATA_REPO + fDict["mapability_exclude_filename"]
+        
+        lcD = defaultdict(IntervalTree)
         if not args.no_LC_filter:
             lcD = buildLCDatabase(lcPath)
-        else:
-            lcD = {}
 
     except KeyError:
         sys.stderr.write("$AA_DATA_REPO not set. Please see AA installation instructions.\n")
