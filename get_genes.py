@@ -113,14 +113,16 @@ def write_interval_beds(sname, ampN, feature_dict):
 
 
 def extract_gene_list(sname, ampN, gene_lookup, classes_to_get, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters,
-                      invalidInds, bfbStat, ecStat):
+                      invalidInds, bfbStat, ecStat, ampClass):
 
     feature_dict = {}
+    invalidSet = set(invalidInds)
+    all_used = invalidSet.union(bfb_cycle_inds)
     if ("bfb" in classes_to_get or "all" in classes_to_get) and bfbStat:
         # collect unmerged genomic intervals comprising the feature
         bfb_interval_dict = defaultdict(list)
         for b_ind in bfb_cycle_inds:
-            if b_ind not in invalidInds:
+            if b_ind not in invalidSet:
                 for c_id in cycleList[b_ind]:
                     chrom, l, r = segSeqD[abs(c_id)]
                     bfb_interval_dict[chrom].append((l, r))
@@ -132,21 +134,18 @@ def extract_gene_list(sname, ampN, gene_lookup, classes_to_get, cycleList, segSe
         for amp_ind, ec_cycle_inds in enumerate(ecIndexClusters):
             ec_interval_dict = defaultdict(list)
             for e_ind in ec_cycle_inds:
-                if e_ind not in invalidInds:
+                all_used.add(e_ind)
+                if e_ind not in invalidSet:
                     for c_id in cycleList[e_ind]:
                         chrom, l, r = segSeqD[abs(c_id)]
                         ec_interval_dict[chrom].append((l, r))
 
             feature_dict["ecDNA_" + str(amp_ind + 1)] = ec_interval_dict
 
-    if ("other" in classes_to_get or "all" in classes_to_get):
-        nonOther = invalidInds.union(bfb_cycle_inds)
-        for ecIC in ecIndexClusters:
-            nonOther|=set(ecIC)
-
+    if ("other" in classes_to_get or "all" in classes_to_get) and ampClass != "No amp/Invalid":
         other_interval_dict = defaultdict(list)
         for o_ind in range(len(cycleList)):
-            if o_ind not in nonOther:
+            if o_ind not in all_used:
                 for c_id in cycleList[o_ind]:
                     chrom, l, r = segSeqD[abs(c_id)]
                     other_interval_dict[chrom].append((l, r))

@@ -825,20 +825,20 @@ if __name__ == "__main__":
         bfbStat = False
         if ampClass == "Cyclic" and not bfbClass:
             ecStat = True
+            bfb_cycle_inds = []
 
         elif bfbClass:
             bfbStat = True
             if bfbHasEC:
                 ecStat = True
 
+        else:
+            bfb_cycle_inds = []
+
         # determine number of ecDNA present
         ecIndexClusters = []
         if ecStat:
-            if bfbStat:
-                excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
-            else:
-                excludableCycleIndices = set(invalidInds)
-
+            excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
             ecIndexClusters = clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices)
             ecAmpliconCount = max(len(ecIndexClusters), 1)
 
@@ -867,7 +867,7 @@ if __name__ == "__main__":
         # write genes
         if args.report_genes:
             feat_genes = get_genes.extract_gene_list(sName, ampN, gene_lookup, args.report_genes, cycleList, segSeqD,
-                                                     bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat)
+                                                     bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass)
 
             ftgd_list.append([sName, ampN, feat_genes])
 
