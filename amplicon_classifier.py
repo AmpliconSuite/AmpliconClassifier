@@ -680,7 +680,7 @@ if __name__ == "__main__":
     parser.add_argument("-o", help="Output filename prefix")
     parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: \
     sample_name cycles.txt graph.txt")
-    parser.add_argument("--plotStyle", help="Type of visualizations to produce",
+    parser.add_argument("--plotstyle", help="Type of visualizations to produce",
                         choices=["grouped", "individual", "noplot"], default="noplot")
     parser.add_argument("--force", help="Disable No amp/Invalid class if possible", action='store_true')
     # parser.add_argument("--use_BFB_linked_cyclic_class", help="Include the \'BFB-linked cyclic\' class",
@@ -903,14 +903,14 @@ if __name__ == "__main__":
     # PLOTTING
     textCategories = ["No amp/Invalid", "Linear\namplification", "Trivial\ncycle", "Complex\nnon-cyclic",
                       "Complex\ncyclic", "BFB\nfoldback"]
-    if args.plotStyle == "grouped":
+    if args.plotstyle == "grouped":
         from radar_plotting import *
 
         print("plotting")
         make_classification_radar(textCategories, AMP_dvaluesList, args.o + "_amp_class", sampNames)
         make_classification_radar(mixing_cats, EDGE_dvaluesList, args.o + "_edge_class", sampNames)
 
-    elif args.plotStyle == "individual":
+    elif args.plotstyle == "individual":
         from radar_plotting import *
 
         print("plotting")
