@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 
-__version__ = "0.3.6"
+__version__ = "0.3.7"
 __author__ = "Jens Luebeck"
 
 import argparse
-from collections import defaultdict
 import copy
 from math import log
 import operator
-import os
 import sys
 
-from intervaltree import IntervalTree
+from ac_util import *
+import get_genes
 
 tot_min_del = 5000  # minimum size of deletion before non-trivial
 minCycleSize = 10000
@@ -24,18 +23,6 @@ min_upper_cn = 4.5
 min_score_for_bfb = 0.25
 min_fb_reads_for_bfb = 10
 fb_dist_cut = 25000
-
-
-class breakpoint(object):
-    def __init__(self, lchrom, lpos, rchrom, rpos, cn):
-        self.lchrom = lchrom
-        self.lpos = lpos
-        self.rchrom = rchrom
-        self.rpos = rpos
-        self.cn = cn
-
-    def to_string(self):
-        return self.lchrom + ":" + str(self.lpos) + " | " + self.rchrom + ":" + str(self.rpos) + "\t" + str(self.cn)
 
 
 # ------------------------------------------------------------
@@ -476,151 +463,6 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices=None):
 
     return indexClusters
 
-
-# ------------------------------------------------------------
-# Input and data prep
-def bpgEdgeToCycles(bp, posCycleLookup):
-    lCycles = set([x.data for x in posCycleLookup[bp.lchrom][bp.lpos]])
-    rCycles = set([x.data for x in posCycleLookup[bp.rchrom][bp.rpos]])
-    return lCycles, rCycles
-
-
-# some have 0's in the middle because of an AA bug. This is fixes that automatically
-def repair_cycle(cycle):
-    if 0 in cycle and cycle[0] != 0:
-        zero_ind = cycle.index(0)
-        rotCyc = cycle[zero_ind + 1:] + cycle[:zero_ind + 1]
-
-        return rotCyc
-
-    return cycle
-
-
-def parseCycle(cyclef, add_chr_tag):
-    segSeqD = {0: (None, 0, 0)}
-    cycleList = []
-    cycleCNs = []
-    seenCycs = set()
-
-    with open(cyclef) as infile:
-        for line in infile:
-            if line.startswith("Segment"):
-                fields = line.rstrip().rsplit()
-                segNum = int(fields[1])
-                chrom = fields[2]
-                if add_chr_tag and not chrom.startswith('chr'):
-                    chrom = "chr" + chrom
-
-                l, r = int(fields[3]), int(fields[4])
-                segSeqD[segNum] = (chrom, l, r)
-
-            elif line.startswith("Cycle"):
-                cf = [tuple(x.rsplit("=")) for x in line.rstrip().rsplit(";")]
-                cd = dict(cf)
-                ss = cd["Segments"]
-                num_ss = [int(x[-1] + x[:-1]) for x in ss.rsplit(",")]
-                # print(num_ss)
-                # if any([segSeqD[abs(x)][0] == "hs37d5" for x in num_ss if x != 0]):
-                #     continue
-                lcCycle = False
-                pop_inds = []
-                for seg_ind, seg in enumerate(num_ss):
-                    t = segSeqD[abs(seg)]
-                    if lcD[t[0]].overlaps(t[1], t[2]):
-                        if num_ss[0] == 0 and (seg_ind == 1 or seg_ind == len(num_ss) - 2) and len(num_ss) > 3:
-                            pop_inds.append(seg_ind)
-                            continue
-
-                        else:
-                            print("Cycle was LC", str(t[0]), str(t[1]), str(t[2]))
-                            lcCycle = True
-                            break
-
-                if lcCycle:
-                    continue
-
-                elif pop_inds:
-                    for seg_ind in pop_inds[::-1]:
-                        num_ss.pop(seg_ind)
-
-
-                currCycle = repair_cycle(num_ss)
-                uid = ss + "," + cd["Copy_count"]
-                if uid in seenCycs:
-                    print(cyclef + " duplicate cycle encountered")
-
-                else:
-                    cycleList.append(currCycle)
-                    seenCycs.add(uid)
-                    cycleCNs.append(float(cd["Copy_count"]))
-
-    return segSeqD, cycleList, cycleCNs
-
-
-def parseBPG(bpgf, add_chr_tag):
-    bps = []
-    with open(bpgf) as infile:
-        for line in infile:
-            # if line.startswith("discordant") or line.startswith("concordant"):
-            if line.startswith("discordant"):
-                fields = line.rstrip().rsplit()
-                l, r = fields[1].rsplit("->")
-                lchrom, lpos = l[:-1].rsplit(":")
-                rchrom, rpos = r[:-1].rsplit(":")
-                lpos, rpos = int(lpos), int(rpos)
-                if add_chr_tag and not lchrom.startswith('chr'):
-                    lchrom = "chr" + lchrom
-                    rchrom = "chr" + rchrom
-
-                if lcD[lchrom][lpos] or lcD[rchrom][rpos]:
-                    continue
-
-                cn = float(fields[2])
-                currBP = breakpoint(lchrom, lpos, rchrom, rpos, cn)
-                bps.append(currBP)
-
-    return bps
-
-
-# build a lookup for position to list of cycles hitting it
-def buildPosCycleLookup(cycles, segSeqD):
-    posCycleLookup = defaultdict(IntervalTree)
-    for ind, c in enumerate(cycles):
-        for seg in c:
-            if seg != 0:
-                chrom, s, e = segSeqD[abs(seg)]
-                posCycleLookup[chrom][s:e + 1] = ind
-
-    return posCycleLookup
-
-
-def buildLCDatabase(mappabilityFile):
-    lcD = defaultdict(IntervalTree)
-    with open(mappabilityFile) as infile:
-        for line in infile:
-            fields = line.rstrip().rsplit()
-            chrom, s, e = fields[0], int(fields[1]), int(fields[2])
-            if e - s > 7500:
-                lcD[chrom].addi(s, e)
-
-    return lcD
-
-
-def readFlist(filelist):
-    flist = []
-    with open(filelist) as infile:
-        for line in infile:
-            line = line.rstrip()
-            if line:
-                fields = line.rsplit()
-                if len(fields) < 2 or len(fields) > 3:
-                    print("Bad formatting in: ", line)
-                else:
-                    flist.append(fields)
-
-    return flist
-
-
 # ------------------------------------------------------------
 
 '''
@@ -708,6 +550,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     if args.ref == "hg38": args.ref = "GRCh38"
+    patch_links = read_patch_regions(args.ref)
+    print(patch_links)
 
     # check if aa data repo set, construct LC datatabase
     try:
@@ -730,8 +574,7 @@ if __name__ == "__main__":
     gene_lookup = {}
     ftgd_list = []
     if args.report_genes:
-        # read the gene list and import
-        import get_genes
+        # read the gene list
         gene_file_location_lookup = {"hg19": "human_hg19_september_2011/Genes_July_2010_hg19.gff",
                                      "GRCh38": "genes_hg38.gff",
                                      "GRCh37": "human_hg19_september_2011/Genes_July_2010_hg19.gff"}
@@ -764,7 +607,7 @@ if __name__ == "__main__":
             sName, cyclesFile, graphFile = fpair
             sampNames.append(sName)
             cyclesFiles.append(cyclesFile)
-            segSeqD, cycleList, cycleCNs = parseCycle(cyclesFile, args.add_chr_tag)
+            segSeqD, cycleList, cycleCNs = parseCycle(cyclesFile, args.add_chr_tag, lcD, patch_links)
 
         else:
             print(fpair)
@@ -887,7 +730,7 @@ if __name__ == "__main__":
         edgeTypeCountD = defaultdict(float)
         if graphFile:
             posCycleLookup = buildPosCycleLookup(cycleList, segSeqD)
-            bps = parseBPG(graphFile, args.add_chr_tag)
+            bps = parseBPG(graphFile, args.add_chr_tag, lcD)
             for bp in bps:
                 lCycles, rCycles = bpgEdgeToCycles(bp, posCycleLookup)
                 # indices of left and right cycles on the discordant edges, and the index-ordered list of types
@@ -925,45 +768,7 @@ if __name__ == "__main__":
 
     #OUTPUT FILE WRITING
     print("writing output files")
-    # Genes
-    if args.report_genes:
-        gene_extraction_outname = args.o + "_gene_list.tsv"
-        get_genes.write_results(gene_extraction_outname, ftgd_list)
-
-    # Feature entropy
-    if args.report_complexity:
-        with open(args.o + "_feature_entropy.tsv",'w') as outfile:
-            outfile.write("sample\tamplicon\tfeature\ttotal_feature_entropy\tdecomp_entropy\tAmp_nseg_entropy\n")
-            for k, vt in featEntropyD.items():
-                ol = map(str, k + vt)
-                outfile.write("\t".join(ol) + "\n")
-
-    # Amplicon profiles
-    with open(args.o + "_amplicon_classification_profiles.tsv", 'w') as outfile:
-        oh = ["sample_name", "amplicon_number", "amplicon_decomposition_class", "ecDNA+", "BFB+", "ecDNA_amplicons"]
-        if args.verbose_classification:
-            oh += categories
-
-        outfile.write("\t".join(oh) + "\n")
-        for ind, sname in enumerate(sampNames):
-            ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
-            ampClass, ecStat, bfbStat, ecAmpliconCount = AMP_classifications[ind]
-            ecOut = "Positive" if ecStat else "None detected"
-            bfbOut = "Positive" if bfbStat else "None detected"
-            ov = [sname.rsplit("_amplicon")[0], ampN, ampClass, ecOut, bfbOut, str(ecAmpliconCount)]
-            if args.verbose_classification:
-                ov+=[str(x) for x in AMP_dvaluesList[ind]]
-
-            outfile.write("\t".join(ov) + "\n")
-
-
-    # Edge profiles
-    if args.verbose_classification:
-        with open(args.o + "_edge_classification_profiles.tsv", 'w') as outfile:
-            outfile.write("\t".join(["sample_name", "amplicon_number"] + mixing_cats) + "\n")
-            for ind, sname in enumerate(sampNames):
-                ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
-                outfile.write(
-                    "\t".join([sname.rsplit("_amplicon")[0], ampN] + [str(x) for x in EDGE_dvaluesList[ind]]) + "\n")
+    write_outputs(args, ftgd_list, featEntropyD, categories, sampNames, cyclesFiles, AMP_classifications,
+                  AMP_dvaluesList, mixing_cats, EDGE_dvaluesList)
 
     print("done")

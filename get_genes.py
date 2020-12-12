@@ -1,38 +1,9 @@
 #!/usr/bin/env python3
 
-# This is imported by amplicon_classifier.py to get genes
-
-from collections import defaultdict
-import os
-
-from intervaltree import IntervalTree
+from ac_util import *
 
 
-def parse_genes(gene_file):
-    print("reading " + gene_file)
-    t = defaultdict(IntervalTree)
-    seenNames = set()
-    with open(gene_file) as infile:
-        for line in infile:
-            if line.startswith("#"):
-                continue
-
-            fields = line.rstrip().split()
-            if not fields:
-                continue
-
-            chrom, s, e, strand = fields[0], int(fields[3]), int(fields[4]), fields[6]
-            # parse the line and get the name
-            propFields = {x.split("=")[0]: x.split("=")[1] for x in fields[-1].rstrip(";").split(";")}
-            gname = propFields["Name"]
-            is_other_feature = (gname.startswith("LOC") or gname.startswith("LINC") or gname.startswith("MIR"))
-            if gname not in seenNames and not is_other_feature:
-                seenNames.add(gname)
-                t[chrom][s:e] = (gname, strand)
-
-    print("read " + str(len(seenNames)) + " genes\n")
-    return t
-
+# This file is imported by amplicon_classifier.py to get genes
 
 def merge_intervals(feature_dict):
     for item, usort_intd in feature_dict.items():
@@ -83,38 +54,8 @@ def get_genes_from_intervals(gene_lookup, feature_dict):
     return feat_to_genes
 
 
-# take a list of 'feat_to_genes' dicts
-def write_results(outname, ftg_list):
-    with open(outname, 'w') as outfile:
-        head = ["sample_name", "amplicon_number", "feature", "gene", "truncated"]
-        outfile.write("\t".join(head) + "\n")
-        for sname, anum, ftgd in ftg_list:
-            for feat_name in sorted(ftgd.keys()):
-                for gname in sorted(ftgd[feat_name].keys()):
-                    truncs = [x for x in ["5p", "3p"] if x not in ftgd[feat_name][gname]]
-                    ts = "_".join(truncs) if truncs else "None"
-                    outfile.write("\t".join([sname, anum, feat_name, gname, ts]) + "\n")
-
-
-#print all the intervals to bed files
-def write_interval_beds(sname, ampN, feature_dict):
-    outdir = "classification_bed_files/"
-    os.makedirs(outdir, exist_ok=True)
-    trim_sname = sname.rsplit("/")[-1]
-    for feat_name, curr_fd in feature_dict.items():
-        with open(outdir + trim_sname + "_" + ampN + "_" + feat_name + "_intervals.bed", 'w') as outfile:
-            for chrom, ilist in curr_fd.items():
-                if not chrom:
-                    continue
-
-                for i in ilist:
-                    l = map(str, [chrom, i[0], i[1]])
-                    outfile.write("\t".join(l) + "\n")
-
-
 def extract_gene_list(sname, ampN, gene_lookup, classes_to_get, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters,
                       invalidInds, bfbStat, ecStat, ampClass):
-
     feature_dict = {}
     invalidSet = set(invalidInds)
     all_used = invalidSet.union(bfb_cycle_inds)
