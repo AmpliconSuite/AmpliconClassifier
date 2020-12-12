@@ -116,7 +116,7 @@ def tot_rearr_edges(graphf, add_chr_tag):
     return rearr_e
 
 
-def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, exclude_inds):
+def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, exclude_inds, add_chr_tag):
     #construct intervaltree of valid regions
     hit_region_it = defaultdict(IntervalTree)
     for i in feature_inds:
@@ -134,6 +134,9 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
             if line.startswith("sequence"):
                 fields = line.rsplit()
                 c, s, e = fields[1].rsplit(":")[0], int(fields[1].rsplit(":")[1][:-1]), int(fields[2].rsplit(":")[1][:-1])+1
+                if add_chr_tag and not c.startswith('chr'):
+                    c = "chr" + c
+
                 if not hit_region_it[c][s:e]:
                     continue
 
@@ -806,7 +809,7 @@ if __name__ == "__main__":
 
         # decomposition/amplicon complexity
         totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
-                                                                range(len(cycleList)), set())
+                                                                range(len(cycleList)), set(), args.add_chr_tag)
         AMP_dvaluesDict["Amp_entropy"] = totalEnt
         AMP_dvaluesDict["Amp_decomp_entropy"] = decompEnt
         AMP_dvaluesDict["Amp_nseg_entropy"] = nEnt
@@ -857,7 +860,7 @@ if __name__ == "__main__":
         for ecCycleList in ecIndexClusters:
             c_ex_I = bfb_cycle_inds if bfbStat else set()
             totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
-                                                                ecCycleList, c_ex_I)
+                                                                ecCycleList, c_ex_I, args.add_chr_tag)
             ecEntropies.append((totalEnt, decompEnt, nEnt))
 
         for ind, etup in enumerate(ecEntropies):
@@ -865,7 +868,7 @@ if __name__ == "__main__":
 
         if bfbStat:
             bfb_totalEnt, bfb_decompEnt, bfb_nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
-                                                                            bfb_cycle_inds, set())
+                                                                            bfb_cycle_inds, set(), args.add_chr_tag)
             featEntropyD[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
 
         # write genes
