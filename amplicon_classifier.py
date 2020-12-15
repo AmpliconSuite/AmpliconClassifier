@@ -607,15 +607,15 @@ if __name__ == "__main__":
             sName, cyclesFile, graphFile = fpair
             sampNames.append(sName)
             cyclesFiles.append(cyclesFile)
-            segSeqD, cycleList, cycleCNs = parseCycle(cyclesFile, args.add_chr_tag, lcD, patch_links)
+            ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
+            print(sName, ampN)
+            segSeqD, cycleList, cycleCNs = parseCycle(cyclesFile, graphFile, args.add_chr_tag, lcD, patch_links)
 
         else:
             print(fpair)
             sys.stderr.write("File list not properly formatted\n")
             sys.exit(1)
 
-        ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
-        print(sName, ampN)
         cycleTypes = []
         cycleWeights = []
         invalidInds = []

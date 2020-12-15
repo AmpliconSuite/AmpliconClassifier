@@ -74,6 +74,47 @@ def write_interval_beds(sname, ampN, feature_dict):
 
 
 # ------------------------------------------------------------
+def get_amp_outside_bounds(graphf, add_chr_tag):
+    # get the interval of the first amp (x)
+    # get the interval of the last amp (y)
+    # is there an everted edge linking x to y?
+    xc, xs = None, 0
+    yc, ye = None, 0
+    ee_spans = False
+    with open(graphf) as infile:
+        for line in infile:
+            fields = line.rsplit()
+            if line.startswith("sequence"):
+                c, s, e = fields[1].rsplit(":")[0], int(fields[1].rsplit(":")[1][:-1]), int(fields[2].rsplit(":")[1][:-1])+1
+                cn = float(fields[3])
+                if add_chr_tag and not c.startswith('chr'):
+                    c = "chr" + c
+
+                if cn > 10:
+                    if not xc:
+                        xc, xs = c, s
+
+                    yc, ye = c, e
+
+
+            elif line.startswith("discordant") and not xc is None and not yc is None:
+                s1, s2 = fields[1].rsplit("->")
+                c1, p1, d1 = s1.rsplit(":")[0],  int(s1.rsplit(":")[1][:-1]), s1.rsplit(":")[1][-1]
+                c2, p2, d2 = s2.rsplit(":")[0], int(s2.rsplit(":")[1][:-1]), s2.rsplit(":")[1][-1]
+                if add_chr_tag and not c1.startswith('chr'):
+                    c1 = "chr" + c1
+                    c2 = "chr" + c2
+
+                # first must be +, second must be -
+                if d1 == "+" and d2 == "-" and c1 == c2 and p1 > p2 and c1 == yc and c2 == xc:
+                    # first must fall within 1kbp of yc,ye
+                    # second must fall within 1kbp of xc,xs
+                    if ye - 1000 < p1 < ye + 1000 and xs - 1000 < p2 < xs + 1000:
+                        ee_spans = True
+
+    return (xc, xs), (yc, ye), ee_spans
+
+
 # Input and data prep
 def bpgEdgeToCycles(bp, posCycleLookup):
     lCycles = set([x.data for x in posCycleLookup[bp.lchrom][bp.lpos]])
@@ -82,7 +123,7 @@ def bpgEdgeToCycles(bp, posCycleLookup):
 
 
 # address formatting issues and known link misses
-def repair_cycle(cycle, segSeqD, patch_links):
+def repair_cycle(cycle, segSeqD, patch_links, xt, yt, ee_spans):
     repCyc = cycle
 
     # repair issue with interior source edges
@@ -90,8 +131,9 @@ def repair_cycle(cycle, segSeqD, patch_links):
         zero_ind = cycle.index(0)
         repCyc = cycle[zero_ind + 1:] + cycle[:zero_ind + 1]
 
-    # repair issue with unlinked deletion
+    # repair issues with unlinked deletion
     if len(repCyc) > 3 and repCyc[0] == 0:
+        # repair small unlinked deletions from known database (patch_links)
         directional_a, directional_b = repCyc[1], repCyc[-2]
         a, b = abs(directional_a), abs(directional_b)
         if directional_a > 0:
@@ -109,13 +151,34 @@ def repair_cycle(cycle, segSeqD, patch_links):
             if x[0] == spair[0][0] and x[2] == spair[1][0]:
                 if x[1].overlaps(spair[0][1]) and x[3].overlaps(spair[1][1]):
                     repCyc = repCyc[1:-1]
-                    print("bridged a gap in cycle: " + str(repCyc))
-                    break
+                    print("bridged a gap in cycle using known database: " + str(repCyc))
+                    return repCyc
+
+        # now check if amplicon entirely enclosed in everted edge with high CN (suggests missing interior edge).
+        if ee_spans:
+            for i, j in zip(repCyc[1:-2], repCyc[2:-1]):
+                # check if same direction
+                if i < 0 and j < 0:
+                    chri, posi = segSeqD[abs(i)][0], segSeqD[abs(i)][1]
+                    chrj, posj = segSeqD[abs(j)][0], segSeqD[abs(j)][2]
+                    if xt[0] == chri and abs(posi - xt[1]) < 1000 and yt[0] == chrj and abs(posj - yt[1]):
+                        repCyc = repCyc[1:-1]
+                        print("bridged a gap in cycle: " + str(repCyc))
+                        return repCyc
+
+                elif i > 0 and j > 0:
+                    chri, posi = segSeqD[abs(i)][0], segSeqD[abs(i)][2]
+                    chrj, posj = segSeqD[abs(j)][0], segSeqD[abs(j)][1]
+                    if xt[0] == chrj and abs(posj - xt[1]) < 1000 and yt[0] == chri and abs(posi - yt[1]):
+                        repCyc = repCyc[1:-1]
+                        print("bridged a gap in cycle: " + str(repCyc))
+                        return repCyc
 
     return repCyc
 
 
-def parseCycle(cyclef, add_chr_tag, lcD, patch_links):
+def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
+    xt, yt, ee_spans = get_amp_outside_bounds(graphf, add_chr_tag)
     segSeqD = {0: (None, 0, 0)}
     cycleList = []
     cycleCNs = []
@@ -162,7 +225,7 @@ def parseCycle(cyclef, add_chr_tag, lcD, patch_links):
                     for seg_ind in pop_inds[::-1]:
                         num_ss.pop(seg_ind)
 
-                currCycle = repair_cycle(num_ss, segSeqD, patch_links)
+                currCycle = repair_cycle(num_ss, segSeqD, patch_links, xt, yt, ee_spans)
                 uid = ss + "," + cd["Copy_count"]
                 if uid in seenCycs:
                     print(cyclef + " duplicate cycle encountered")
