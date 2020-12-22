@@ -315,6 +315,46 @@ def read_patch_regions(ref):
     return patch_links
 
 
+# write a cycles file with the cycles -> some corrected
+def write_annotated_corrected_cycles_file(outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters,
+                                          invalidInds, rearrCycleInds):
+    outdir = "annotated_cycles_files/"
+    os.makedirs(outdir, exist_ok=True)
+    with open(outdir + outname, 'w') as outfile:
+        outfile.write("List of cycle segments\n")
+        for ind, k in enumerate(sorted(segSeqD.keys())):
+            if k != 0:
+                ll = "\t".join(["Segment", str(ind+1), segSeqD[k][0], str(segSeqD[k][1]), str(segSeqD[k][2])])
+                outfile.write(ll + "\n")
+
+        for ind, cyc in enumerate(cycleList):
+            ccn = cycleCNs[ind]
+            clen = sum([segSeqD[abs(x)][2] - segSeqD[abs(x)][1] for x in cyc])
+            cl = ",".join([str(abs(x)) + "-" if x < 0 else str(abs(x)) + "+" for x in cyc])
+            acclass = ""
+            isCyclic = cyc[0] != 0
+            for ec_i, ec_cycset in enumerate(ecIndexClusters):
+                if ind in ec_cycset:
+                    acclass += "ecDNA-like_"
+
+            if ind in bfb_cycle_inds:
+                acclass += "BFB-like_"
+
+            if ind in invalidInds:
+                acclass += "Invalid"
+
+            acclass = acclass.rstrip("_")
+            if not acclass:
+                if ind in rearrCycleInds or isCyclic:
+                    acclass = "Rearranged"
+                else:
+                    acclass = "Linear"
+
+            l1 = ";".join(["Cycle=" + str(ind+1), "Copy_count=" + str(ccn), "Length=" + str(clen),
+                           "IsCyclicPath=" + str(isCyclic), "CycleClass=" + acclass, "Segments=" + cl])
+            outfile.write(l1 + "\n")
+
+
 def write_outputs(args, ftgd_list, featEntropyD, categories, sampNames, cyclesFiles, AMP_classifications,
                   AMP_dvaluesList, mixing_cats, EDGE_dvaluesList):
     # Genes

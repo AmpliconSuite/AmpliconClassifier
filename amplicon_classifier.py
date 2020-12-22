@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.3.7"
+__version__ = "0.3.8"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -520,11 +520,11 @@ if __name__ == "__main__":
                         choices=["hg19", "GRCh37", "hg38", "GRCh38"], required=True)
 
     parser.add_argument("--min_cn_flow", type=float, help="Minimum CN flow to consider as amplification", default=1)
-    parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon",
+    parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon (5000)",
                         default=5000)
     parser.add_argument("-o", help="Output filename prefix")
-    parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: \
-    sample_name cycles.txt graph.txt")
+    parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: "
+                        "sample_name cycles.txt graph.txt")
     parser.add_argument("--plotstyle", help="Type of visualizations to produce",
                         choices=["grouped", "individual", "noplot"], default="noplot")
     parser.add_argument("--force", help="Disable No amp/Invalid class if possible", action='store_true')
@@ -538,6 +538,8 @@ if __name__ == "__main__":
                         action='store_true')
     parser.add_argument("--verbose_classification", help="Generate verbose output with raw classification scores.",
                         action='store_true')
+    parser.add_argument("--annotate_cycles_file", help="Create an annotated cycles file, indicating the classification "
+                        "of the paths and cycles present.", action='store_true')
     parser.add_argument("--no_LC_filter", help="Do not filter low-complexity cycles. Not recommended to set this flag.",
                         action='store_true', default=False)
     parser.add_argument("-v", "--version", action='version', version='amplicon_classifier {version} \n Author: Jens \
@@ -551,7 +553,6 @@ if __name__ == "__main__":
 
     if args.ref == "hg38": args.ref = "GRCh38"
     patch_links = read_patch_regions(args.ref)
-    print(patch_links)
 
     # check if aa data repo set, construct LC datatabase
     try:
@@ -619,6 +620,7 @@ if __name__ == "__main__":
         cycleTypes = []
         cycleWeights = []
         invalidInds = []
+        rearrCycleInds = set()
         fb_prop, maxCN = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
         rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
         totalCompCyclicCont = 0
@@ -633,8 +635,10 @@ if __name__ == "__main__":
             else:
                 circCyc = isCircular(cycle)
                 compCyc = isRearranged(cycle, segSeqD)
-                if circCyc and compCyc:
-                    totalCompCyclicCont += get_size(cycle, segSeqD)
+                if compCyc:
+                    rearrCycleInds.add(ind)
+                    if circCyc:
+                        totalCompCyclicCont += get_size(cycle, segSeqD)
 
                 cycleTypes.append(ampDefs[(circCyc, compCyc)])
 
@@ -714,7 +718,7 @@ if __name__ == "__main__":
                                                                             bfb_cycle_inds, set(), args.add_chr_tag)
             featEntropyD[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
 
-        # write genes
+        # get genes
         if args.report_genes:
             feat_genes = get_genes.extract_gene_list(sName, ampN, gene_lookup, args.report_genes, cycleList, segSeqD,
                                                      bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass)
@@ -745,6 +749,12 @@ if __name__ == "__main__":
 
         dvalues = [edgeTypeCountD[x] for x in mixing_cats]
         EDGE_dvaluesList.append(dvalues)
+
+        #write the annotated cycles file
+        if args.annotate_cycles_file:
+            outname = os.path.basename(cyclesFile).rsplit("_cycles")[0] + "_annotated_cycles.txt"
+            write_annotated_corrected_cycles_file(outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds,
+                                                  ecIndexClusters, invalidInds, rearrCycleInds)
 
     # PLOTTING
     textCategories = ["No amp/Invalid", "Linear\namplification", "Trivial\ncycle", "Complex\nnon-cyclic",
