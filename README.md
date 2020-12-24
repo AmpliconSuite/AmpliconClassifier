@@ -83,8 +83,9 @@ Other arguments
 - `--add_chr_tag`: If you have a mix of hg19 and GRCh37 amplicons, you can set `--ref hg19` and `--add_chr_tag` to classify them all together.
 - `--min_cn_flow`: Minumum cycle CN flow to consider as an amplification (default=1).
 - `--min_size`: Minimum cycle size (in bp) to consider as valid amplicon (default=5000).
-- `--report_genes [ecdna, bfb, both]`: Extract list of genes and bed files from amplicons with given classification.
+- `--report_genes [ecdna, bfb, other, all]`: Extract list of genes and bed files from amplicons with given classification(s).
 - `--report_comlexity`: Report a measurement of the amplicon's 'complexity' score, which represents a measurement of the complexity of the AA breakpoint graph decomposition.
 - `--verbose_classification`: Output verbose information in the `amplicon_classification_profiles.tsv` file, and create `edge_classification_profiles.tsv`. Useful for debugging.
 - `--force`: Disable No amp/Invalid class, if possible. Use only when extremely large CN seeds were used in AA amplicon generation.
-- `--plotStyle [noplot, individual]`: Produce a radar-style plot of classification strenghts. Default `noplot`. 
+- `--plotStyle [noplot, individual]`: Produce a radar-style plot of classification strenghts. Default `noplot`.
+- `--annotate_cycles_file`: Write a new cycles file for each amplicon analyzed with the paths annotated by how the path conforms and some other useful properties.
