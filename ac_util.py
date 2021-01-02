@@ -60,7 +60,9 @@ def write_gene_results(outname, ftg_list):
 # print all the intervals to bed files
 def write_interval_beds(sname, ampN, feature_dict):
     outdir = "classification_bed_files/"
-    os.makedirs(outdir, exist_ok=True)
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+
     trim_sname = sname.rsplit("/")[-1]
     for feat_name, curr_fd in feature_dict.items():
         with open(outdir + trim_sname + "_" + ampN + "_" + feat_name + "_intervals.bed", 'w') as outfile:
@@ -319,7 +321,9 @@ def read_patch_regions(ref):
 def write_annotated_corrected_cycles_file(outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters,
                                           invalidInds, rearrCycleInds):
     outdir = "annotated_cycles_files/"
-    os.makedirs(outdir, exist_ok=True)
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+
     with open(outdir + outname, 'w') as outfile:
         outfile.write("List of cycle segments\n")
         for ind, k in enumerate(sorted(segSeqD.keys())):

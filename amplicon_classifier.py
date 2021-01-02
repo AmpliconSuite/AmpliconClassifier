@@ -357,7 +357,7 @@ def classifyConnections(cycleSet1, cycleSet2, clfs):
 
 
 # categories = ["No amp/Invalid", "Linear amplification", "Trivial cycle", "Complex non-cyclic", "Complex cyclic"]
-def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCycCont, force=False):
+def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCyclicCont, force=False):
     cycSig = amp_profile["Trivial cycle"] + amp_profile["Complex cyclic"]
     if cycSig > cycCut or totalCompCyclicCont > compCycContCut:
         return "Cyclic"
@@ -575,12 +575,14 @@ if __name__ == "__main__":
     gene_lookup = {}
     ftgd_list = []
     if args.report_genes:
-        # read the gene list
-        gene_file_location_lookup = {"hg19": "human_hg19_september_2011/Genes_July_2010_hg19.gff",
-                                     "GRCh38": "genes_hg38.gff",
-                                     "GRCh37": "human_hg19_september_2011/Genes_July_2010_hg19.gff"}
+        # gene_file_location_lookup = {"hg19": "human_hg19_september_2011/Genes_July_2010_hg19.gff",
+        #                              "GRCh38": "genes_hg38.gff",
+        #                              "GRCh37": "human_hg19_september_2011/Genes_July_2010_hg19.gff"}
+        #
+        # refGeneFileLoc = AA_DATA_REPO + gene_file_location_lookup[args.ref]
 
-        refGeneFileLoc = AA_DATA_REPO + gene_file_location_lookup[args.ref]
+        # read the gene list
+        refGeneFileLoc = AA_DATA_REPO + fDict["gene_filename"]
         gene_lookup = get_genes.parse_genes(refGeneFileLoc)
 
     if not args.input:
@@ -665,8 +667,9 @@ if __name__ == "__main__":
         # first compute some properties
         fb_prop, maxCN = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
 
-        fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC, non_bfb_cycle_inds, \
-        bfb_cycle_inds = cycles_file_bfb_props(cycleList, segSeqD, cycleCNs)
+        fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC, non_bfb_cycle_inds, bfb_cycle_inds = cycles_file_bfb_props(cycleList,
+                                                                                                       segSeqD,
+                                                                                                       cycleCNs)
         # "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp"
         AMP_dvaluesDict["foldback_read_prop"] = fb_prop
         AMP_dvaluesDict["BFB_bwp"] = fb_bwp
