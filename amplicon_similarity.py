@@ -226,19 +226,6 @@ def get_pairs(s2a_graph):
 def merge_pairs():
     pass
 
-
-# def readAPairs(pfile):
-#     pairs = []
-#     with open(pfile) as infile:
-#         for line in infile:
-#             line = line.rstrip()
-#             if line:
-#                 fields = line.rsplit()
-#                 pairs.extend(combinations(fields,2))
-#
-#     return pairs
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Classify AA amplicon type")
     parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38",
@@ -255,10 +242,13 @@ if __name__ == "__main__":
                         action='store_true', default=False)
     parser.add_argument("--no_LC_filter", help="Do not filter low-complexity cycles. Not recommended to set this flag.",
                         action='store_true', default=False)
+    parser.add_argument("--min_de", type=int, help="Set the minimum number of discordant edges in the amplicon "
+                                                   "required to be considered for similarity.", default=1)
     args = parser.parse_args()
 
     add_chr_tag = args.add_chr_tag
     cn_cut = args.min_cn
+    min_de = args.min_de
 
     if not args.o:
         args.o = os.path.basename(args.input).rsplit(".")[0]
