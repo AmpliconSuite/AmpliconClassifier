@@ -684,7 +684,7 @@ if __name__ == "__main__":
             ecStat = True
             bfb_cycle_inds = []
 
-        elif bfbClass:
+        elif bfbClass and ampClass != "No amp/Invalid":
             bfbStat = True
             if bfbHasEC:
                 ecStat = True
