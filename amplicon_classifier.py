@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.3.8"
+__version__ = "0.3.9"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -18,6 +18,7 @@ compCycContCut = 50000
 cycCut = 0.12
 compCut = 0.3
 min_upper_cn = 4.5
+decomposition_strictness = 0.1
 
 # bfb thresholds
 min_score_for_bfb = 0.25
@@ -323,7 +324,7 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs):
 def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN):
     # CN flow can be split across multiple amps
     if not isSingleton:
-        scale = min(args.min_cn_flow, maxCN / 10.)
+        scale = min(args.min_cn_flow, maxCN * decomposition_strictness)
     elif maxCN > 7:
         scale = min(3, maxCN / 8.)
     else:
@@ -542,6 +543,10 @@ if __name__ == "__main__":
                         "of the paths and cycles present.", action='store_true')
     parser.add_argument("--no_LC_filter", help="Do not filter low-complexity cycles. Not recommended to set this flag.",
                         action='store_true', default=False)
+    parser.add_argument("--decomposition_strictness", help="Value between 0 and 1 reflecting how strictly to filter "
+                                                           "low CN decompositions (default = 0.1). Higher values "
+                                                           "filter more of the low-weight decompositions", type=float,
+                        default=0.1)
     parser.add_argument("-v", "--version", action='version', version='amplicon_classifier {version} \n Author: Jens \
                         Luebeck (jluebeck [at] ucsd.edu)'.format(version=__version__))
 
@@ -553,6 +558,11 @@ if __name__ == "__main__":
 
     if args.ref == "hg38": args.ref = "GRCh38"
     patch_links = read_patch_regions(args.ref)
+    if 0 <= args.decomposition_strictness <= 1:
+        decomposition_strictness= args.decomposition_strictness
+    else:
+        print("--decomposition_strictness must be a value between 0 and 1")
+        sys.exit(1)
 
     # check if aa data repo set, construct LC datatabase
     try:
