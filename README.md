@@ -15,7 +15,7 @@ If using AmpliconClassifier, please cite:
 *Nature Genetics*. 2020.
 <br />
 <br />
-### Current version: 0.3.9 (stable)
+### Current version: 0.4.0 (stable)
 
 ***Please note that this software is actively being developed. Stable versions are released on the main branch.***
 

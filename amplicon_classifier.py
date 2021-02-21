@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.3.9"
+__version__ = "0.4.0"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -22,7 +22,7 @@ decomposition_strictness = 0.1
 
 # bfb thresholds
 min_score_for_bfb = 0.25
-min_fb_reads_for_bfb = 10
+# min_fb_reads_for_bfb = 10
 fb_dist_cut = 25000
 
 
@@ -247,7 +247,7 @@ def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs):
 
 
 # proportion of cycles with foldbacks
-def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs):
+def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, graphf, add_chr_tag):
     FB_breaks = 0.0
     distal_breaks = 0.0
     lin_breaks = 0.0
@@ -275,21 +275,28 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs):
             if aSize < minCycleSize and bSize < minCycleSize:
                 continue
 
-            if a * b < 0 and segSeqD[abs(a)][0] == segSeqD[abs(b)][0]:
-                hit = True
-                if diff < 50000:
-                    isBFBelem = True
-                    FB_breaks += cycleCNs[ind]
+            # check if front and back are connected via everted edge
+            front_to_back_connection = amp_encompassed(cycle, segSeqD, graphf, add_chr_tag)
+            if front_to_back_connection:
+                print("Cycle has front to back link", cycle)
+                illegalBFB = True
 
-                else:
+            else:
+                if a * b < 0 and segSeqD[abs(a)][0] == segSeqD[abs(b)][0]:
+                    hit = True
+                    if diff < 50000:
+                        isBFBelem = True
+                        FB_breaks += cycleCNs[ind]
+
+                    else:
+                        distal_breaks += cycleCNs[ind]
+
+                elif diff > tot_min_del:
+                    hit = True
                     distal_breaks += cycleCNs[ind]
 
-            elif diff > tot_min_del:
-                hit = True
-                distal_breaks += cycleCNs[ind]
-
-            if segSeqD[abs(a)][0] != segSeqD[abs(b)][0] and not (a == 0 or b == 0):
-                illegalBFB = True
+                if segSeqD[abs(a)][0] != segSeqD[abs(b)][0] and not (a == 0 or b == 0):
+                    illegalBFB = True
 
         if illegalBFB:
             isBFBelem = False
@@ -329,6 +336,9 @@ def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN):
         scale = min(3, maxCN / 8.)
     else:
         scale = 2.5
+
+    # print(cycle)
+    # print("decomp cutoff",scale)
 
     if (cn <= scale) or (maxCN < min_upper_cn):
         return True
@@ -668,7 +678,7 @@ if __name__ == "__main__":
 
         # decomposition/amplicon complexity
         totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
-                                                                range(len(cycleList)), set(), args.add_chr_tag)
+                                                            range(len(cycleList)), set(), args.add_chr_tag)
         AMP_dvaluesDict["Amp_entropy"] = totalEnt
         AMP_dvaluesDict["Amp_decomp_entropy"] = decompEnt
         AMP_dvaluesDict["Amp_nseg_entropy"] = nEnt
@@ -678,8 +688,7 @@ if __name__ == "__main__":
         fb_prop, maxCN = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
 
         fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC, non_bfb_cycle_inds, bfb_cycle_inds = cycles_file_bfb_props(cycleList,
-                                                                                                       segSeqD,
-                                                                                                       cycleCNs)
+                                                                        segSeqD, cycleCNs, graphFile, args.add_chr_tag)
         # "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp"
         AMP_dvaluesDict["foldback_read_prop"] = fb_prop
         AMP_dvaluesDict["BFB_bwp"] = fb_bwp

@@ -117,6 +117,39 @@ def get_amp_outside_bounds(graphf, add_chr_tag):
     return (xc, xs), (yc, ye), ee_spans
 
 
+# determine if a cyclic path front and back are connected by everted edge
+# return true if connected, false if not connected or not a cyclic path
+def amp_encompassed(cycle, segSeqD, graphf, add_chr_tag):
+    # min seg and max seg in cycle -
+    absSegs = set(abs(x) for x in cycle)
+    minSeg, maxSeg = min(absSegs), max(absSegs)
+    if minSeg == 0:
+        return False
+
+    # are they connected in same orientation?
+    ca, pal = segSeqD[minSeg][0], segSeqD[minSeg][1]
+    cb, pbr = segSeqD[maxSeg][0], segSeqD[maxSeg][2]
+
+    # is there an everted edge joining them?
+    with open(graphf) as infile:
+        for line in infile:
+            fields = line.rsplit()
+            if line.startswith("discordant"):
+                s1, s2 = fields[1].rsplit("->")
+                c1, p1, d1 = s1.rsplit(":")[0],  int(s1.rsplit(":")[1][:-1]), s1.rsplit(":")[1][-1]
+                c2, p2, d2 = s2.rsplit(":")[0], int(s2.rsplit(":")[1][:-1]), s2.rsplit(":")[1][-1]
+                if add_chr_tag and not c1.startswith('chr'):
+                    c1 = "chr" + c1
+                    c2 = "chr" + c2
+
+                # first must be +, second must be -
+                if d1 == "+" and d2 == "-" and ca == c2 and cb == c1:
+                    if pbr - 1 < p1 < pbr + 1 and pal - 1 < p2 < pal + 1:
+                        return True
+
+    return False
+
+
 # Input and data prep
 def bpgEdgeToCycles(bp, posCycleLookup):
     lCycles = set([x.data for x in posCycleLookup[bp.lchrom][bp.lpos]])
