@@ -359,9 +359,11 @@ def write_annotated_corrected_cycles_file(outname, cycleList, cycleCNs, segSeqD,
 
     with open(outdir + outname, 'w') as outfile:
         outfile.write("List of cycle segments\n")
-        for ind, k in enumerate(sorted(segSeqD.keys())):
+        seg_ind = 0
+        for k in sorted(segSeqD.keys()):
             if k != 0:
-                ll = "\t".join(["Segment", str(ind+1), segSeqD[k][0], str(segSeqD[k][1]), str(segSeqD[k][2])])
+                seg_ind += 1
+                ll = "\t".join(["Segment", str(seg_ind), segSeqD[k][0], str(segSeqD[k][1]), str(segSeqD[k][2])])
                 outfile.write(ll + "\n")
 
         for ind, cyc in enumerate(cycleList):
