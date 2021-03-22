@@ -47,14 +47,15 @@ def parse_genes(gene_file):
 # take a list of 'feat_to_genes' dicts
 def write_gene_results(outname, ftg_list):
     with open(outname, 'w') as outfile:
-        head = ["sample_name", "amplicon_number", "feature", "gene", "truncated"]
+        head = ["sample_name", "amplicon_number", "feature", "gene", "gene_cn", "truncated"]
         outfile.write("\t".join(head) + "\n")
-        for sname, anum, ftgd in ftg_list:
-            for feat_name in sorted(ftgd.keys()):
-                for gname in sorted(ftgd[feat_name].keys()):
-                    truncs = [x for x in ["5p", "3p"] if x not in ftgd[feat_name][gname]]
+        for sname, anum, truncd, cnd in ftg_list:
+            for feat_name in sorted(truncd.keys()):
+                for gname in sorted(truncd[feat_name].keys()):
+                    truncs = [x for x in ["5p", "3p"] if x not in truncd[feat_name][gname]]
+                    gene_cn = str(cnd[feat_name][gname])
                     ts = "_".join(truncs) if truncs else "None"
-                    outfile.write("\t".join([sname, anum, feat_name, gname, ts]) + "\n")
+                    outfile.write("\t".join([sname, anum, feat_name, gname, gene_cn, ts]) + "\n")
 
 
 # print all the intervals to bed files
@@ -397,9 +398,8 @@ def write_annotated_corrected_cycles_file(outname, cycleList, cycleCNs, segSeqD,
 def write_outputs(args, ftgd_list, featEntropyD, categories, sampNames, cyclesFiles, AMP_classifications,
                   AMP_dvaluesList, mixing_cats, EDGE_dvaluesList):
     # Genes
-    if args.report_genes:
-        gene_extraction_outname = args.o + "_gene_list.tsv"
-        write_gene_results(gene_extraction_outname, ftgd_list)
+    gene_extraction_outname = args.o + "_gene_list.tsv"
+    write_gene_results(gene_extraction_outname, ftgd_list)
 
     # Feature entropy
     if args.report_complexity:

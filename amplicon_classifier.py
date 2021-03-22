@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -527,24 +527,24 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Classify AA amplicon type")
     parser.add_argument("-c", "--cycles", help="AA-formatted cycles file")
     parser.add_argument("-g", "--graph", help="AA-formatted graph file")
-    parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38",
+    parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38.",
                         choices=["hg19", "GRCh37", "hg38", "GRCh38"], required=True)
 
-    parser.add_argument("--min_cn_flow", type=float, help="Minimum CN flow to consider as amplification", default=1)
-    parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon (5000)",
+    parser.add_argument("--min_cn_flow", type=float, help="Minimum CN flow to consider as amplification.", default=1)
+    parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon (5000).",
                         default=5000)
     parser.add_argument("-o", help="Output filename prefix")
     parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: "
                         "sample_name cycles.txt graph.txt")
-    parser.add_argument("--plotstyle", help="Type of visualizations to produce",
+    parser.add_argument("--plotstyle", help="Type of visualizations to produce.",
                         choices=["grouped", "individual", "noplot"], default="noplot")
     parser.add_argument("--force", help="Disable No amp/Invalid class if possible", action='store_true')
     # parser.add_argument("--use_BFB_linked_cyclic_class", help="Include the \'BFB-linked cyclic\' class",
     #                     action='store_true')
-    parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files",
+    parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files.",
                         action='store_true')
-    parser.add_argument("--report_genes", help="Extract list of genes from amplicons with given classification.",
-                        choices=["ecdna", "bfb", "other", "all"], nargs='+', default=[])
+    # parser.add_argument("--report_genes", help="Extract list of genes from amplicons with given classification.",
+    #                     choices=["ecdna", "bfb", "other", "all"], nargs='+', default=[])
     parser.add_argument("--report_complexity", help="Compute a measure of amplicon entropy for each amplicon.",
                         action='store_true')
     parser.add_argument("--verbose_classification", help="Generate verbose output with raw classification scores.",
@@ -555,7 +555,7 @@ if __name__ == "__main__":
                         action='store_true', default=False)
     parser.add_argument("--decomposition_strictness", help="Value between 0 and 1 reflecting how strictly to filter "
                                                            "low CN decompositions (default = 0.1). Higher values "
-                                                           "filter more of the low-weight decompositions", type=float,
+                                                           "filter more of the low-weight decompositions.", type=float,
                         default=0.1)
     parser.add_argument("-v", "--version", action='version', version='amplicon_classifier {version} \n Author: Jens \
                         Luebeck (jluebeck [at] ucsd.edu)'.format(version=__version__))
@@ -592,18 +592,17 @@ if __name__ == "__main__":
         sys.stderr.write("$AA_DATA_REPO not set. Please see AA installation instructions.\n")
         sys.exit(1)
 
-    gene_lookup = {}
-    ftgd_list = []
-    if args.report_genes:
-        # gene_file_location_lookup = {"hg19": "human_hg19_september_2011/Genes_July_2010_hg19.gff",
-        #                              "GRCh38": "genes_hg38.gff",
-        #                              "GRCh37": "human_hg19_september_2011/Genes_July_2010_hg19.gff"}
-        #
-        # refGeneFileLoc = AA_DATA_REPO + gene_file_location_lookup[args.ref]
+    # gene_lookup = {}
+    ftgd_list = []  # store list of feature gene classifications
+    # gene_file_location_lookup = {"hg19": "human_hg19_september_2011/Genes_July_2010_hg19.gff",
+    #                              "GRCh38": "genes_hg38.gff",
+    #                              "GRCh37": "human_hg19_september_2011/Genes_July_2010_hg19.gff"}
+    #
+    # refGeneFileLoc = AA_DATA_REPO + gene_file_location_lookup[args.ref]
 
-        # read the gene list
-        refGeneFileLoc = AA_DATA_REPO + fDict["gene_filename"]
-        gene_lookup = get_genes.parse_genes(refGeneFileLoc)
+    # read the gene list
+    refGeneFileLoc = AA_DATA_REPO + fDict["gene_filename"]
+    gene_lookup = get_genes.parse_genes(refGeneFileLoc)
 
     if not args.input:
         tempName = args.cycles.rsplit("/")[-1].rsplit(".")[0]
@@ -741,11 +740,12 @@ if __name__ == "__main__":
             featEntropyD[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
 
         # get genes
-        if args.report_genes:
-            feat_genes = get_genes.extract_gene_list(sName, ampN, gene_lookup, args.report_genes, cycleList, segSeqD,
-                                                     bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass)
+        feat_gene_truncs, feat_gene_cns = get_genes.extract_gene_list(sName, ampN, gene_lookup, cycleList, segSeqD,
+                                                                      bfb_cycle_inds, ecIndexClusters, invalidInds,
+                                                                      bfbStat, ecStat, ampClass, graphFile,
+                                                                      args.add_chr_tag)
 
-            ftgd_list.append([sName, ampN, feat_genes])
+        ftgd_list.append([sName, ampN, feat_gene_truncs, feat_gene_cns])
 
         # store this additional information
         AMP_classifications.append((ampClass, ecStat, bfbStat, ecAmpliconCount))

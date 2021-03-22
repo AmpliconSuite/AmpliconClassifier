@@ -15,7 +15,7 @@ If using AmpliconClassifier, please cite:
 *Nature Genetics*. 2020.
 <br />
 <br />
-### Current version: 0.4.0 (stable)
+### Current version: 0.4.1 (stable)
 
 ***Please note that this software is actively being developed. Stable versions are released on the main branch.***
 
@@ -65,8 +65,8 @@ Because an ecDNA may overlap with a BFB, they are reported separately.
 
 ****`[output_prefix]_gene_list.tsv`****
  
-If `--report_genes` is set this will report the genes present on amplicons with that classification, and which genomic feature (e.g. ecDNA_1, BFB_1, etc), it is located on. 
-This option **will also create a folder in the current working directory which stores .bed files with the predicted feature regions.**  
+This will reports the genes present on amplicons with each classification, and which genomic feature (e.g. ecDNA_1, BFB_1, etc), it is located on, along with the copy number. 
+This **will also create a folder in the current working directory which stores .bed files with the predicted feature regions.**  
 
 
 **4. Description of command line arguments**:
@@ -87,7 +87,8 @@ Other arguments
 - `--add_chr_tag`: If you have a mix of hg19 and GRCh37 amplicons, you can set `--ref hg19` and `--add_chr_tag` to classify them all together.
 - `--min_cn_flow`: Minumum cycle CN flow to consider as an amplification (default=1).
 - `--min_size`: Minimum cycle size (in bp) to consider as valid amplicon (default=5000).
-- `--report_genes [ecdna, bfb, other, all]`: Extract list of genes and bed files from amplicons with given classification(s).
+
+[comment]: <> (- `--report_genes [ecdna, bfb, other, all]`: Extract list of genes and bed files from amplicons with given classification&#40;s&#41;.)
 - `--report_comlexity`: Report a measurement of the amplicon's 'complexity' score, which represents a measurement of the complexity of the AA breakpoint graph decomposition.
 - `--verbose_classification`: Output verbose information in the `amplicon_classification_profiles.tsv` file, and create `edge_classification_profiles.tsv`. Useful for debugging.
 - `--force`: Disable No amp/Invalid class, if possible. Use only when extremely large CN seeds were used in AA amplicon generation.

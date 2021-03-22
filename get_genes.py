@@ -2,7 +2,6 @@
 
 from ac_util import *
 
-
 # This file is imported by amplicon_classifier.py to get genes
 
 def merge_intervals(feature_dict):
@@ -37,8 +36,9 @@ def get_gene_ends(gs, ge, strand, a, b):
     return has5p, has3p
 
 
-def get_genes_from_intervals(gene_lookup, feature_dict):
-    feat_to_genes = defaultdict(lambda: defaultdict(set))
+def get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d):
+    feat_to_gene_trunc = defaultdict(lambda: defaultdict(set))
+    feat_to_gene_cn = defaultdict(lambda: defaultdict(float))
     for feat_name, curr_fd in feature_dict.items():
         for chrom, intlist in curr_fd.items():
             for a, b in intlist:
@@ -46,20 +46,45 @@ def get_genes_from_intervals(gene_lookup, feature_dict):
                 for gp in ogenes_ints:
                     gname, strand = gp.data
                     has5p, has3p = get_gene_ends(gp.begin, gp.end, strand, a, b)
+                    gsegs_hit = gseg_cn_d[chrom][gp.begin:gp.end]
+                    gene_valid_cns = [x.data for x in gsegs_hit if x.end - x.begin > 1000]
+                    if gene_valid_cns:
+                        gene_cn = max(gene_valid_cns)
+                    else:
+                        gene_cn = "unknown"
+                    feat_to_gene_cn[feat_name][gname] = gene_cn
                     if has5p:
-                        feat_to_genes[feat_name][gname].add("5p")
+                        feat_to_gene_trunc[feat_name][gname].add("5p")
                     if has3p:
-                        feat_to_genes[feat_name][gname].add("3p")
+                        feat_to_gene_trunc[feat_name][gname].add("3p")
 
-    return feat_to_genes
+    return feat_to_gene_trunc, feat_to_gene_cn
 
 
-def extract_gene_list(sname, ampN, gene_lookup, classes_to_get, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters,
-                      invalidInds, bfbStat, ecStat, ampClass):
+def get_gseg_cns(graphf, add_chr_tag):
+    gseg_cn_d = defaultdict(IntervalTree)
+    with open(graphf) as infile:
+        for line in infile:
+            fields = line.rsplit()
+            if line.startswith("sequence"):
+                c, s, e = fields[1].rsplit(":")[0], int(fields[1].rsplit(":")[1][:-1]), int(fields[2].rsplit(":")[1][:-1])+1
+                cn = float(fields[3])
+                if add_chr_tag and not c.startswith('chr'):
+                    c = "chr" + c
+
+                gseg_cn_d[c].addi(s, e, cn)
+
+    return gseg_cn_d
+
+
+def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters,
+                      invalidInds, bfbStat, ecStat, ampClass, graphf, add_chr_tag):
     feature_dict = {}
+    gseg_cn_d = get_gseg_cns(graphf, add_chr_tag)
     invalidSet = set(invalidInds)
     all_used = invalidSet.union(bfb_cycle_inds)
-    if ("bfb" in classes_to_get or "all" in classes_to_get) and bfbStat:
+    used_segs = defaultdict(IntervalTree)
+    if bfbStat:
         # collect unmerged genomic intervals comprising the feature
         bfb_interval_dict = defaultdict(list)
         for b_ind in bfb_cycle_inds:
@@ -67,10 +92,11 @@ def extract_gene_list(sname, ampN, gene_lookup, classes_to_get, cycleList, segSe
                 for c_id in cycleList[b_ind]:
                     chrom, l, r = segSeqD[abs(c_id)]
                     bfb_interval_dict[chrom].append((l, r))
+                    used_segs[chrom].addi(l, r)
 
         feature_dict["BFB_1"] = bfb_interval_dict
 
-    if ("ecdna" in classes_to_get or "all" in classes_to_get) and ecStat:
+    if ecStat:
         # collect unmerged genomic intervals comprising the feature
         for amp_ind, ec_cycle_inds in enumerate(ecIndexClusters):
             ec_interval_dict = defaultdict(list)
@@ -80,18 +106,24 @@ def extract_gene_list(sname, ampN, gene_lookup, classes_to_get, cycleList, segSe
                     for c_id in cycleList[e_ind]:
                         chrom, l, r = segSeqD[abs(c_id)]
                         ec_interval_dict[chrom].append((l, r))
+                        used_segs[chrom].addi(l, r)
 
             feature_dict["ecDNA_" + str(amp_ind + 1)] = ec_interval_dict
 
-    if ("other" in classes_to_get or "all" in classes_to_get) and ampClass != "No amp/Invalid" and not ecStat and not bfbStat:
+    if ampClass != "No amp/Invalid":
         other_interval_dict = defaultdict(list)
         for o_ind in range(len(cycleList)):
             if o_ind not in all_used:
                 for c_id in cycleList[o_ind]:
-                    chrom, l, r = segSeqD[abs(c_id)]
-                    other_interval_dict[chrom].append((l, r))
+                    if abs(c_id) not in used_segs:
+                        chrom, l, r = segSeqD[abs(c_id)]
+                        if not used_segs[chrom][l:r]:
+                            other_interval_dict[chrom].append((l, r))
 
-        feature_dict["other_1"] = other_interval_dict
+        if not ecStat and not bfbStat:
+            feature_dict[ampClass + "_1"] = other_interval_dict
+        else:
+            feature_dict["unknown_1"] = other_interval_dict
 
     # merge all the intervals in each list of intervals
     tot_init_intervals = sum([len(ilist) for fd in feature_dict.values() for ilist in fd.values()])
@@ -101,4 +133,4 @@ def extract_gene_list(sname, ampN, gene_lookup, classes_to_get, cycleList, segSe
     #     tot_final_intervals) + " intervals")
 
     write_interval_beds(sname, ampN, feature_dict)
-    return get_genes_from_intervals(gene_lookup, feature_dict)
+    return get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d)
