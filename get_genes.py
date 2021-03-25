@@ -91,8 +91,9 @@ def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_in
             if b_ind not in invalidSet:
                 for c_id in cycleList[b_ind]:
                     chrom, l, r = segSeqD[abs(c_id)]
-                    bfb_interval_dict[chrom].append((l, r))
-                    used_segs[chrom].addi(l, r)
+                    if chrom:
+                        bfb_interval_dict[chrom].append((l, r))
+                        used_segs[chrom].addi(l, r)
 
         feature_dict["BFB_1"] = bfb_interval_dict
 
@@ -105,8 +106,9 @@ def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_in
                 if e_ind not in invalidSet:
                     for c_id in cycleList[e_ind]:
                         chrom, l, r = segSeqD[abs(c_id)]
-                        ec_interval_dict[chrom].append((l, r))
-                        used_segs[chrom].addi(l, r)
+                        if chrom:
+                            ec_interval_dict[chrom].append((l, r))
+                            used_segs[chrom].addi(l, r)
 
             feature_dict["ecDNA_" + str(amp_ind + 1)] = ec_interval_dict
 
