@@ -161,27 +161,33 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
 
     # scW = sorted(cycleWeights, reverse=True)
     # cf = cycleWeights[0]/totalGraphWeight
+
     cf = 0
     fe_ent = 0
     added_cf = 0
     cInd = 0
-    while cf + added_cf < hf_cut and cInd < len(cycleWeights):
-        if cInd in new_feat_inds:
-            cf += added_cf
-            if added_cf > 0:
-                fe_ent += (added_cf * log(added_cf))
+    if totalGraphWeight > 0:
+        while cf + added_cf < hf_cut and cInd < len(cycleWeights):
+            if cInd in new_feat_inds:
+                cf += added_cf
+                if added_cf > 0:
+                    fe_ent += (added_cf * log(added_cf))
 
-            added_cf = cycleWeights[cInd] / float(totalGraphWeight)
+                added_cf = cycleWeights[cInd] / float(totalGraphWeight)
 
-        cInd += 1
+            cInd += 1
 
-    cf+=added_cf
-    cf = round(cf, 5)
-    rf = (1 - cf)
-    # print(rf, cf, totalGraphWeight)
-    if rf > 0:
-        fu_ent = -1 * rf * log(rf)
+        cf+=added_cf
+        cf = round(cf, 5)
+        rf = (1 - cf)
+        # print(rf, cf, totalGraphWeight)
+        if rf > 0:
+            fu_ent = -1 * rf * log(rf)
+        else:
+            fu_ent = 0
+
     else:
+        print("Warning: total graph weight <= 0")
         fu_ent = 0
 
     seg_ent = log(1.0 / segs) if segs > 0 else 0
@@ -278,7 +284,7 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, graphf, add_chr_tag):
             # check if front and back are connected via everted edge
             front_to_back_connection = amp_encompassed(cycle, segSeqD, graphf, add_chr_tag)
             if front_to_back_connection:
-                print("Cycle has front to back link", cycle)
+                # print("Cycle has front to back link", cycle)
                 illegalBFB = True
 
             else:
@@ -525,6 +531,8 @@ ampDefs = {(False, False): "Linear amplification", (False, True): "Complex non-c
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Classify AA amplicon type")
+    parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: "
+                        "sample_name cycles.txt graph.txt. Give this argument if not using -c and -g.")
     parser.add_argument("-c", "--cycles", help="AA-formatted cycles file")
     parser.add_argument("-g", "--graph", help="AA-formatted graph file")
     parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38.",
@@ -534,8 +542,7 @@ if __name__ == "__main__":
     parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon (5000).",
                         default=5000)
     parser.add_argument("-o", help="Output filename prefix")
-    parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: "
-                        "sample_name cycles.txt graph.txt")
+
     parser.add_argument("--plotstyle", help="Type of visualizations to produce.",
                         choices=["grouped", "individual", "noplot"], default="noplot")
     parser.add_argument("--force", help="Disable No amp/Invalid class if possible", action='store_true')
