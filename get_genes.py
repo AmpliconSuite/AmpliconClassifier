@@ -78,7 +78,7 @@ def get_gseg_cns(graphf, add_chr_tag):
 
 
 def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters,
-                      invalidInds, bfbStat, ecStat, ampClass, graphf, add_chr_tag):
+                      invalidInds, bfbStat, ecStat, ampClass, graphf, add_chr_tag, prefix):
     feature_dict = {}
     gseg_cn_d = get_gseg_cns(graphf, add_chr_tag)
     invalidSet = set(invalidInds)
@@ -134,5 +134,5 @@ def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_in
     # print("Feature extraction: started with " + str(tot_init_intervals) + " unmerged intervals, finished with " + str(
     #     tot_final_intervals) + " intervals")
 
-    write_interval_beds(sname, ampN, feature_dict)
+    write_interval_beds(prefix, sname, ampN, feature_dict)
     return get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d)

@@ -59,8 +59,8 @@ def write_gene_results(outname, ftg_list):
 
 
 # print all the intervals to bed files
-def write_interval_beds(sname, ampN, feature_dict):
-    outdir = "classification_bed_files/"
+def write_interval_beds(prefix, sname, ampN, feature_dict):
+    outdir = prefix + "_classification_bed_files/"
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
@@ -98,7 +98,6 @@ def get_amp_outside_bounds(graphf, add_chr_tag):
                         xc, xs = c, s
 
                     yc, ye = c, e
-
 
             elif line.startswith("discordant") and not xc is None and not yc is None:
                 s1, s2 = fields[1].rsplit("->")
@@ -352,9 +351,10 @@ def read_patch_regions(ref):
 
 
 # write a cycles file with the cycles -> some corrected
-def write_annotated_corrected_cycles_file(outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters,
+def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters,
                                           invalidInds, rearrCycleInds):
-    outdir = "annotated_cycles_files/"
+
+    outdir = prefix + "_annotated_cycles_files/"
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 

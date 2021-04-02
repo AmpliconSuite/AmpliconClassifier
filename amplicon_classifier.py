@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -307,7 +307,7 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, graphf, add_chr_tag):
         if illegalBFB:
             isBFBelem = False
 
-        if cycle[0] == 0 and not hit:
+        if cycle[0] == 0 and not hit and get_size(cycle,segSeqD) > 10000:
             lin_breaks += cycleCNs[ind]
 
         if isBFBelem:
@@ -542,7 +542,6 @@ if __name__ == "__main__":
     parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon (5000).",
                         default=5000)
     parser.add_argument("-o", help="Output filename prefix")
-
     parser.add_argument("--plotstyle", help="Type of visualizations to produce.",
                         choices=["grouped", "individual", "noplot"], default="noplot")
     parser.add_argument("--force", help="Disable No amp/Invalid class if possible", action='store_true')
@@ -621,7 +620,6 @@ if __name__ == "__main__":
         flist = readFlist(args.input)
         if not args.o:
             args.o = os.path.basename(args.input).rsplit(".")[0]
-
 
     minCycleSize = args.min_size
 
@@ -750,7 +748,7 @@ if __name__ == "__main__":
         feat_gene_truncs, feat_gene_cns = get_genes.extract_gene_list(sName, ampN, gene_lookup, cycleList, segSeqD,
                                                                       bfb_cycle_inds, ecIndexClusters, invalidInds,
                                                                       bfbStat, ecStat, ampClass, graphFile,
-                                                                      args.add_chr_tag)
+                                                                      args.add_chr_tag, args.o)
 
         ftgd_list.append([sName, ampN, feat_gene_truncs, feat_gene_cns])
 
@@ -782,7 +780,7 @@ if __name__ == "__main__":
         #write the annotated cycles file
         if args.annotate_cycles_file:
             outname = os.path.basename(cyclesFile).rsplit("_cycles")[0] + "_annotated_cycles.txt"
-            write_annotated_corrected_cycles_file(outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds,
+            write_annotated_corrected_cycles_file(args.o, outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds,
                                                   ecIndexClusters, invalidInds, rearrCycleInds)
 
     # PLOTTING

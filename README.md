@@ -15,15 +15,15 @@ If using AmpliconClassifier, please cite:
 *Nature Genetics*. 2020.
 <br />
 <br />
-### Current version: 0.4.1 (stable)
+### Current version: 0.4.2 (stable)
 
 ***Please note that this software is actively being developed. Stable versions are released on the main branch.***
 
 **1. Prerequisites**: 
 - Supports both python2 and python3.
-- intervaltree (python library):  `pip install intervaltree`
+- `intervaltree` (python library):  `pip install intervaltree`
 - `$AA_DATA_REPO` environment variable. For instructions see [AmpliconArchitect installation](https://github.com/jluebeck/AmpliconArchitect#data-repositories). 
-- matplotlib (python library, optional): `pip install matplotlib`
+- `matplotlib` (python library, optional): `pip install matplotlib`
 
 **2. Usage**:
 
@@ -43,7 +43,7 @@ If passing a list of amplicons, the `--input` argument must be formatted as foll
 
 There is also an experimental option you can set to visualize the strength of each amplicon class assigned to an amplicon, which can be turned on by setting `--plotStyle individual`.
 
-If you have data from both GRCh37 and hg19 that you are combining, you can set the flag `--add_chr_tag` to add the "chr" prefix to each chromosome name and effectively unify everything as hg19-based.
+If combining data from both GRCh37 and hg19 in the same classification run, you can set the flag `--add_chr_tag` to add the "chr" prefix to each chromosome name and effectively unify everything as hg19-based.
 
 **3. Output**:
 
