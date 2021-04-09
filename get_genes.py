@@ -12,7 +12,7 @@ def merge_intervals(feature_dict):
             # merge sorted ints
             mi = [sort_ints[0]]
             for ival in sort_ints[1:]:
-                if ival[0] <= mi[-1][1]:
+                if ival[0] <= mi[-1][1]+1:
                     ui = (mi[-1][0], ival[1])
                     mi[-1] = ui
 
@@ -93,7 +93,7 @@ def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_in
                     chrom, l, r = segSeqD[abs(c_id)]
                     if chrom:
                         bfb_interval_dict[chrom].append((l, r))
-                        used_segs[chrom].addi(l, r)
+                        used_segs[chrom].addi(l, r+1)
 
         feature_dict["BFB_1"] = bfb_interval_dict
 
@@ -108,7 +108,7 @@ def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_in
                         chrom, l, r = segSeqD[abs(c_id)]
                         if chrom:
                             ec_interval_dict[chrom].append((l, r))
-                            used_segs[chrom].addi(l, r)
+                            used_segs[chrom].addi(l, r+1)
 
             feature_dict["ecDNA_" + str(amp_ind + 1)] = ec_interval_dict
 
@@ -128,9 +128,9 @@ def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_in
             feature_dict["unknown_1"] = other_interval_dict
 
     # merge all the intervals in each list of intervals
-    tot_init_intervals = sum([len(ilist) for fd in feature_dict.values() for ilist in fd.values()])
+    # tot_init_intervals = sum([len(ilist) for fd in feature_dict.values() for ilist in fd.values()])
     merge_intervals(feature_dict)
-    tot_final_intervals = sum([len(ilist) for fd in feature_dict.values() for ilist in fd.values()])
+    # tot_final_intervals = sum([len(ilist) for fd in feature_dict.values() for ilist in fd.values()])
     # print("Feature extraction: started with " + str(tot_init_intervals) + " unmerged intervals, finished with " + str(
     #     tot_final_intervals) + " intervals")
 
