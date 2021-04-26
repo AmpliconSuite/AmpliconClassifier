@@ -4,7 +4,7 @@ from ac_util import *
 
 # This file is imported by amplicon_classifier.py to get genes
 
-def merge_intervals(feature_dict):
+def merge_intervals(feature_dict, tol=1):
     for item, usort_intd in feature_dict.items():
         for chrom, usort_ints in usort_intd.items():
             # sort ints
@@ -12,7 +12,7 @@ def merge_intervals(feature_dict):
             # merge sorted ints
             mi = [sort_ints[0]]
             for ival in sort_ints[1:]:
-                if ival[0] <= mi[-1][1]+1:
+                if ival[0] <= mi[-1][1] + tol:
                     ui = (mi[-1][0], ival[1])
                     mi[-1] = ui
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.2"
+__version__ = "0.4.3"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -214,6 +214,9 @@ def compute_f_from_AA_graph(graphf, add_chr_tag):
                 if lcD[lchrom][lpos] or lcD[rchrom][rpos]:
                     continue
 
+                elif fields[0] == "discordant" and rchrom == lchrom and abs(rpos - lpos) <= 2000 and rdir == '-' and ldir == '+':
+                    continue
+
                 rSupp = int(fields[3])
                 if ldir == rdir:
                     if lchrom == rchrom and abs(rpos - lpos) < fb_dist_cut:
@@ -374,9 +377,9 @@ def classifyConnections(cycleSet1, cycleSet2, clfs):
 
 
 # categories = ["No amp/Invalid", "Linear amplification", "Trivial cycle", "Complex non-cyclic", "Complex cyclic"]
-def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCyclicCont, force=False):
+def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCyclicCont, totCyclicCont, force=False):
     cycSig = amp_profile["Trivial cycle"] + amp_profile["Complex cyclic"]
-    if cycSig > cycCut or totalCompCyclicCont > compCycContCut:
+    if (cycSig > cycCut or totalCompCyclicCont > compCycContCut) and totCyclicCont > 10000:
         return "Cyclic"
 
     elif amp_profile["Complex non-cyclic"] + cycSig > compCut:
@@ -430,9 +433,12 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices=None):
     indices = [x for x in range(len(cycleList)) if cycleList[x][0] != 0 and x not in excludableCycleIndices]
     clusters = []
     seenSegs = set()
+    total_EC_size = 0
     for ind in indices:
         cycle = cycleList[ind]
-        if cycleCNs[ind] < args.min_cn_flow and get_size(cycle, segSeqD) < minCycleSize:
+        csize = get_size(cycle, segSeqD)
+        total_EC_size+=csize
+        if cycleCNs[ind] < args.min_cn_flow and csize < minCycleSize:
             continue
 
         cIndsToMerge = set()
@@ -474,9 +480,17 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices=None):
         currIndexSet = set()
         for k, v in clust.items():
             for ival in v:
-                currIndexSet.add(ival.data)  # set to 1-based
+                currIndexSet.add(ival.data)
 
         indexClusters.append(currIndexSet)
+
+    # remove those that are too small
+    print(indexClusters)
+    if len(indexClusters) > 1:
+        indexClusters = [x for x in indexClusters if not sum([get_size(cycleList[y], segSeqD) for y in x]) < 10000]
+
+    # augment these clusters
+
 
     return indexClusters
 
@@ -650,6 +664,7 @@ if __name__ == "__main__":
         fb_prop, maxCN = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
         rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
         totalCompCyclicCont = 0
+        totCyclicCont = 0
         for ind, cycle in enumerate(cycleList):
             hasNonCircLen1 = True if len(cycle) == 3 and cycle[0] == 0 else False
             oneCycle = (len(cycleList) == 1)
@@ -666,6 +681,9 @@ if __name__ == "__main__":
                     if circCyc:
                         totalCompCyclicCont += get_size(cycle, segSeqD)
 
+                if circCyc:
+                    totCyclicCont += get_size(cycle, segSeqD)
+
                 cycleTypes.append(ampDefs[(circCyc, compCyc)])
 
             currWt = weightedCycleAmount(cycle, cycleCNs[ind], segSeqD)
@@ -678,7 +696,7 @@ if __name__ == "__main__":
 
         # anything stored in AMP_dvaluesDict prior to running classify will get used in classification
         # make sure you're not putting in other properties before here.
-        ampClass = classifyAmpliconProfile(AMP_dvaluesDict, rearr_e, totalCompCyclicCont)
+        ampClass = classifyAmpliconProfile(AMP_dvaluesDict, rearr_e, totalCompCyclicCont, totCyclicCont)
 
         # decomposition/amplicon complexity
         totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,

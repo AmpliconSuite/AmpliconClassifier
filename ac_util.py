@@ -66,6 +66,9 @@ def write_interval_beds(prefix, sname, ampN, feature_dict):
 
     trim_sname = sname.rsplit("/")[-1].rsplit("_amplicon")[0]
     for feat_name, curr_fd in feature_dict.items():
+        if not curr_fd:
+            continue
+
         with open(outdir + trim_sname + "_" + ampN + "_" + feat_name + "_intervals.bed", 'w') as outfile:
             for chrom, ilist in curr_fd.items():
                 if not chrom:
