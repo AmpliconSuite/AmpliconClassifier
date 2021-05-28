@@ -84,6 +84,7 @@ def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_in
     invalidSet = set(invalidInds)
     all_used = invalidSet.union(bfb_cycle_inds)
     used_segs = defaultdict(IntervalTree)
+    graph_cns = get_graph_cns(graphf, add_chr_tag)
     if bfbStat:
         # collect unmerged genomic intervals comprising the feature
         bfb_interval_dict = defaultdict(list)
@@ -107,8 +108,15 @@ def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_in
                     for c_id in cycleList[e_ind]:
                         chrom, l, r = segSeqD[abs(c_id)]
                         if chrom:
-                            ec_interval_dict[chrom].append((l, r))
                             used_segs[chrom].addi(l, r+1)
+                            # chop out low cn regions
+                            seg_t = IntervalTree([Interval(l, r+1)])
+                            olapping_low_cns = [x for x in graph_cns[chrom][l:r+1] if x.data < 4]
+                            for x in olapping_low_cns:
+                                seg_t.chop(x.begin, x.end+1)
+
+                            for x in seg_t:
+                                ec_interval_dict[chrom].append((x.begin, x.end))
 
             feature_dict["ecDNA_" + str(amp_ind + 1)] = ec_interval_dict
 

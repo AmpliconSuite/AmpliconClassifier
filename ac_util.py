@@ -301,6 +301,25 @@ def parseBPG(bpgf, add_chr_tag, lcD):
     return bps
 
 
+def get_graph_cns(gfile, add_chr_tag):
+    cns_dict = defaultdict(IntervalTree)
+    with open(gfile) as infile:
+        for line in infile:
+            if line.startswith("sequence"):
+                fields = line.rstrip().rsplit()
+                cn = float(fields[3])
+                c, p1 = fields[1].rsplit(":")
+                p1 = int(p1[:-1])
+                c, p2 = fields[2].rsplit(":")
+                p2 = int(p2[:-1]) + 1
+                if add_chr_tag and not c.startswith('chr'):
+                    c = 'chr' + c
+
+                cns_dict[c].addi(p1, p2, cn)
+
+    return cns_dict
+
+
 # build a lookup for position to list of cycles hitting it
 def buildPosCycleLookup(cycles, segSeqD):
     posCycleLookup = defaultdict(IntervalTree)

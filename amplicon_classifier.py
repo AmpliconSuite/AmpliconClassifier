@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.3"
+__version__ = "0.4.4"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -25,6 +25,8 @@ min_score_for_bfb = 0.25
 # min_fb_reads_for_bfb = 10
 fb_dist_cut = 25000
 
+#graph properties
+graph_cns = defaultdict(IntervalTree)
 
 # ------------------------------------------------------------
 # Methods to compute values used in classification
@@ -427,7 +429,43 @@ def classifyBFB(fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN):
 
 
 # ------------------------------------------------------------
-# # structure metanalysis
+# structure metanalysis
+
+def check_max_cn(ec_cycle_inds, cycleList, segSeqD):
+    for e_ind in ec_cycle_inds:
+        for c_id in cycleList[e_ind]:
+            chrom, l, r = segSeqD[abs(c_id)]
+            if r - l < 1000:
+                continue
+
+            for i in graph_cns[chrom][l:r]:
+                if i.data > min_upper_cn:
+                    return True
+
+    return False
+
+
+def get_amount_sigamp(ec_cycle_inds, cycleList, segSeqD):
+    used_content = defaultdict(set)
+    for e_ind in ec_cycle_inds:
+        for c_id in cycleList[e_ind]:
+            chrom, l, r = segSeqD[abs(c_id)]
+            if not chrom:
+                continue
+            seg_t = IntervalTree([Interval(l, r+1)])
+            olapping_low_cns = [x for x in graph_cns[chrom][l:r] if x.data < 4]
+            for x in olapping_low_cns:
+                seg_t.chop(x.begin, x.end)
+            for x in seg_t:
+                used_content[chrom] |= set(range(x.begin, x.end))
+
+    total_sigamp = 0
+    for chrom, useset in used_content.items():
+        total_sigamp += len(useset)
+
+    return total_sigamp
+
+
 def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices=None):
     padding = 500000
     indices = [x for x in range(len(cycleList)) if cycleList[x][0] != 0 and x not in excludableCycleIndices]
@@ -453,9 +491,6 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices=None):
                     cIndsToMerge.add(c_ind)
                     break
 
-        # if cIndsToMerge:
-        #     for s in s_set:
-        #         clusters[cIndsToMerge
         newClusters = []
         newClust = defaultdict(IntervalTree)
         for s in s_set:
@@ -482,15 +517,11 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices=None):
             for ival in v:
                 currIndexSet.add(ival.data)
 
-        indexClusters.append(currIndexSet)
+        if get_amount_sigamp(currIndexSet, cycleList, segSeqD) > 10000:
+            indexClusters.append(currIndexSet)
 
-    # remove those that are too small
-    print(indexClusters)
-    if len(indexClusters) > 1:
-        indexClusters = [x for x in indexClusters if not sum([get_size(cycleList[y], segSeqD) for y in x]) < 10000]
-
-    # augment these clusters
-
+    # remove those where the max CN is below threshold
+    indexClusters = [x for x in indexClusters if check_max_cn(x, cycleList, segSeqD)]
 
     return indexClusters
 
@@ -661,6 +692,7 @@ if __name__ == "__main__":
         cycleWeights = []
         invalidInds = []
         rearrCycleInds = set()
+        graph_cns = get_graph_cns(graphFile, args.add_chr_tag)
         fb_prop, maxCN = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
         rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
         totalCompCyclicCont = 0
