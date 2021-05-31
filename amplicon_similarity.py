@@ -89,6 +89,39 @@ def bp_dist(bplist1, bplist2, d):
     return intersectCount/tE
 
 
+def jaccard_sim_seq(g1, g2):
+    g1_bp = 0
+    g2_bp = 0
+    obp = 0
+    for c1, it1 in g1.items():
+        for t1 in it1:
+            g1_bp += (t1.end - t1.begin)
+            for t2 in g2[c1][t1.begin:t1.end]:
+                obp += (min(t1.end, t2.end) - max(t1.begin, t2.begin))
+
+    for c2, it2 in g2.items():
+        for t2 in it2:
+             g2_bp += (t2.end - t2.begin)
+
+    jsim = obp/(g1_bp + g2_bp - obp)
+    return jsim
+
+
+def jaccard_sim_bp(bplist1, bplist2, d):
+    if not bplist1 and not bplist1:
+        return 0
+
+    intersectCount = 0.0
+    for bp1 in bplist1:
+        for bp2 in bplist2:
+            if bp1.d_similar(bp2, d):
+                intersectCount += 1
+                break
+
+    jsim = intersectCount/(len(bplist1) + len(bplist2) - intersectCount)
+    return jsim
+
+
 def asymmetric_score(bplist1, bplist2, st1, st2, d):
     ns = nucSimilarity(st1, st2)
     bpd = bp_dist(bplist1, bplist2, d)
@@ -235,7 +268,8 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: \
     samplename /path/to/sample_amplicon1_cycles.txt /path/to/sample_amplicon1_graph.txt", required=True)
     parser.add_argument("-o", help="Output filename prefix")
-    parser.add_argument("--min_cn", type=float, help="Minimum CN to consider as amplification", default=4.5)
+    parser.add_argument("--min_cn", type=float, help="Minimum CN to consider as amplification (default 4.5",
+                        default=4.5)
     # parser.add_argument("-p","--pairs", help="Amplicons to compute similarity for. Each line formatted as: \
     # samplename_amplicon1 samplename_amplicon2 ...", required=True)
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files",
@@ -243,7 +277,7 @@ if __name__ == "__main__":
     parser.add_argument("--no_LC_filter", help="Do not filter low-complexity cycles. Not recommended to set this flag.",
                         action='store_true', default=False)
     parser.add_argument("--min_de", type=int, help="Set the minimum number of discordant edges in the amplicon "
-                                                   "required to be considered for similarity.", default=1)
+                                                   "required to be considered for similarity (default 1).", default=1)
     args = parser.parse_args()
 
     add_chr_tag = args.add_chr_tag
@@ -286,10 +320,15 @@ if __name__ == "__main__":
 
     with open(args.o + "_similarity_scores.tsv",'w') as outfile:
         #[as1, as2, nS1, nS2, bpd1, bpd2]
-        outfile.write("Amp1\tAmp2\tSimilarityScore\tSS_pval\tAS1\tAS2\tNS1\tNS2\tBPS1\tBPS2\n")
+        outfile.write("Amp1\tAmp2\tSimilarityScore\tSimScorePval\tAsymmetricScore1\tAsymmetricScore2\t"
+                      "GenomicSegmentScore1\tGenomicSegmentScore2\tBreakpointScore1\tBreakpointScore2\t"
+                      "JaccardGenomicSegment\tJaccardBreakpoint\n")
         for a, b in pairs:
             bplist_a, st_a = s2a_graph[a]
             bplist_b, st_b = s2a_graph[b]
             s, featList = symScore(bplist_a, bplist_b, st_a, st_b, d)
+            jaccard_seq = jaccard_sim_seq(st_a, st_b)
+            jaccard_bp = jaccard_sim_bp(bplist_a, bplist_b, d)
+            featList.extend([jaccard_seq, jaccard_bp])
             pval = score_to_pval(s, background_scores)
             outfile.write("\t".join([a, b, str(s), str(pval)] + [str(x) for x in featList]) + "\n")
