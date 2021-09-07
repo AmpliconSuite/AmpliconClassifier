@@ -127,7 +127,7 @@ def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_in
                 for c_id in cycleList[o_ind]:
                     if abs(c_id) not in used_segs:
                         chrom, l, r = segSeqD[abs(c_id)]
-                        if not used_segs[chrom][l:r]:
+                        if not used_segs[chrom][l:r] and not chrom is None:
                             other_interval_dict[chrom].append((l, r))
 
         if not ecStat and not bfbStat:
