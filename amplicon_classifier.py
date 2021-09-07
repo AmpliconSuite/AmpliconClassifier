@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.4"
+__version__ = "0.4.5"
 __author__ = "Jens Luebeck"
 
 import argparse
@@ -243,7 +243,7 @@ def compute_f_from_AA_graph(graphf, add_chr_tag):
     if fbEdges < 2:
         return 0, maxCN
 
-    return fbCount / max(1.0, fbCount + nonFbCount), maxCN
+    return fbCount / max(1.0, float(fbCount + nonFbCount)), maxCN
 
 
 def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs):
@@ -344,7 +344,7 @@ def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN):
     if not isSingleton:
         scale = min(args.min_cn_flow, maxCN * decomposition_strictness)
     elif maxCN > 7:
-        scale = min(3, maxCN / 8.)
+        scale = min(3., maxCN / 8.)
     else:
         scale = 2.5
 
@@ -583,9 +583,10 @@ if __name__ == "__main__":
     parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38.",
                         choices=["hg19", "GRCh37", "hg38", "GRCh38"], required=True)
 
-    parser.add_argument("--min_cn_flow", type=float, help="Minimum CN flow to consider as amplification.", default=1)
-    parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon (5000).",
-                        default=5000)
+    parser.add_argument("--min_cn_flow", type=float, help="Minimum CN flow to consider as amplification (1.0).",
+                        default=1)
+    parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon "
+                        "(5000).", default=5000)
     parser.add_argument("-o", help="Output filename prefix")
     parser.add_argument("--plotstyle", help="Type of visualizations to produce.",
                         choices=["grouped", "individual", "noplot"], default="noplot")

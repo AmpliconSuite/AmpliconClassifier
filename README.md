@@ -15,7 +15,7 @@ If using AmpliconClassifier, please cite:
 *Nature Genetics*. 2020.
 <br />
 <br />
-### Current version: 0.4.4 (stable)
+### Current version: 0.4.5 (stable)
 
 ***Please note that this software is actively being developed. Stable versions are released on the main branch.***
 
@@ -40,6 +40,12 @@ Alternatively you can generate classifications for a list of amplicons:
 If passing a list of amplicons, the `--input` argument must be formatted as follows, with one amplicon per line:
 
 `sample_name_amplicon1   /path/to/sample_name_amplicon1_cycles.txt   /path/to/sample_name_amplicon1_graph.txt`
+
+To generate the input file automatically, you can do
+
+`make_input.sh /path/to/AA/output/directory/ [some_prefix]`
+
+and it will search for the cycles and graph files in that directory, and pair the locations into a text file compatible with the `--input` argument.
 
 There is also an experimental option you can set to visualize the strength of each amplicon class assigned to an amplicon, which can be turned on by setting `--plotStyle individual`.
 
