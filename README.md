@@ -19,13 +19,13 @@ If using AmpliconClassifier, please cite:
 
 ***Please note that this software is actively being developed. Stable versions are released on the main branch.***
 
-**1. Prerequisites**: 
+###1. Prerequisites: 
 - Supports both python2 and python3.
 - `intervaltree` (python library):  `pip install intervaltree`
 - `$AA_DATA_REPO` environment variable. For instructions see [AmpliconArchitect installation](https://github.com/jluebeck/AmpliconArchitect#data-repositories). 
 - `matplotlib` (python library, optional): `pip install matplotlib`
 
-**2. Usage**:
+###2. Usage:
 
 `amplicon_classifier.py` takes an AA graph file and an AA cycles file as input.
 
@@ -51,7 +51,7 @@ There is also an experimental option you can set to visualize the strength of ea
 
 If combining data from both GRCh37 and hg19 in the same classification run, you can set the flag `--add_chr_tag` to add the "chr" prefix to each chromosome name and effectively unify everything as hg19-based.
 
-**3. Output**:
+###3. Output:
 
 ****`[output_prefix]_amplicon_classification_profiles.tsv`**** 
 
@@ -75,7 +75,7 @@ This will reports the genes present on amplicons with each classification, and w
 This **will also create a folder in the current working directory which stores .bed files with the predicted feature regions.**  
 
 
-**4. Description of command line arguments**:
+###4. Description of command line arguments:
 
 Running on a single AA amplicon:
 - `-c/--cycles`: AA cycles file
@@ -101,3 +101,23 @@ Other arguments
 - `--plotStyle [noplot, individual]`: Produce a radar-style plot of classification strenghts. Default `noplot`.
 - `--annotate_cycles_file`: Write a new cycles file for each amplicon analyzed with the paths annotated by how the path conforms and some other useful properties.
 - `--decomposition_strictness`: Value between 0 and 1 reflecting how strictly to filter low CN decompositions (default = 0.1). Higher values filter more of the low-weight decompositions.
+
+###5. Other utilities:
+
+####Amplicon Similarity
+One may wish to compare two overlapping focal amplifications and quantify their similarity - particularly when they are derived from multi-region 
+or longitudinal sampling. We provide a script which ***a)*** identifies overlap between pairs of amplicons (using the same input file as `amplicon_classifier.py`), 
+***b)*** computes measurements of the similarity of the two overlapping amplicons based on shared breakpoints and shared genomic content - 
+using both a Jaccard index approach and also our own *Symmetric Similarity Score* and *Asymmetric Similarity Score* approaches, and ***c)*** compares the scores against
+the similarity scores for overlapping amplicons derived from unrelated origins (data derived from Turner et al. _Nature_ 2017 and deCarvalho et al. _Nature Genetics_ 2018).
+
+The output file `*_similarity_scores.tsv` reports the following columns:
+- Amplicon 1 ID & Amplicon 2 ID
+- Symmetric Similarity Score (a combination of GenomicSegment and Breakpoint scores)
+- P-value of the Sym. Score in the background unrelated overlapping amplicon distribution (empirical).
+- `GenomicSegmentScore1` & `GenomicSegmentScore2` based on the directional similarity of genomic segment overlap (Amp1 and Amp2)/(Amp1) or (Amp1 and Amp2)/(Amp2), respectively.
+- `BreakpointScore1` & `BreakpointScore2` based on the directional similarity of breakpoint matching (Amp1 and Amp2)/(Amp1) or (Amp1 and Amp2)/(Amp2), respectively.
+- `JaccardGenomicSegment`, based on overlap of genomic segments (based on overlap of genomic coordinates)
+- `JaccardBreakpoint`, based on overlap from matching of breakpoints.
+
+`amplicon_similarity.py` can be 

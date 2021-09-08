@@ -65,6 +65,7 @@ def amps_overlap(gdoi1, gdoi2):
 
     return False
 
+
 def nucSimilarity(g1, g2):
     g1_bp = 0
     obp = 0
@@ -141,6 +142,24 @@ def score_to_pval(s, background_scores):
     return pval
 
 
+def get_pairs(s2a_graph):
+    pairs = []
+    graph_data = []
+
+    dat = list(s2a_graph.items())
+    for i1 in range(len(dat)):
+        s1, gpair1 = dat[i1]
+        _, segTree = gpair1
+        graph_data.append(segTree)
+        for i2 in range(i1):
+            if amps_overlap(graph_data[i1], graph_data[i2]):
+                s2, _ = dat[i2]
+                pairs.append((s1, s2))
+
+    print(str(len(pairs)) + " overlapping pairs found.")
+    return pairs
+
+
 def buildLCDatabase(mappabilityFile):
     lcD = defaultdict(IntervalTree)
     with open(mappabilityFile) as infile:
@@ -164,8 +183,9 @@ def build_CG5_database(cg5_file):
     return cg5D
 
 
-def parseBPG(bpgf):
+def parseBPG(bpgf, subset_ivald):
     bps = []
+    keepAll = (len(subset_ivald) == 0)
     segTree = defaultdict(IntervalTree)
     with open(bpgf) as infile:
         for line in infile:
@@ -181,6 +201,9 @@ def parseBPG(bpgf):
 
                 lpos, rpos = int(lpos), int(rpos)
                 if lcD[lchrom][lpos] or lcD[rchrom][rpos]:
+                    continue
+
+                elif not keepAll and not (subset_ivald[lchrom].overlaps(lpos) and subset_ivald[rchrom].overlaps(rpos)):
                     continue
 
                 elif lchrom == rchrom and abs(lpos - rpos) < min_de_size:
@@ -204,6 +227,9 @@ def parseBPG(bpgf):
                 if lcD[lchrom][lpos:rpos] or cg5D[lchrom][lpos:rpos]:
                     continue
 
+                elif not keepAll and not subset_ivald[lchrom].overlaps(lpos, rpos):
+                    continue
+
                 cn = float(fields[3])
                 if cn > cn_cut:
                     segTree[lchrom].addi(lpos, rpos, cn)
@@ -214,7 +240,7 @@ def parseBPG(bpgf):
     return bps, segTree
 
 
-def readFlist(filelist):
+def readFlist(filelist, region_subset_ivald):
     s_to_amp_graph_lookup = {}
     with open(filelist) as infile:
         for line in infile:
@@ -226,7 +252,7 @@ def readFlist(filelist):
                     if sname.startswith("AA"):
                         sname = fields[0]
 
-                    s_to_amp_graph_lookup[sname] = parseBPG(fields[2])
+                    s_to_amp_graph_lookup[sname] = parseBPG(fields[2], region_subset_ivald)
 
     return s_to_amp_graph_lookup
 
@@ -237,22 +263,14 @@ def readBackgroundScores(bgsfile):
         return scores
 
 
-def get_pairs(s2a_graph):
-    pairs = []
-    graph_data = []
+def bed_to_interval_dict(bedf):
+    ivald = defaultdict(IntervalTree)
+    with open(bedf) as infile:
+        for line in infile:
+            fields = line.rstrip().rsplit()
+            ivald[fields[0]].addi(int(fields[1]), int(fields[2]))
 
-    dat = list(s2a_graph.items())
-    for i1 in range(len(dat)):
-        s1, gpair1 = dat[i1]
-        _, segTree = gpair1
-        graph_data.append(segTree)
-        for i2 in range(i1):
-            if amps_overlap(graph_data[i1], graph_data[i2]):
-                s2, _ = dat[i2]
-                pairs.append((s1, s2))
-
-    print(str(len(pairs)) + " overlapping pairs found.")
-    return pairs
+    return ivald
 
 
 # TODO: Add a feature to do one to many comparison (when amplicon is split into multiple amplicons)
@@ -278,11 +296,14 @@ if __name__ == "__main__":
                         action='store_true', default=False)
     parser.add_argument("--min_de", type=int, help="Set the minimum number of discordant edges in the amplicon "
                                                    "required to be considered for similarity (default 1).", default=1)
+    parser.add_argument("--subset_bed", help="Restrict the similarity calculation to the regions in the bed file "
+                                             "provided to this argument.")
     args = parser.parse_args()
 
     add_chr_tag = args.add_chr_tag
     cn_cut = args.min_cn
     min_de = args.min_de
+    region_subset_ivald = {}
 
     if not args.o:
         args.o = os.path.basename(args.input).rsplit(".")[0]
@@ -311,7 +332,10 @@ if __name__ == "__main__":
         sys.stderr.write("$AA_DATA_REPO not set. Please see AA installation instructions.\n")
         sys.exit(1)
 
-    s2a_graph = readFlist(args.input)
+    if args.subset_bed:
+        region_subset_ivald = bed_to_interval_dict(args.subset_bed)
+
+    s2a_graph = readFlist(args.input, region_subset_ivald)
     pairs = get_pairs(s2a_graph)
 
     bgsfile = os.path.dirname(os.path.realpath(__file__)) + "/sorted_background_scores.txt"
