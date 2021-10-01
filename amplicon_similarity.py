@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+__author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
+
 import argparse
 import bisect
 from collections import defaultdict
