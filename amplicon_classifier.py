@@ -675,6 +675,7 @@ if __name__ == "__main__":
     sampNames = []
     cyclesFiles = []
     featEntropyD = {}
+    samp_to_ec_count = defaultdict(int)
     for fpair in flist:
         if len(fpair) > 2:
             sName, cyclesFile, graphFile = fpair
@@ -776,6 +777,7 @@ if __name__ == "__main__":
         else:
             ecAmpliconCount = 0
 
+        samp_to_ec_count[sName] += ecAmpliconCount
         # write entropy for each feature
         ecEntropies = []
         if ecAmpliconCount == 1 and not ecIndexClusters:
@@ -857,6 +859,6 @@ if __name__ == "__main__":
     #OUTPUT FILE WRITING
     print("writing output files")
     write_outputs(args, ftgd_list, featEntropyD, categories, sampNames, cyclesFiles, AMP_classifications,
-                  AMP_dvaluesList, mixing_cats, EDGE_dvaluesList)
+                  AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count)
 
     print("done")

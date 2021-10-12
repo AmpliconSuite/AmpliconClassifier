@@ -300,6 +300,8 @@ if __name__ == "__main__":
                                                    "required to be considered for similarity (default 1).", default=1)
     parser.add_argument("--subset_bed", help="Restrict the similarity calculation to the regions in the bed file "
                                              "provided to this argument.")
+    parser.add_argument("--cycle_similarity", help="Similarity calculations for the similarity of paths/cycles in AA "
+                                                   "in cycles files", action='store_true', default=False)
     args = parser.parse_args()
 
     add_chr_tag = args.add_chr_tag

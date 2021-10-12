@@ -79,6 +79,14 @@ def write_interval_beds(prefix, sname, ampN, feature_dict):
                     outfile.write("\t".join(l) + "\n")
 
 
+# write the number of ecDNA per sample
+def write_ec_per_sample(outname, samp_to_ec_count):
+    with open(outname, 'w') as outfile:
+        outfile.write("#sample\tecDNA_count\n")
+        for s, c in samp_to_ec_count.items():
+            outfile.write("\t".join([s, str(c)]) + "\n")
+
+
 # ------------------------------------------------------------
 def get_amp_outside_bounds(graphf, add_chr_tag):
     # get the interval of the first amp (x)
@@ -418,10 +426,12 @@ def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, 
 
 
 def write_outputs(args, ftgd_list, featEntropyD, categories, sampNames, cyclesFiles, AMP_classifications,
-                  AMP_dvaluesList, mixing_cats, EDGE_dvaluesList):
+                  AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count):
     # Genes
     gene_extraction_outname = args.o + "_gene_list.tsv"
     write_gene_results(gene_extraction_outname, ftgd_list)
+    ecDNA_count_outname = args.o + "_ecDNA_counts.tsv"
+    write_ec_per_sample(ecDNA_count_outname, samp_to_ec_count)
 
     # Feature entropy
     if args.report_complexity:
