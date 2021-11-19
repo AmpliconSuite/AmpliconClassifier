@@ -87,7 +87,7 @@ OR running on multiple amplicons
 `sample_name_amplicon1   /path/to/sample_name_amplicon1_cycles.txt   /path/to/sample_name_amplicon1_graph.txt`
 
 Other arguments
-- `--ref [hg19, GRCh37 or GRCh38]`: (Required) Choose reference genome version used in generating AA output.
+- `--ref [hg19, GRCh37, GRCh38, mm10, or GRCm38]`: (Required) Choose reference genome version used in generating AA output.
 - `-v/--version`: Print version and exit.
 - `-o`: Output filename prefix. Default is prefix of `-i` or `-c`.
 - `--add_chr_tag`: If you have a mix of hg19 and GRCh37 amplicons, you can set `--ref hg19` and `--add_chr_tag` to classify them all together.

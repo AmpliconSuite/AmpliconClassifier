@@ -282,7 +282,7 @@ def merge_pairs():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Classify AA amplicon type")
     parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38",
-                        choices=["hg19", "GRCh37", "hg38", "GRCh38"], required=True)
+                        choices=["hg19", "GRCh37", "hg38", "GRCh38", "mm10", "GRCm38"], required=True)
     # parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon",
     #                     default=5000)
     parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: \

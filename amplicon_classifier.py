@@ -581,7 +581,7 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--cycles", help="AA-formatted cycles file")
     parser.add_argument("-g", "--graph", help="AA-formatted graph file")
     parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38.",
-                        choices=["hg19", "GRCh37", "hg38", "GRCh38"], required=True)
+                        choices=["hg19", "GRCh37", "hg38", "GRCh38", "mm10", "GRCm38"], required=True)
 
     parser.add_argument("--min_cn_flow", type=float, help="Minimum CN flow to consider as amplification (1.0).",
                         default=1)
