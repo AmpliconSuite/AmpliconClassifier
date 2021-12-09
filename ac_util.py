@@ -34,7 +34,10 @@ def parse_genes(gene_file):
             chrom, s, e, strand = fields[0], int(fields[3]), int(fields[4]), fields[6]
             # parse the line and get the name
             propFields = {x.split("=")[0]: x.split("=")[1] for x in fields[-1].rstrip(";").split(";")}
-            gname = propFields["Name"]
+            try:
+                gname = propFields["Name"]
+            except KeyError:
+                gname = propFields["gene_name"]
             is_other_feature = (gname.startswith("LOC") or gname.startswith("LINC") or gname.startswith("MIR"))
             if gname not in seenNames and not is_other_feature:
                 seenNames.add(gname)
@@ -345,9 +348,10 @@ def buildLCDatabase(mappabilityFile):
     with open(mappabilityFile) as infile:
         for line in infile:
             fields = line.rstrip().rsplit()
-            chrom, s, e = fields[0], int(fields[1]), int(fields[2])
-            if e - s > 7500:
-                lcD[chrom].addi(s, e)
+            if fields:
+                chrom, s, e = fields[0], int(fields[1]), int(fields[2])
+                if e - s > 7500:
+                    lcD[chrom].addi(s, e)
 
     return lcD
 
