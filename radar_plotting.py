@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from math import pi
 # Say, "the default sans-serif font is COMIC SANS"
