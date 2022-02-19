@@ -25,6 +25,14 @@ If using AmpliconClassifier, please cite:
 - `$AA_DATA_REPO` environment variable. For instructions see [AmpliconArchitect installation](https://github.com/jluebeck/AmpliconArchitect#data-repositories). 
 - `matplotlib` (python library, optional): `pip install matplotlib`
 
+#### Installation:
+```bash
+git pull https://github.com/jluebeck/AmpliconClassifier.git
+cd AmpliconClassifier
+echo export AC_SRC=$PWD >> ~/.bashrc
+source ~/.bashrc
+```
+
 ### 2. Usage:
 
 `amplicon_classifier.py` takes an AA graph file and an AA cycles file as input.
