@@ -242,7 +242,7 @@ def parseBPG(bpgf, subset_ivald):
     return bps, segTree
 
 
-def readFlist(filelist, region_subset_ivald):
+def readFlist(filelist, region_subset_ivald, fullname=False):
     s_to_amp_graph_lookup = {}
     with open(filelist) as infile:
         for line in infile:
@@ -250,9 +250,12 @@ def readFlist(filelist, region_subset_ivald):
             if line:
                 fields = line.rsplit()
                 if len(fields) > 1:
-                    sname = fields[2].rsplit("/")[-1].rsplit("_graph.txt")[0]
-                    if sname.startswith("AA"):
-                        sname = fields[0]
+                    if fullname:
+                        sname = fields[2].rsplit("_graph.txt")[0]
+                    else:
+                        sname = fields[2].rsplit("/")[-1].rsplit("_graph.txt")[0]
+                        if sname.startswith("AA"):
+                            sname = fields[0]
 
                     s_to_amp_graph_lookup[sname] = parseBPG(fields[2], region_subset_ivald)
 
@@ -302,6 +305,9 @@ if __name__ == "__main__":
                                              "provided to this argument.")
     parser.add_argument("--cycle_similarity", help="Similarity calculations for the similarity of paths/cycles in AA "
                                                    "in cycles files", action='store_true', default=False)
+    parser.add_argument("--include_path_in_amplicon_name", help="Include path of file when reporting amplicon name",
+                        action='store_true', default=False)
+
     args = parser.parse_args()
 
     add_chr_tag = args.add_chr_tag
@@ -339,7 +345,7 @@ if __name__ == "__main__":
     if args.subset_bed:
         region_subset_ivald = bed_to_interval_dict(args.subset_bed)
 
-    s2a_graph = readFlist(args.input, region_subset_ivald)
+    s2a_graph = readFlist(args.input, region_subset_ivald, args.include_path_in_amplicon_name)
     pairs = get_pairs(s2a_graph)
 
     bgsfile = os.path.dirname(os.path.realpath(__file__)) + "/sorted_background_scores.txt"
