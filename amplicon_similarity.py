@@ -107,10 +107,10 @@ def jaccard_sim_seq(g1, g2):
              g2_bp += (t2.end - t2.begin)
 
     jsim = obp/(g1_bp + g2_bp - obp)
-    return jsim
+    return jsim, obp, g1_bp, g2_bp
 
 
-def jaccard_sim_bp(bplist1, bplist2, d):
+def compute_num_shared_bps(bplist1, bplist2, d):
     if not bplist1 and not bplist1:
         return 0
 
@@ -121,8 +121,16 @@ def jaccard_sim_bp(bplist1, bplist2, d):
                 intersectCount += 1
                 break
 
+    return intersectCount
+
+
+def jaccard_sim_bp(bplist1, bplist2, d):
+    if not bplist1 and not bplist1:
+        return 0, 0
+
+    intersectCount = compute_num_shared_bps(bplist1, bplist2, d)
     jsim = intersectCount/(len(bplist1) + len(bplist2) - intersectCount)
-    return jsim
+    return jsim, intersectCount
 
 
 def asymmetric_score(bplist1, bplist2, st1, st2, d):
@@ -356,13 +364,16 @@ if __name__ == "__main__":
         #[as1, as2, nS1, nS2, bpd1, bpd2]
         outfile.write("Amp1\tAmp2\tSimilarityScore\tSimScorePval\tAsymmetricScore1\tAsymmetricScore2\t"
                       "GenomicSegmentScore1\tGenomicSegmentScore2\tBreakpointScore1\tBreakpointScore2\t"
-                      "JaccardGenomicSegment\tJaccardBreakpoint\n")
+                      "JaccardGenomicSegment\tJaccardBreakpoint\tNumSharedBPs\tAmp1NumBPs\tAmp2NumBPs\t"
+                      "AmpOverlapLen\tAmp1AmpLen\tAmp2AmpLen\n")
+
         for a, b in pairs:
             bplist_a, st_a = s2a_graph[a]
             bplist_b, st_b = s2a_graph[b]
             s, featList = symScore(bplist_a, bplist_b, st_a, st_b, d)
-            jaccard_seq = jaccard_sim_seq(st_a, st_b)
-            jaccard_bp = jaccard_sim_bp(bplist_a, bplist_b, d)
-            featList.extend([jaccard_seq, jaccard_bp])
+            jaccard_seq, amp_olap_len, amp_a_len, amp_b_len = jaccard_sim_seq(st_a, st_b)
+            jaccard_bp, num_shared_bps = jaccard_sim_bp(bplist_a, bplist_b, d)
+            featList.extend([jaccard_seq, jaccard_bp, num_shared_bps, len(bplist_a), len(bplist_b), amp_olap_len,
+                             amp_a_len, amp_b_len])
             pval = score_to_pval(s, background_scores)
             outfile.write("\t".join([a, b, str(s), str(pval)] + [str(x) for x in featList]) + "\n")
