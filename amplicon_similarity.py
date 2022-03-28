@@ -9,6 +9,8 @@ import os
 import sys
 
 from intervaltree import IntervalTree
+from scipy.stats import beta
+
 
 add_chr_tag = False
 bpweight = 0.75
@@ -16,6 +18,8 @@ d = 250
 cn_cut = 4.5
 min_de = 1
 min_de_size = 2500
+# negative log likelihood model fit similarity score model parameters from null distribution
+alpha0, beta0 = 1.0407843068316383, 7.0222490956961359
 '''
 input:
 tab-separated file listing for each amplicon/sample 
@@ -146,9 +150,13 @@ def symScore(bplist_a, bplist_b, st_a, st_b, d):
     return (as1 + as2)/2, [as1, as2, nS1, nS2, bpd1, bpd2]
 
 
-def score_to_pval(s, background_scores):
+def score_to_pval(s):
+    return 1-beta.cdf(s, alpha0, beta0)
+
+
+def score_to_percentile(s, background_scores):
     ind = bisect.bisect(background_scores, s)
-    pval = 1 - ind/len(background_scores)
+    pval = ind*100.0/len(background_scores)
     return pval
 
 
@@ -193,9 +201,9 @@ def build_CG5_database(cg5_file):
     return cg5D
 
 
-def parseBPG(bpgf, subset_ivald):
+def parseBPG(bpgf, subset_ivald, cn_cut):
     bps = []
-    keepAll = (len(subset_ivald) == 0)
+    keepAll = (len(subset_ivald) == 0 or cn_cut == 0)
     segTree = defaultdict(IntervalTree)
     with open(bpgf) as infile:
         for line in infile:
@@ -214,6 +222,9 @@ def parseBPG(bpgf, subset_ivald):
                     continue
 
                 elif not keepAll and not (subset_ivald[lchrom].overlaps(lpos) and subset_ivald[rchrom].overlaps(rpos)):
+                    continue
+
+                elif keepAll and not (segTree[lchrom].overlaps(lpos) or segTree[rchrom].overlaps(rpos)):
                     continue
 
                 elif lchrom == rchrom and abs(lpos - rpos) < min_de_size:
@@ -250,7 +261,7 @@ def parseBPG(bpgf, subset_ivald):
     return bps, segTree
 
 
-def readFlist(filelist, region_subset_ivald, fullname=False):
+def readFlist(filelist, region_subset_ivald, cn_cut=0, fullname=False):
     s_to_amp_graph_lookup = {}
     with open(filelist) as infile:
         for line in infile:
@@ -265,7 +276,7 @@ def readFlist(filelist, region_subset_ivald, fullname=False):
                         if sname.startswith("AA"):
                             sname = fields[0]
 
-                    s_to_amp_graph_lookup[sname] = parseBPG(fields[2], region_subset_ivald)
+                    s_to_amp_graph_lookup[sname] = parseBPG(fields[2], region_subset_ivald, cn_cut)
 
     return s_to_amp_graph_lookup
 
@@ -311,8 +322,8 @@ if __name__ == "__main__":
                                                    "required to be considered for similarity (default 1).", default=1)
     parser.add_argument("--subset_bed", help="Restrict the similarity calculation to the regions in the bed file "
                                              "provided to this argument.")
-    parser.add_argument("--cycle_similarity", help="Similarity calculations for the similarity of paths/cycles in AA "
-                                                   "in cycles files", action='store_true', default=False)
+    # parser.add_argument("--cycle_similarity", help="Similarity calculations for the similarity of paths/cycles in AA "
+    #                                                "in cycles files", action='store_true', default=False)
     parser.add_argument("--include_path_in_amplicon_name", help="Include path of file when reporting amplicon name",
                         action='store_true', default=False)
 
@@ -353,7 +364,7 @@ if __name__ == "__main__":
     if args.subset_bed:
         region_subset_ivald = bed_to_interval_dict(args.subset_bed)
 
-    s2a_graph = readFlist(args.input, region_subset_ivald, args.include_path_in_amplicon_name)
+    s2a_graph = readFlist(args.input, region_subset_ivald, cn_cut, args.include_path_in_amplicon_name)
     pairs = get_pairs(s2a_graph)
 
     bgsfile = os.path.dirname(os.path.realpath(__file__)) + "/sorted_background_scores.txt"
@@ -362,10 +373,10 @@ if __name__ == "__main__":
 
     with open(args.o + "_similarity_scores.tsv",'w') as outfile:
         #[as1, as2, nS1, nS2, bpd1, bpd2]
-        outfile.write("Amp1\tAmp2\tSimilarityScore\tSimScorePval\tAsymmetricScore1\tAsymmetricScore2\t"
-                      "GenomicSegmentScore1\tGenomicSegmentScore2\tBreakpointScore1\tBreakpointScore2\t"
-                      "JaccardGenomicSegment\tJaccardBreakpoint\tNumSharedBPs\tAmp1NumBPs\tAmp2NumBPs\t"
-                      "AmpOverlapLen\tAmp1AmpLen\tAmp2AmpLen\n")
+        outfile.write("Amp1\tAmp2\tSimilarityScore\tSimScorePercentile\tSimScorePvalue\tAsymmetricScore1\t"
+                      "AsymmetricScore2\tGenomicSegmentScore1\tGenomicSegmentScore2\tBreakpointScore1\t"
+                      "BreakpointScore2\tJaccardGenomicSegment\tJaccardBreakpoint\tNumSharedBPs\tAmp1NumBPs\t"
+                      "Amp2NumBPs\tAmpOverlapLen\tAmp1AmpLen\tAmp2AmpLen\n")
 
         for a, b in pairs:
             bplist_a, st_a = s2a_graph[a]
@@ -375,5 +386,6 @@ if __name__ == "__main__":
             jaccard_bp, num_shared_bps = jaccard_sim_bp(bplist_a, bplist_b, d)
             featList.extend([jaccard_seq, jaccard_bp, num_shared_bps, len(bplist_a), len(bplist_b), amp_olap_len,
                              amp_a_len, amp_b_len])
-            pval = score_to_pval(s, background_scores)
-            outfile.write("\t".join([a, b, str(s), str(pval)] + [str(x) for x in featList]) + "\n")
+            pcent = score_to_percentile(s, background_scores)
+            pval = score_to_pval(s)
+            outfile.write("\t".join([a, b, str(s), str(pcent), str(pval)] + [str(x) for x in featList]) + "\n")

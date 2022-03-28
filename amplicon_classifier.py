@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.5"
-__author__ = "Jens Luebeck"
+__version__ = "0.4.7"
+__author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
 import copy
@@ -25,7 +25,7 @@ min_score_for_bfb = 0.25
 # min_fb_reads_for_bfb = 10
 fb_dist_cut = 25000
 
-#graph properties
+# graph properties
 graph_cns = defaultdict(IntervalTree)
 
 # ------------------------------------------------------------
@@ -199,7 +199,7 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
 # Compute f (foldback fraction) from the edges in the AA graph alone
 def compute_f_from_AA_graph(graphf, add_chr_tag):
     with open(graphf) as infile:
-        fbCount, nonFbCount, fbEdges, maxCN = 0, 0, 0, 0
+        fbCount, nonFbCount, fbEdges, maxCN, tot_over_min_cn = 0, 0, 0, 0, 0
         for line in infile:
             fields = line.rstrip().rsplit()
             if line.startswith("discordant"):
@@ -236,14 +236,18 @@ def compute_f_from_AA_graph(graphf, add_chr_tag):
                                                               int(fields[2].rsplit(":")[1][:-1])):
 
                     ccn = float(fields[3])
-                    if ccn > maxCN:
-                        maxCN = ccn
+                    seglen = int(fields[5])
+                    if seglen > 1000:
+                        if ccn > maxCN:
+                            maxCN = ccn
+                        if ccn > min_upper_cn:
+                            tot_over_min_cn += seglen
 
     # just return 0 if there isn't enough support
     if fbEdges < 2:
-        return 0, maxCN
+        return 0, maxCN, tot_over_min_cn
 
-    return fbCount / max(1.0, float(fbCount + nonFbCount)), maxCN
+    return fbCount / max(1.0, float(fbCount + nonFbCount)), maxCN, tot_over_min_cn
 
 
 def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs):
@@ -348,9 +352,6 @@ def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN):
     else:
         scale = 2.5
 
-    # print(cycle)
-    # print("decomp cutoff",scale)
-
     if (cn <= scale) or (maxCN < min_upper_cn):
         return True
 
@@ -379,16 +380,17 @@ def classifyConnections(cycleSet1, cycleSet2, clfs):
 
 
 # categories = ["No amp/Invalid", "Linear amplification", "Trivial cycle", "Complex non-cyclic", "Complex cyclic"]
-def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCyclicCont, totCyclicCont, force=False):
+def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCyclicCont, totCyclicCont, tot_over_min_cn, force=False):
     cycSig = amp_profile["Trivial cycle"] + amp_profile["Complex cyclic"]
-    if (cycSig > cycCut or totalCompCyclicCont > compCycContCut) and totCyclicCont > 10000:
+    if (cycSig > cycCut or totalCompCyclicCont > compCycContCut) and totCyclicCont > 10000 and tot_over_min_cn > 5000:
         return "Cyclic"
 
     elif amp_profile["Complex non-cyclic"] + cycSig > compCut:
-        if rearr_e < 2:
-            return "Linear amplification"
+        if rearr_e > 1 and tot_over_min_cn > 5000:
+            return "Complex non-cyclic"
 
-        return "Complex non-cyclic"
+        else:
+            return "Linear amplification"
 
     else:
         if max(amp_profile.values()) == 0:
@@ -535,8 +537,7 @@ Amplicon Classes:
 2) Linear amplification
 3) Complex non-cyclic
 4) BFB
-5) BFB-linked cylic (ecBFB)
-6) Cyclic (ecDNA)
+5) Cyclic (ecDNA)
 
 Graph edge classes:
 1) No amp/Invalid
@@ -609,8 +610,8 @@ if __name__ == "__main__":
                                                            "low CN decompositions (default = 0.1). Higher values "
                                                            "filter more of the low-weight decompositions.", type=float,
                         default=0.1)
-    parser.add_argument("-v", "--version", action='version', version='amplicon_classifier {version} \n Author: Jens \
-                        Luebeck (jluebeck [at] ucsd.edu)'.format(version=__version__))
+    parser.add_argument("-v", "--version", action='version', version='amplicon_classifier {version} \n Author: '
+                        '{author}'.format(version=__version__, author=__author__))
 
     args = parser.parse_args()
 
@@ -618,6 +619,7 @@ if __name__ == "__main__":
         print("Need to specify (--cycles & --graph) or --input\n")
         sys.exit(1)
 
+    print("AmpliconClassifier " + __version__)
     if args.ref == "hg38": args.ref = "GRCh38"
     patch_links = read_patch_regions(args.ref)
     if 0 <= args.decomposition_strictness <= 1:
@@ -695,7 +697,7 @@ if __name__ == "__main__":
         invalidInds = []
         rearrCycleInds = set()
         graph_cns = get_graph_cns(graphFile, args.add_chr_tag)
-        fb_prop, maxCN = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
+        fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
         rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
         totalCompCyclicCont = 0
         totCyclicCont = 0
@@ -730,7 +732,7 @@ if __name__ == "__main__":
 
         # anything stored in AMP_dvaluesDict prior to running classify will get used in classification
         # make sure you're not putting in other properties before here.
-        ampClass = classifyAmpliconProfile(AMP_dvaluesDict, rearr_e, totalCompCyclicCont, totCyclicCont)
+        ampClass = classifyAmpliconProfile(AMP_dvaluesDict, rearr_e, totalCompCyclicCont, totCyclicCont, tot_over_min_cn)
 
         # decomposition/amplicon complexity
         totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
@@ -741,7 +743,7 @@ if __name__ == "__main__":
 
         # now layer on the bfb classification
         # first compute some properties
-        fb_prop, maxCN = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
+        fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
 
         fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC, non_bfb_cycle_inds, bfb_cycle_inds = cycles_file_bfb_props(cycleList,
                                                                         segSeqD, cycleCNs, graphFile, args.add_chr_tag)
@@ -769,6 +771,7 @@ if __name__ == "__main__":
 
         # determine number of ecDNA present
         ecIndexClusters = []
+        ecAmpliconCount = 0
         if ecStat:
             excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
             ecIndexClusters = clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices)
@@ -776,6 +779,15 @@ if __name__ == "__main__":
 
         else:
             ecAmpliconCount = 0
+
+        # if no ecDNA-like intervals were identified, update and re-call.
+        if ecStat and not ecIndexClusters:
+            if not bfbStat:
+                remaining_classes = ["No amp/Invalid", "Linear amplification", "Complex non-cyclic"]
+                remaining_scores = [AMP_dvaluesDict[x] for x in remaining_classes]
+                ampClass = remaining_classes[remaining_scores.index(max(remaining_scores))]
+
+            ecStat = False
 
         samp_to_ec_count[sName] += ecAmpliconCount
         # write entropy for each feature
