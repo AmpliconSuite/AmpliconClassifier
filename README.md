@@ -22,6 +22,7 @@ If using AmpliconClassifier, please cite:
 ### 1. Prerequisites: 
 - Supports both python2 and python3.
 - `intervaltree` (python library):  `pip install intervaltree`
+- `scipy` (python library): `pip install scipy`
 - `$AA_DATA_REPO` environment variable. For instructions see [AmpliconArchitect installation](https://github.com/jluebeck/AmpliconArchitect#data-repositories). 
 - `matplotlib` (python library, optional): `pip install matplotlib`
 
@@ -106,9 +107,10 @@ Other arguments
 - `--report_comlexity`: Report a measurement of the amplicon's 'complexity' score, which represents a measurement of the complexity of the AA breakpoint graph decomposition.
 - `--verbose_classification`: Output verbose information in the `amplicon_classification_profiles.tsv` file, and create `edge_classification_profiles.tsv`. Useful for debugging.
 - `--force`: Disable No amp/Invalid class, if possible. Use only when extremely large CN seeds were used in AA amplicon generation.
-- `--plotStyle [noplot, individual]`: Produce a radar-style plot of classification strenghts. Default `noplot`.
+- `--plotstyle [noplot, individual]`: Produce a radar-style plot of classification strengths. Default `noplot`.
 - `--annotate_cycles_file`: Write a new cycles file for each amplicon analyzed with the paths annotated by how the path conforms and some other useful properties.
 - `--decomposition_strictness`: Value between 0 and 1 reflecting how strictly to filter low CN decompositions (default = 0.1). Higher values filter more of the low-weight decompositions.
+- `--no_LC_filter`: Set this to turn off filtering low-complexity & poor mappability genome region paths & cycles.
 
 ### 5. Other utilities:
 
@@ -117,12 +119,11 @@ One may wish to compare two overlapping focal amplifications and quantify their 
 or longitudinal sampling. We provide a script which ***a)*** identifies overlap between pairs of amplicons (using the same input file as `amplicon_classifier.py`), 
 ***b)*** computes measurements of the similarity of the two overlapping amplicons based on shared breakpoints and shared genomic content - 
 using both a Jaccard index approach and also our own *Symmetric Similarity Score* and *Asymmetric Similarity Score* approaches, and ***c)*** compares the scores against
-the similarity scores for overlapping amplicons derived from unrelated origins (data derived from Turner et al. _Nature_ 2017 and deCarvalho et al. _Nature Genetics_ 2018).
-
+the similarity scores for overlapping amplicons derived from unrelated origins (data derived from Turner et al. _Nature_ 2017 and deCarvalho et al. _Nature Genetics_ 2018, Bergstrom et al. _Nature_ 2020 and the Seattle Barrett's Study).
 The output file `*_similarity_scores.tsv` reports the following columns:
 - Amplicon 1 ID & Amplicon 2 ID
 - Symmetric Similarity Score (a combination of GenomicSegment and Breakpoint scores)
-- P-value of the Sym. Score in the background unrelated overlapping amplicon distribution (empirical).
+- Percentile and P-value of the Sym. Score in the background unrelated overlapping amplicon distribution. P-value based on beta distribution fit to similarity scores.
 - `GenomicSegmentScore1` & `GenomicSegmentScore2` based on the directional similarity of genomic segment overlap (Amp1 and Amp2)/(Amp1) or (Amp1 and Amp2)/(Amp2), respectively.
 - `BreakpointScore1` & `BreakpointScore2` based on the directional similarity of breakpoint matching (Amp1 and Amp2)/(Amp1) or (Amp1 and Amp2)/(Amp2), respectively.
 - `JaccardGenomicSegment`, based on overlap of genomic segments (based on overlap of genomic coordinates)
