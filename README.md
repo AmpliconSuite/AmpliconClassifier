@@ -80,7 +80,7 @@ Because an ecDNA may overlap with a BFB, they are reported separately.
 
 ****`[output_prefix]_gene_list.tsv`****
  
-This will reports the genes present on amplicons with each classification, and which genomic feature (e.g. ecDNA_1, BFB_1, etc), it is located on, along with the copy number. 
+This will reports the genes present on amplicons with each classification, and which genomic feature (e.g. ecDNA_1, BFB_1, etc), it is located on, along with the copy number and which end(s) of the gene have been lost ("truncated"), will be one of `None`, `5p` (5-prime end), `3p` (3-prime end) or `5p_3p` if both. 
 This **will also create a folder in the current working directory which stores .bed files with the predicted feature regions.**  
 
 
