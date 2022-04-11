@@ -9,6 +9,6 @@ if [ "$(wc -l < scf.txt)" -ne "$(wc -l < sgf.txt)" ]; then
   echo "ERROR: Unequal numbers of cycles and graph files found!"
   exit
 fi
-cat scf.txt | rev | cut -d '/' -f 1 | cut -c12- | rev > san.txt
+cat scf.txt | rev | cut -d '/' -f 1 | cut -c12- | rev | sed 's/_amplicon[0-9]*$//' > san.txt
 paste san.txt scf.txt sgf.txt > $2.input
 rm san.txt scf.txt sgf.txt
