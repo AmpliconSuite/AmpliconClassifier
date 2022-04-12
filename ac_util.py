@@ -363,7 +363,7 @@ def readFlist(filelist):
             line = line.rstrip()
             if line:
                 fields = line.rsplit()
-                if len(fields) < 2 or len(fields) > 3:
+                if len(fields) < 2:
                     print("Bad formatting in: ", line)
                 else:
                     flist.append(fields)

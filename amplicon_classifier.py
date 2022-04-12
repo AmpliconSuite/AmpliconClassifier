@@ -680,7 +680,7 @@ if __name__ == "__main__":
     samp_to_ec_count = defaultdict(int)
     for fpair in flist:
         if len(fpair) > 2:
-            sName, cyclesFile, graphFile = fpair
+            sName, cyclesFile, graphFile = fpair[:3]
             sampNames.append(sName)
             cyclesFiles.append(cyclesFile)
             ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
