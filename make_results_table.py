@@ -17,8 +17,8 @@ parser.add_argument("-i", "--input", help="Path to list of files to use. Each li
 parser.add_argument("--classification_file", help="Path to amplicon_classification_profiles.tsv file", required=True)
 args = parser.parse_args()
 
-output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "AA PNG file",
-               "AA PDF file"]
+output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Feature BED file",
+               "AA PNG file", "AA PDF file"]
 
 output_table_lines = [output_head, ]
 with open(args.input) as input_file, open(args.classification_file) as classification_file:
@@ -79,7 +79,7 @@ with open(args.input) as input_file, open(args.classification_file) as classific
 
                     intervals = "|".join(interval_list)
 
-                featureData.append([featureID, feature, intervals])
+                featureData.append([featureID, feature, intervals, os.path.abspath(featureBed)])
 
         for ft in featureData:
             output_table_lines.append([sample_name, AA_amplicon_number] + ft + image_locs)
