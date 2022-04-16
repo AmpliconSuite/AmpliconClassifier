@@ -352,7 +352,7 @@ if __name__ == "__main__":
                         action='store_true', default=False)
     parser.add_argument("--classification_file", help="Path to amplicon_classification_profiles.tsv file")
     parser.add_argument("--required_classifications", help="Amplicons must have received one or more or the following "
-                        "classifications.", choices=["ecDNA", "BFB", "Complex non-cyclic", "Linear amplification",
+                        "classifications. Requires --classification_file.", choices=["ecDNA", "BFB", "Complex non-cyclic", "Linear amplification",
                                                      "except invalid"],
                         nargs='+')
 
