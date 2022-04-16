@@ -424,6 +424,7 @@ if __name__ == "__main__":
                       "BreakpointScore2\tJaccardGenomicSegment\tJaccardBreakpoint\tNumSharedBPs\tAmp1NumBPs\t"
                       "Amp2NumBPs\tAmpOverlapLen\tAmp1AmpLen\tAmp2AmpLen\n")
 
+        outdata = []
         for a, b in pairs:
             bplist_a, st_a = s2a_graph[a]
             bplist_b, st_b = s2a_graph[b]
@@ -434,4 +435,9 @@ if __name__ == "__main__":
                              amp_a_len, amp_b_len])
             pcent = score_to_percentile(s, background_scores)
             pval = score_to_pval(s)
-            outfile.write("\t".join([a, b, str(s), str(pcent), str(pval)] + [str(x) for x in featList]) + "\n")
+            outdata.append([a, b, s, pcent, pval] + featList)
+            # outfile.write("\t".join([a, b, str(s), str(pcent), str(pval)] + [str(x) for x in featList]) + "\n")
+
+        outdata.sort(key=lambda x: (x[2], x[1], x[0]), reverse=True)
+        for l in outdata:
+            outfile.write("\t".join([str(x) for x in l]) + "\n")
