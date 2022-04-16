@@ -170,8 +170,9 @@ def get_pairs(s2a_graph):
         _, segTree = gpair1
         graph_data.append(segTree)
         for i2 in range(i1):
+            s2, _ = dat[i2]
+
             if amps_overlap(graph_data[i1], graph_data[i2]):
-                s2, _ = dat[i2]
                 pairs.append((s1, s2))
 
     print(str(len(pairs)) + " overlapping pairs found.")
@@ -261,7 +262,12 @@ def parseBPG(bpgf, subset_ivald, cn_cut):
     return bps, segTree
 
 
-def readFlist(filelist, region_subset_ivald, cn_cut=0, fullname=False):
+def readFlist(filelist, region_subset_ivald, cn_cut=0, fullname=False, required_classes=None, a2class=None):
+    if required_classes is None:
+        required_classes = set()
+    if a2class is None:
+        a2class = defaultdict(set)
+
     s_to_amp_graph_lookup = {}
     with open(filelist) as infile:
         for line in infile:
@@ -276,9 +282,27 @@ def readFlist(filelist, region_subset_ivald, cn_cut=0, fullname=False):
                         if sname.startswith("AA"):
                             sname = fields[0]
 
-                    s_to_amp_graph_lookup[sname] = parseBPG(fields[2], region_subset_ivald, cn_cut)
+                    if not required_classes or (required_classes and a2class[sname].intersection(required_classes)):
+                        s_to_amp_graph_lookup[sname] = parseBPG(fields[2], region_subset_ivald, cn_cut)
 
     return s_to_amp_graph_lookup
+
+
+def read_classifications(classification_file):
+    a2class = defaultdict(set)
+    with open(classification_file) as infile:
+        headfields = next(infile).rstrip().rsplit("\t")
+        for line in infile:
+            ld = dict(zip(headfields, line.rstrip().rsplit("\t")))
+            ampid = ld["sample_name"] + "_" + ld["amplicon_number"]
+            if ld["ecDNA+"] == "Positive":
+                a2class[ampid].add("ecDNA")
+            if ld["BFB+"] == "Positive":
+                a2class[ampid].add("BFB")
+
+            a2class[ampid].add(ld["amplicon_decomposition_class"])
+
+    return a2class
 
 
 def readBackgroundScores(bgsfile):
@@ -326,8 +350,29 @@ if __name__ == "__main__":
     #                                                "in cycles files", action='store_true', default=False)
     parser.add_argument("--include_path_in_amplicon_name", help="Include path of file when reporting amplicon name",
                         action='store_true', default=False)
+    parser.add_argument("--classification_file", help="Path to amplicon_classification_profiles.tsv file")
+    parser.add_argument("--required_classifications", help="Amplicons must have received one or more or the following "
+                        "classifications.", choices=["ecDNA", "BFB", "Complex non-cyclic", "Linear amplification",
+                                                     "except invalid"],
+                        nargs='+')
 
     args = parser.parse_args()
+    if args.required_classifications and not args.classification_file:
+        sys.stderr.write("--classification_file must be present with --require_classifications\n")
+        sys.exit(1)
+    elif args.required_classifications:
+        if args.required_classifications == ["except invalid", ]:
+            required_classes = {"ecDNA", "BFB", "Complex non-cyclic", "Linear amplification"}
+        else:
+            required_classes = set(args.required_classifications)
+
+    else:
+        required_classes = set()
+
+    if args.classification_file:
+        a2class = read_classifications(args.classification_file)
+    else:
+        a2class = defaultdict(set)
 
     add_chr_tag = args.add_chr_tag
     cn_cut = args.min_cn
@@ -364,7 +409,8 @@ if __name__ == "__main__":
     if args.subset_bed:
         region_subset_ivald = bed_to_interval_dict(args.subset_bed)
 
-    s2a_graph = readFlist(args.input, region_subset_ivald, cn_cut, args.include_path_in_amplicon_name)
+    s2a_graph = readFlist(args.input, region_subset_ivald, cn_cut, args.include_path_in_amplicon_name, required_classes,
+                          a2class)
     pairs = get_pairs(s2a_graph)
 
     bgsfile = os.path.dirname(os.path.realpath(__file__)) + "/sorted_background_scores.txt"
