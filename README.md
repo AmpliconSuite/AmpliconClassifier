@@ -110,6 +110,7 @@ Other arguments
 - `--plotstyle [noplot, individual]`: Produce a radar-style plot of classification strengths. Default `noplot`.
 - `--annotate_cycles_file`: Write a new cycles file for each amplicon analyzed with the paths annotated by how the path conforms and some other useful properties.
 - `--decomposition_strictness`: Value between 0 and 1 reflecting how strictly to filter low CN decompositions (default = 0.1). Higher values filter more of the low-weight decompositions.
+- `--exclude_bed`: Provide a bed file of regions to ignore during classification. Useful for separating linked amplicons or augmenting low-complexity annotations.
 - `--no_LC_filter`: Set this to turn off filtering low-complexity & poor mappability genome region paths & cycles.
 
 ### 5. Other utilities:

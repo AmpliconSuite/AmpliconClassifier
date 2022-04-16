@@ -606,6 +606,7 @@ if __name__ == "__main__":
                         "of the paths and cycles present.", action='store_true')
     parser.add_argument("--no_LC_filter", help="Do not filter low-complexity cycles. Not recommended to set this flag.",
                         action='store_true', default=False)
+    parser.add_argument("--exclude_bed", help="List of regions in which to ignore classification.")
     parser.add_argument("--decomposition_strictness", help="Value between 0 and 1 reflecting how strictly to filter "
                                                            "low CN decompositions (default = 0.1). Higher values "
                                                            "filter more of the low-weight decompositions.", type=float,
@@ -645,6 +646,11 @@ if __name__ == "__main__":
     except KeyError:
         sys.stderr.write("$AA_DATA_REPO not set. Please see AA installation instructions.\n")
         sys.exit(1)
+
+    if args.exclude_bed:
+        addtnl_lcD = buildLCDatabase(args.exclude_bed, filtsize=0)
+        for k, t in addtnl_lcD.items():
+            lcD[k].update(t)
 
     # gene_lookup = {}
     ftgd_list = []  # store list of feature gene classifications

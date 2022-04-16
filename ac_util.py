@@ -343,14 +343,14 @@ def buildPosCycleLookup(cycles, segSeqD):
     return posCycleLookup
 
 
-def buildLCDatabase(mappabilityFile):
+def buildLCDatabase(mappabilityFile, filtsize=7500):
     lcD = defaultdict(IntervalTree)
     with open(mappabilityFile) as infile:
         for line in infile:
             fields = line.rstrip().rsplit()
             if fields:
                 chrom, s, e = fields[0], int(fields[1]), int(fields[2])
-                if e - s > 7500:
+                if e - s > filtsize:
                     lcD[chrom].addi(s, e)
 
     return lcD
