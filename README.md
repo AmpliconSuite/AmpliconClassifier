@@ -28,7 +28,7 @@ If using AmpliconClassifier, please cite:
 
 #### Installation:
 ```bash
-git pull https://github.com/jluebeck/AmpliconClassifier.git
+git clone https://github.com/jluebeck/AmpliconClassifier.git
 cd AmpliconClassifier
 echo export AC_SRC=$PWD >> ~/.bashrc
 source ~/.bashrc
