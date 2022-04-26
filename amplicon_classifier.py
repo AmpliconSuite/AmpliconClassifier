@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.7"
+__version__ = "0.4.8"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
@@ -346,7 +346,7 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, graphf, add_chr_tag):
 def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN):
     # CN flow can be split across multiple amps
     if not isSingleton:
-        scale = min(args.min_cn_flow, maxCN * decomposition_strictness)
+        scale = min(args.min_flow, maxCN * decomposition_strictness)
     elif maxCN > 7:
         scale = min(3., maxCN / 8.)
     else:
@@ -478,7 +478,7 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices=None):
         cycle = cycleList[ind]
         csize = get_size(cycle, segSeqD)
         total_EC_size+=csize
-        if cycleCNs[ind] < args.min_cn_flow and csize < minCycleSize:
+        if cycleCNs[ind] < args.min_flow and csize < minCycleSize:
             continue
 
         cIndsToMerge = set()
@@ -584,8 +584,8 @@ if __name__ == "__main__":
     parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38.",
                         choices=["hg19", "GRCh37", "hg38", "GRCh38", "mm10", "GRCm38"], required=True)
 
-    parser.add_argument("--min_cn_flow", type=float, help="Minimum CN flow to consider as amplification (1.0).",
-                        default=1)
+    parser.add_argument("--min_flow", type=float, help="Minimum flow to consider among decomposed paths (1.0).",
+                        default=1.0)
     parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon "
                         "(5000).", default=5000)
     parser.add_argument("-o", help="Output filename prefix")
@@ -816,12 +816,12 @@ if __name__ == "__main__":
             featEntropyD[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
 
         # get genes
-        feat_gene_truncs, feat_gene_cns = get_genes.extract_gene_list(sName, ampN, gene_lookup, cycleList, segSeqD,
-                                                                      bfb_cycle_inds, ecIndexClusters, invalidInds,
-                                                                      bfbStat, ecStat, ampClass, graphFile,
-                                                                      args.add_chr_tag, args.o)
+        feat_gene_truncs, feat_gene_cns, feat_to_ongene = get_genes.extract_gene_list(sName, ampN, gene_lookup,
+                                                                    cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters,
+                                                                    invalidInds, bfbStat, ecStat, ampClass, graphFile,
+                                                                    args.add_chr_tag, args.o)
 
-        ftgd_list.append([sName, ampN, feat_gene_truncs, feat_gene_cns])
+        ftgd_list.append([sName, ampN, feat_gene_truncs, feat_gene_cns, feat_to_ongene])
 
         # store this additional information
         AMP_classifications.append((ampClass, ecStat, bfbStat, ecAmpliconCount))

@@ -15,7 +15,7 @@ If using AmpliconClassifier, please cite:
 *Nature Genetics*. 2020.
 <br />
 <br />
-### Current version: 0.4.7
+### Current version: 0.4.8
 
 ***Please note that this software is actively being developed. Stable versions are released on the main branch.***
 
@@ -100,7 +100,7 @@ Other arguments
 - `-v/--version`: Print version and exit.
 - `-o`: Output filename prefix. Default is prefix of `-i` or `-c`.
 - `--add_chr_tag`: If you have a mix of hg19 and GRCh37 amplicons, you can set `--ref hg19` and `--add_chr_tag` to classify them all together.
-- `--min_cn_flow`: Minumum cycle CN flow to consider as an amplification (default=1).
+- `--min_flow`: Minumum cycle CN flow to consider among decomposed paths (default=1).
 - `--min_size`: Minimum cycle size (in bp) to consider as valid amplicon (default=5000).
 
 [comment]: <> (- `--report_genes [ecdna, bfb, other, all]`: Extract list of genes and bed files from amplicons with given classification&#40;s&#41;.)

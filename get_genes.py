@@ -37,8 +37,18 @@ def get_gene_ends(gs, ge, strand, a, b):
 
 
 def get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d):
+    ongene = os.path.dirname(os.path.realpath(__file__)) + "/resources/oncogene_list_ONGene.txt"
+    ongene_set = set()
+    with open(ongene) as infile:
+        h = next(infile).rstrip().rsplit()
+        for l in infile:
+            fields = l.rstrip().rsplit()
+            fd = dict(zip(h, fields))
+            ongene_set.add(fd['OncogeneName'])
+
     feat_to_gene_trunc = defaultdict(lambda: defaultdict(set))
     feat_to_gene_cn = defaultdict(lambda: defaultdict(float))
+    feat_to_ongene = defaultdict(lambda: defaultdict(bool))
     for feat_name, curr_fd in feature_dict.items():
         for chrom, intlist in curr_fd.items():
             for a, b in intlist:
@@ -58,7 +68,10 @@ def get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d):
                     if has3p:
                         feat_to_gene_trunc[feat_name][gname].add("3p")
 
-    return feat_to_gene_trunc, feat_to_gene_cn
+                    if gname in ongene_set:
+                        feat_to_ongene[feat_name][gname] = True
+
+    return feat_to_gene_trunc, feat_to_gene_cn, feat_to_ongene
 
 
 def get_gseg_cns(graphf, add_chr_tag):

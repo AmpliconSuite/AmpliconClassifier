@@ -50,15 +50,16 @@ def parse_genes(gene_file):
 # take a list of 'feat_to_genes' dicts
 def write_gene_results(outname, ftg_list):
     with open(outname, 'w') as outfile:
-        head = ["sample_name", "amplicon_number", "feature", "gene", "gene_cn", "truncated"]
+        head = ["sample_name", "amplicon_number", "feature", "gene", "gene_cn", "truncated", "in_ongene_database"]
         outfile.write("\t".join(head) + "\n")
-        for sname, anum, truncd, cnd in ftg_list:
+        for sname, anum, truncd, cnd, ogd in ftg_list:
             for feat_name in sorted(truncd.keys()):
                 for gname in sorted(truncd[feat_name].keys()):
                     truncs = [x for x in ["5p", "3p"] if x not in truncd[feat_name][gname]]
                     gene_cn = str(cnd[feat_name][gname])
+                    inongene = str(ogd[feat_name][gname])
                     ts = "_".join(truncs) if truncs else "None"
-                    outfile.write("\t".join([sname, anum, feat_name, gname, gene_cn, ts]) + "\n")
+                    outfile.write("\t".join([sname, anum, feat_name, gname, gene_cn, ts, inongene]) + "\n")
 
 
 # print all the intervals to bed files
@@ -372,7 +373,7 @@ def readFlist(filelist):
 
 
 def read_patch_regions(ref):
-    dp = os.path.dirname(os.path.abspath(__file__)) + "/"
+    dp = os.path.dirname(os.path.abspath(__file__)) + "/resources/"
     patch_links = []
     with open(dp + "patch_regions.tsv") as infile:
         for line in infile:

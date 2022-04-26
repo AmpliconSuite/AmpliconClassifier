@@ -413,7 +413,7 @@ if __name__ == "__main__":
                           a2class)
     pairs = get_pairs(s2a_graph)
 
-    bgsfile = os.path.dirname(os.path.realpath(__file__)) + "/sorted_background_scores.txt"
+    bgsfile = os.path.dirname(os.path.realpath(__file__)) + "/resources/sorted_background_scores.txt"
     background_scores = readBackgroundScores(bgsfile)
 
 
