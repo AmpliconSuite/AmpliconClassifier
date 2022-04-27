@@ -106,7 +106,7 @@ Other arguments
 [comment]: <> (- `--report_genes [ecdna, bfb, other, all]`: Extract list of genes and bed files from amplicons with given classification&#40;s&#41;.)
 - `--report_comlexity`: Report a measurement of the amplicon's 'complexity' score, which represents a measurement of the complexity of the AA breakpoint graph decomposition.
 - `--verbose_classification`: Output verbose information in the `amplicon_classification_profiles.tsv` file, and create `edge_classification_profiles.tsv`. Useful for debugging.
-- `--force`: Disable No amp/Invalid class, if possible. Use only when extremely large CN seeds were used in AA amplicon generation.
+- `--force`: Disable No amp/Invalid class, if possible. Use only when extremely large CN seeds were used in AA amplicon generation (>10 Mbp intervals).
 - `--plotstyle [noplot, individual]`: Produce a radar-style plot of classification strengths. Default `noplot`.
 - `--annotate_cycles_file`: Write a new cycles file for each amplicon analyzed with the paths annotated by how the path conforms and some other useful properties.
 - `--decomposition_strictness`: Value between 0 and 1 reflecting how strictly to filter low CN decompositions (default = 0.1). Higher values filter more of the low-weight decompositions.
