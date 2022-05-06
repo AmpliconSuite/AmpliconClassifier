@@ -5,8 +5,6 @@ from collections import defaultdict
 import os
 import sys
 
-# from intervaltree import IntervalTree
-
 
 def read_amplicon_gene_list(genefile):
     amplicon_gene_dict = defaultdict(list)
@@ -20,6 +18,18 @@ def read_amplicon_gene_list(genefile):
                 amplicon_gene_dict[ampliconID].append((fd['gene'], fd['gene_cn'], eval(fd['in_ongene_database'])))
 
     return amplicon_gene_dict
+
+
+def html_table(output_table_lines, html_ofname):
+    with open(html_ofname, 'w') as outfile:
+        outfile.write("<style>\ntable, th, td {\n    border: 1px solid black;\n}\n</style>\n")
+        outfile.write('<table>\n')
+        for ll in output_table_lines:
+            outfile.write('  <tr><td>')
+            outfile.write('\n    </td><td>'.join(ll))
+            outfile.write('  </td></tr>\n')
+
+        outfile.write('</table>\n')
 
 
 if __name__ == "__main__":
@@ -101,7 +111,13 @@ if __name__ == "__main__":
             for ft in featureData:
                 output_table_lines.append([sample_name, AA_amplicon_number] + ft + image_locs)
 
-    with open(classBase + "_result_table.tsv", 'w') as outfile:
+
+    tsv_ofname = classBase + "_result_table.tsv"
+    html_ofname = classBase + "_result_table.html"
+
+    with open(tsv_ofname, 'w') as outfile:
         for ll in output_table_lines:
             oline = "\t".join(ll) + "\n"
             outfile.write(oline)
+
+    html_table(output_table_lines, html_ofname)
