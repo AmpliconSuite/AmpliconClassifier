@@ -25,8 +25,9 @@ def html_table(output_table_lines, html_ofname):
         outfile.write("<style>\ntable, th, td {\n    border: 1px solid black;\n}\n</style>\n")
         outfile.write('<table>\n')
         for ll in output_table_lines:
+            hll = [x.replace("/opt/gpbeta_2/gp_home/", "https://beta.genepattern.org/gp/") for x in ll]
             outfile.write('  <tr><td>')
-            outfile.write('\n    </td><td>'.join(ll))
+            outfile.write('\n    </td><td>'.join(hll))
             outfile.write('  </td></tr>\n')
 
         outfile.write('</table>\n')
@@ -54,6 +55,7 @@ if __name__ == "__main__":
             input_fields = input_line.rstrip().rsplit()
             sample_name = input_fields[0].rsplit("_amplicon")[0]
             amplicon_prefix = input_fields[1].rsplit("_cycles.txt")[0]
+            if not ":" in amplicon_prefix: amplicon_prefix.replace("//","/")
             AA_amplicon_number = amplicon_prefix.rsplit("_amplicon")[-1]
 
             classD = dict(zip(class_head, classification_line.rstrip().rsplit("\t")))
@@ -113,10 +115,11 @@ if __name__ == "__main__":
 
 
     tsv_ofname = classBase + "_result_table.tsv"
-    html_ofname = classBase + "_result_table.html"
+    html_ofname = classBase + "_GenePatternNotebook_result_table.html"
 
     with open(tsv_ofname, 'w') as outfile:
         for ll in output_table_lines:
+
             oline = "\t".join(ll) + "\n"
             outfile.write(oline)
 
