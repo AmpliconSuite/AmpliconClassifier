@@ -26,9 +26,12 @@ def html_table(output_table_lines, html_ofname):
         outfile.write('<table>\n')
         for ll in output_table_lines:
             hll = [x.replace("/opt/gpbeta_2/gp_home/", "https://beta.genepattern.org/gp/") for x in ll]
-            outfile.write('  <tr><td>')
-            outfile.write('\n    </td><td>'.join(hll))
-            outfile.write('  </td></tr>\n')
+            for i in range(-3,0):
+                s = hll[i]
+                hll[i] = "<a href=" + s + ">File</a>"
+            outfile.write('<tr><td>')
+            outfile.write('</td>\n    <td>'.join(hll))
+            outfile.write('</td></tr>\n')
 
         outfile.write('</table>\n')
 
