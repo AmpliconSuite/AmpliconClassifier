@@ -442,7 +442,9 @@ def write_outputs(args, ftgd_list, featEntropyD, categories, sampNames, cyclesFi
     if args.report_complexity:
         with open(args.o + "_feature_entropy.tsv", 'w') as outfile:
             outfile.write("sample\tamplicon\tfeature\ttotal_feature_entropy\tdecomp_entropy\tAmp_nseg_entropy\n")
-            for k, vt in featEntropyD.items():
+            sorted_keys = sorted(featEntropyD.keys())
+            for k in sorted_keys:
+                vt = featEntropyD[k]
                 ol = map(str, k + vt)
                 outfile.write("\t".join(ol) + "\n")
 

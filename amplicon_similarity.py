@@ -160,7 +160,7 @@ def score_to_percentile(s, background_scores):
     return pval
 
 
-def get_pairs(s2a_graph):
+def get_pairs(s2a_graph, required_amplicon_ID):
     pairs = []
     graph_data = []
 
@@ -171,6 +171,8 @@ def get_pairs(s2a_graph):
         graph_data.append(segTree)
         for i2 in range(i1):
             s2, _ = dat[i2]
+            if required_amplicon_ID and (not s1.endswith(required_amplicon_ID) and not s2.endswith(required_amplicon_ID)):
+                continue
 
             if amps_overlap(graph_data[i1], graph_data[i2]):
                 pairs.append((s1, s2))
@@ -321,12 +323,8 @@ def bed_to_interval_dict(bedf):
     return ivald
 
 
-# TODO: Add a feature to do one to many comparison (when amplicon is split into multiple amplicons)
-def merge_pairs():
-    pass
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Classify AA amplicon type")
+    parser = argparse.ArgumentParser(description="Compute similarity between overlapping AA amplicons")
     parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38",
                         choices=["hg19", "GRCh37", "hg38", "GRCh38", "mm10", "GRCm38"], required=True)
     # parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon",
@@ -352,16 +350,17 @@ if __name__ == "__main__":
                         action='store_true', default=False)
     parser.add_argument("--classification_file", help="Path to amplicon_classification_profiles.tsv file")
     parser.add_argument("--required_classifications", help="Amplicons must have received one or more or the following "
-                        "classifications. Requires --classification_file.", choices=["ecDNA", "BFB", "Complex non-cyclic", "Linear amplification",
-                                                     "except invalid"],
-                        nargs='+')
+                        "classifications. Requires --classification_file.", choices=["ecDNA", "BFB",
+                        "Complex non-cyclic", "Linear amplification", "any"], nargs='+')
+    parser.add_argument("--required_amplicon_ID", help="Require that any similarity scores reported are using this "
+                                                       "amplicon ID", default=None)
 
     args = parser.parse_args()
     if args.required_classifications and not args.classification_file:
         sys.stderr.write("--classification_file must be present with --require_classifications\n")
         sys.exit(1)
     elif args.required_classifications:
-        if args.required_classifications == ["except invalid", ]:
+        if args.required_classifications == ["any", ]:
             required_classes = {"ecDNA", "BFB", "Complex non-cyclic", "Linear amplification"}
         else:
             required_classes = set(args.required_classifications)
@@ -411,7 +410,7 @@ if __name__ == "__main__":
 
     s2a_graph = readFlist(args.input, region_subset_ivald, cn_cut, args.include_path_in_amplicon_name, required_classes,
                           a2class)
-    pairs = get_pairs(s2a_graph)
+    pairs = get_pairs(s2a_graph, args.required_amplicon_ID)
 
     bgsfile = os.path.dirname(os.path.realpath(__file__)) + "/resources/sorted_background_scores.txt"
     background_scores = readBackgroundScores(bgsfile)

@@ -687,6 +687,7 @@ if __name__ == "__main__":
     for fpair in flist:
         if len(fpair) > 2:
             sName, cyclesFile, graphFile = fpair[:3]
+            sName = sName.rsplit("_amplicon")[0]
             sampNames.append(sName)
             cyclesFiles.append(cyclesFile)
             ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
