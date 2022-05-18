@@ -6,18 +6,31 @@ import os
 import sys
 
 
-def read_amplicon_gene_list(genefile):
+def read_amplicon_gene_list(gene_file):
     amplicon_gene_dict = defaultdict(list)
-    with open(genefile) as infile:
+    with open(gene_file) as infile:
         h = next(infile).rstrip().rsplit("\t")
         for line in infile:
             fields = line.rstrip().rsplit("\t")
             fd = dict(zip(h, fields))
-            ampliconID = "_".join(fields[:3])
+            featureID = "_".join(fields[:3])
             if "5p" not in fd["truncated"]:
-                amplicon_gene_dict[ampliconID].append((fd['gene'], fd['gene_cn'], eval(fd['in_ongene_database'])))
+                amplicon_gene_dict[featureID].append((fd['gene'], fd['gene_cn'], eval(fd['is_canonical_oncogene'])))
 
     return amplicon_gene_dict
+
+
+def read_complexity_scores(entropy_file):
+    amplicon_complexity_dict = defaultdict(lambda: "NA")
+    with open(entropy_file) as infile:
+        h = next(infile).rstrip().rsplit("\t")
+        for line in infile:
+            fields = line.rstrip().rsplit("\t")
+            # fd = dict(zip(h, fields))
+            featureID = "_".join(fields[:3])
+            amplicon_complexity_dict[featureID] = fields[4]
+
+    return amplicon_complexity_dict
 
 
 def html_table(output_table_lines, html_ofname):
@@ -46,14 +59,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Oncogenes",
-                   "Feature BED file", "AA PNG file", "AA PDF file"]
+                   "Complexity score", "Feature BED file", "AA PNG file", "AA PDF file"]
 
     output_table_lines = [output_head, ]
     with open(args.input) as input_file, open(args.classification_file) as classification_file:
         classBase = args.classification_file.rsplit("_amplicon_classification_profiles.tsv")[0]
         classBedDir = classBase + "_classification_bed_files/"
-        genefile = classBase + "_gene_list.tsv"
-        amplicon_gene_dict = read_amplicon_gene_list(genefile)
+        gene_file = classBase + "_gene_list.tsv"
+        entropy_file = classBase + "_feature_entropy.tsv"
+        amplicon_gene_dict = read_amplicon_gene_list(gene_file)
+        amplicon_complexity_dict = read_complexity_scores(entropy_file)
         class_head = next(classification_file).rstrip().rsplit("\t")
         for input_line, classification_line in zip(input_file, classification_file):
             input_fields = input_line.rstrip().rsplit()
@@ -90,7 +105,7 @@ if __name__ == "__main__":
             elif not amps_classes and classD["amplicon_decomposition_class"] != "No amp/Invalid":
                 amps_classes.append((classD["amplicon_decomposition_class"], 1))
 
-            # Get the AC intervals
+            # Get the AC intervals, genes and complexity
             featureData = []
             for feature, namps in amps_classes:
                 for i in range(namps):
@@ -111,8 +126,9 @@ if __name__ == "__main__":
 
                     raw_glist = amplicon_gene_dict[featureID]
                     oncogenes = "|".join(sorted([g[0] for g in raw_glist if g[2]]))
+                    complexity = amplicon_complexity_dict[featureID]
 
-                    featureData.append([featureID, feature, intervals, oncogenes, os.path.abspath(featureBed)])
+                    featureData.append([featureID, feature, intervals, oncogenes, complexity, os.path.abspath(featureBed)])
 
             for ft in featureData:
                 output_table_lines.append([sample_name, AA_amplicon_number] + ft + image_locs)

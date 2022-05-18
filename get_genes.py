@@ -37,14 +37,15 @@ def get_gene_ends(gs, ge, strand, a, b):
 
 
 def get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d):
-    ongene = os.path.dirname(os.path.realpath(__file__)) + "/resources/oncogene_list_ONGene.txt"
+    ongene = os.path.dirname(os.path.realpath(__file__)) + "/resources/combined_oncogene_list.txt"
     ongene_set = set()
     with open(ongene) as infile:
-        h = next(infile).rstrip().rsplit()
+        # h = next(infile).rstrip().rsplit()
         for l in infile:
             fields = l.rstrip().rsplit()
-            fd = dict(zip(h, fields))
-            ongene_set.add(fd['OncogeneName'])
+            # fd = dict(zip(h, fields))
+            # ongene_set.add(fd['OncogeneName'])
+            ongene_set.add(fields[0])
 
     feat_to_gene_trunc = defaultdict(lambda: defaultdict(set))
     feat_to_gene_cn = defaultdict(lambda: defaultdict(float))

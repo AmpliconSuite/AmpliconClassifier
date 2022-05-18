@@ -50,7 +50,7 @@ def parse_genes(gene_file):
 # take a list of 'feat_to_genes' dicts
 def write_gene_results(outname, ftg_list):
     with open(outname, 'w') as outfile:
-        head = ["sample_name", "amplicon_number", "feature", "gene", "gene_cn", "truncated", "in_ongene_database"]
+        head = ["sample_name", "amplicon_number", "feature", "gene", "gene_cn", "truncated", "is_canonical_oncogene"]
         outfile.write("\t".join(head) + "\n")
         for sname, anum, truncd, cnd, ogd in ftg_list:
             for feat_name in sorted(truncd.keys()):
