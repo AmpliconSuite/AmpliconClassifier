@@ -11,7 +11,6 @@ import sys
 from intervaltree import IntervalTree
 from scipy.stats import beta
 
-
 add_chr_tag = False
 bpweight = 0.75
 d = 250
@@ -64,9 +63,9 @@ def amps_overlap(gdoi1, gdoi2):
             continue
 
         for int1 in it1:
-            if int1.data > cn_cut:
+            if int1.data is None or int1.data > cn_cut:
                 for int2 in it2[int1.begin:int1.end]:
-                    if int2.data > cn_cut:
+                    if int2.data is None or int2.data > cn_cut:
                         return True
 
     return False
@@ -160,7 +159,7 @@ def score_to_percentile(s, background_scores):
     return pval
 
 
-def get_pairs(s2a_graph, required_amplicon_ID):
+def get_pairs(s2a_graph, required_amplicon_ID=None):
     pairs = []
     graph_data = []
 
@@ -204,7 +203,7 @@ def build_CG5_database(cg5_file):
     return cg5D
 
 
-def parseBPG(bpgf, subset_ivald, cn_cut):
+def parseBPG(bpgf, subset_ivald, cn_cut, add_chr_tag, lcD, cg5D):
     bps = []
     keepAll = (len(subset_ivald) == 0 or cn_cut == 0)
     segTree = defaultdict(IntervalTree)
@@ -264,7 +263,7 @@ def parseBPG(bpgf, subset_ivald, cn_cut):
     return bps, segTree
 
 
-def readFlist(filelist, region_subset_ivald, cn_cut=0, fullname=False, required_classes=None, a2class=None):
+def readFlist(filelist, region_subset_ivald, lcD, cg5D, cn_cut=0, fullname=False, required_classes=None, a2class=None):
     if required_classes is None:
         required_classes = set()
     if a2class is None:
@@ -285,7 +284,8 @@ def readFlist(filelist, region_subset_ivald, cn_cut=0, fullname=False, required_
                             sname = fields[0]
 
                     if not required_classes or (required_classes and a2class[sname].intersection(required_classes)):
-                        s_to_amp_graph_lookup[sname] = parseBPG(fields[2], region_subset_ivald, cn_cut)
+                        s_to_amp_graph_lookup[sname] = parseBPG(fields[2], region_subset_ivald, cn_cut, add_chr_tag,
+                                                                lcD, cg5D)
 
     return s_to_amp_graph_lookup
 
@@ -313,15 +313,55 @@ def readBackgroundScores(bgsfile):
         return scores
 
 
-def bed_to_interval_dict(bedf):
+def bed_to_interval_dict(bedf, add_chr_tag):
     ivald = defaultdict(IntervalTree)
     with open(bedf) as infile:
         for line in infile:
             fields = line.rstrip().rsplit()
+            if add_chr_tag and not fields[0].startswith('chr'):
+                fields[0] = 'chr' + fields[0]
+
             ivald[fields[0]].addi(int(fields[1]), int(fields[2]))
 
     return ivald
 
+
+def compute_similarity(outfile, s2a_graph, pairs, outdata):
+    bgsfile = os.path.dirname(os.path.realpath(__file__)) + "/resources/sorted_background_scores.txt"
+    background_scores = readBackgroundScores(bgsfile)
+    for a, b in pairs:
+        bplist_a, st_a = s2a_graph[a]
+        bplist_b, st_b = s2a_graph[b]
+        s, featList = symScore(bplist_a, bplist_b, st_a, st_b, d)
+        jaccard_seq, amp_olap_len, amp_a_len, amp_b_len = jaccard_sim_seq(st_a, st_b)
+        jaccard_bp, num_shared_bps = jaccard_sim_bp(bplist_a, bplist_b, d)
+        featList.extend([jaccard_seq, jaccard_bp, num_shared_bps, len(bplist_a), len(bplist_b), amp_olap_len,
+                         amp_a_len, amp_b_len])
+        pcent = score_to_percentile(s, background_scores)
+        pval = score_to_pval(s)
+        if s != 0:
+            outdata.append([a, b, s, pcent, pval] + featList)
+        # outfile.write("\t".join([a, b, str(s), str(pcent), str(pval)] + [str(x) for x in featList]) + "\n")
+
+
+# check if aa data repo set, construct LC datatabase
+def set_lcd(AA_DATA_REPO, no_LC_filter):
+    fDict = {}
+    with open(AA_DATA_REPO + "file_list.txt") as infile:
+        for line in infile:
+            fields = line.strip().rsplit()
+            fDict[fields[0]] = fields[1]
+
+    lcPath = AA_DATA_REPO + fDict["mapability_exclude_filename"]
+    cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
+
+    lcD = defaultdict(IntervalTree)
+    cg5D = defaultdict(IntervalTree)
+    if not no_LC_filter:
+        lcD = buildLCDatabase(lcPath)
+        cg5D = build_CG5_database(cg5Path)
+
+    return lcD, cg5D
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compute similarity between overlapping AA amplicons")
@@ -352,7 +392,7 @@ if __name__ == "__main__":
     parser.add_argument("--required_classifications", help="Amplicons must have received one or more or the following "
                         "classifications. Requires --classification_file.", choices=["ecDNA", "BFB",
                         "Complex non-cyclic", "Linear amplification", "any"], nargs='+')
-    parser.add_argument("--required_amplicon_ID", help="Require that any similarity scores reported are using this "
+    parser.add_argument("--required_amplicon_ID", help="Require that any similarity scores reported are including this "
                                                        "amplicon ID", default=None)
 
     args = parser.parse_args()
@@ -386,57 +426,29 @@ if __name__ == "__main__":
     # check if aa data repo set, construct LC datatabase
     try:
         AA_DATA_REPO = os.environ["AA_DATA_REPO"] + "/" + args.ref + "/"
-        fDict = {}
-        with open(AA_DATA_REPO + "file_list.txt") as infile:
-            for line in infile:
-                fields = line.strip().rsplit()
-                fDict[fields[0]] = fields[1]
-
-        lcPath = AA_DATA_REPO + fDict["mapability_exclude_filename"]
-        cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
-
-        lcD = defaultdict(IntervalTree)
-        cg5D = defaultdict(IntervalTree)
-        if not args.no_LC_filter:
-            lcD = buildLCDatabase(lcPath)
-            cg5D = build_CG5_database(cg5Path)
 
     except KeyError:
         sys.stderr.write("$AA_DATA_REPO not set. Please see AA installation instructions.\n")
         sys.exit(1)
 
-    if args.subset_bed:
-        region_subset_ivald = bed_to_interval_dict(args.subset_bed)
+    lcD, cg5D = set_lcd(AA_DATA_REPO, args.no_LC_filter)
 
-    s2a_graph = readFlist(args.input, region_subset_ivald, cn_cut, args.include_path_in_amplicon_name, required_classes,
-                          a2class)
+    if args.subset_bed:
+        region_subset_ivald = bed_to_interval_dict(args.subset_bed, add_chr_tag)
+
+    s2a_graph = readFlist(args.input, region_subset_ivald, lcD, cg5D, cn_cut, args.include_path_in_amplicon_name,
+                          required_classes, a2class)
+
     pairs = get_pairs(s2a_graph, args.required_amplicon_ID)
 
-    bgsfile = os.path.dirname(os.path.realpath(__file__)) + "/resources/sorted_background_scores.txt"
-    background_scores = readBackgroundScores(bgsfile)
-
-
-    with open(args.o + "_similarity_scores.tsv",'w') as outfile:
-        #[as1, as2, nS1, nS2, bpd1, bpd2]
+    with open(args.o + "_amplicon_similarity_scores.tsv", 'w') as outfile:
+        # [as1, as2, nS1, nS2, bpd1, bpd2]
         outfile.write("Amp1\tAmp2\tSimilarityScore\tSimScorePercentile\tSimScorePvalue\tAsymmetricScore1\t"
                       "AsymmetricScore2\tGenomicSegmentScore1\tGenomicSegmentScore2\tBreakpointScore1\t"
                       "BreakpointScore2\tJaccardGenomicSegment\tJaccardBreakpoint\tNumSharedBPs\tAmp1NumBPs\t"
                       "Amp2NumBPs\tAmpOverlapLen\tAmp1AmpLen\tAmp2AmpLen\n")
-
         outdata = []
-        for a, b in pairs:
-            bplist_a, st_a = s2a_graph[a]
-            bplist_b, st_b = s2a_graph[b]
-            s, featList = symScore(bplist_a, bplist_b, st_a, st_b, d)
-            jaccard_seq, amp_olap_len, amp_a_len, amp_b_len = jaccard_sim_seq(st_a, st_b)
-            jaccard_bp, num_shared_bps = jaccard_sim_bp(bplist_a, bplist_b, d)
-            featList.extend([jaccard_seq, jaccard_bp, num_shared_bps, len(bplist_a), len(bplist_b), amp_olap_len,
-                             amp_a_len, amp_b_len])
-            pcent = score_to_percentile(s, background_scores)
-            pval = score_to_pval(s)
-            outdata.append([a, b, s, pcent, pval] + featList)
-            # outfile.write("\t".join([a, b, str(s), str(pcent), str(pval)] + [str(x) for x in featList]) + "\n")
-
+        compute_similarity(outfile, s2a_graph, pairs, outdata)
         outdata.sort(key=lambda x: (x[2], x[1], x[0]), reverse=True)
         for l in outdata:
             outfile.write("\t".join([str(x) for x in l]) + "\n")

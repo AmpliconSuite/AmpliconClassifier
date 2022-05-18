@@ -63,24 +63,27 @@ def write_gene_results(outname, ftg_list):
 
 
 # print all the intervals to bed files
-def write_interval_beds(prefix, sname, ampN, feature_dict):
-    outdir = prefix + "_classification_bed_files/"
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
+def write_interval_beds(prefix, sname, ampN, feature_dict, ampN_to_graph, f2gf):
+        outdir = prefix + "_classification_bed_files/"
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
 
-    trim_sname = sname.rsplit("/")[-1].rsplit("_amplicon")[0]
-    for feat_name, curr_fd in feature_dict.items():
-        if not curr_fd:
-            continue
+        trim_sname = sname.rsplit("/")[-1].rsplit("_amplicon")[0]
+        for feat_name, curr_fd in feature_dict.items():
+            if not curr_fd:
+                continue
 
-        with open(outdir + trim_sname + "_" + ampN + "_" + feat_name + "_intervals.bed", 'w') as outfile:
-            for chrom, ilist in curr_fd.items():
-                if not chrom:
-                    continue
+            full_fname = outdir + trim_sname + "_" + ampN + "_" + feat_name + "_intervals.bed"
+            if not feat_name.startswith("unknown"):
+                f2gf.write(full_fname + "\t" + ampN_to_graph[ampN] + "\n")
+            with open( full_fname, 'w') as outfile:
+                for chrom, ilist in curr_fd.items():
+                    if not chrom:
+                        continue
 
-                for i in ilist:
-                    l = map(str, [chrom, i[0], i[1]])
-                    outfile.write("\t".join(l) + "\n")
+                    for i in ilist:
+                        l = map(str, [chrom, i[0], i[1]])
+                        outfile.write("\t".join(l) + "\n")
 
 
 # write the number of ecDNA per sample

@@ -13,7 +13,7 @@ def merge_intervals(feature_dict, tol=1):
             mi = [sort_ints[0]]
             for ival in sort_ints[1:]:
                 if ival[0] <= mi[-1][1] + tol:
-                    ui = (mi[-1][0], ival[1])
+                    ui = (mi[-1][0], max(ival[1], mi[-1][1]))
                     mi[-1] = ui
 
                 else:
@@ -90,8 +90,8 @@ def get_gseg_cns(graphf, add_chr_tag):
     return gseg_cn_d
 
 
-def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters,
-                      invalidInds, bfbStat, ecStat, ampClass, graphf, add_chr_tag, prefix):
+def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds,
+                      bfbStat, ecStat, ampClass, graphf, add_chr_tag, prefix, ampN_to_graph, f2gf):
     feature_dict = {}
     gseg_cn_d = get_gseg_cns(graphf, add_chr_tag)
     invalidSet = set(invalidInds)
@@ -114,6 +114,7 @@ def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_in
     if ecStat:
         # collect unmerged genomic intervals comprising the feature
         for amp_ind, ec_cycle_inds in enumerate(ecIndexClusters):
+            # print(amp_ind, ec_cycle_inds)
             ec_interval_dict = defaultdict(list)
             for e_ind in ec_cycle_inds:
                 all_used.add(e_ind)
@@ -155,5 +156,5 @@ def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_in
     # print("Feature extraction: started with " + str(tot_init_intervals) + " unmerged intervals, finished with " + str(
     #     tot_final_intervals) + " intervals")
 
-    write_interval_beds(prefix, sname, ampN, feature_dict)
+    write_interval_beds(prefix, sname, ampN, feature_dict, ampN_to_graph, f2gf)
     return get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d)

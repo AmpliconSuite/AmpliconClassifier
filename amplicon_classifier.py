@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.8"
+__version__ = "0.4.9"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
@@ -621,6 +621,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     print("AmpliconClassifier " + __version__)
+    print(" ".join(sys.argv))
     if args.ref == "hg38": args.ref = "GRCh38"
     patch_links = read_patch_regions(args.ref)
     if 0 <= args.decomposition_strictness <= 1:
@@ -663,6 +664,7 @@ if __name__ == "__main__":
     # read the gene list
     refGeneFileLoc = AA_DATA_REPO + fDict["gene_filename"]
     gene_lookup = get_genes.parse_genes(refGeneFileLoc)
+    f2gf = open("feature_to_graph.txt", 'w')
 
     if not args.input:
         tempName = args.cycles.rsplit("/")[-1].rsplit(".")[0]
@@ -684,6 +686,7 @@ if __name__ == "__main__":
     cyclesFiles = []
     featEntropyD = {}
     samp_to_ec_count = defaultdict(int)
+    ampN_to_graph = {}
     for fpair in flist:
         if len(fpair) > 2:
             sName, cyclesFile, graphFile = fpair[:3]
@@ -691,6 +694,7 @@ if __name__ == "__main__":
             sampNames.append(sName)
             cyclesFiles.append(cyclesFile)
             ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
+            ampN_to_graph[ampN] = graphFile
             print(sName, ampN)
             segSeqD, cycleList, cycleCNs = parseCycle(cyclesFile, graphFile, args.add_chr_tag, lcD, patch_links)
 
@@ -820,7 +824,7 @@ if __name__ == "__main__":
         feat_gene_truncs, feat_gene_cns, feat_to_ongene = get_genes.extract_gene_list(sName, ampN, gene_lookup,
                                                                     cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters,
                                                                     invalidInds, bfbStat, ecStat, ampClass, graphFile,
-                                                                    args.add_chr_tag, args.o)
+                                                                    args.add_chr_tag, args.o, ampN_to_graph, f2gf)
 
         ftgd_list.append([sName, ampN, feat_gene_truncs, feat_gene_cns, feat_to_ongene])
 
@@ -880,4 +884,5 @@ if __name__ == "__main__":
     write_outputs(args, ftgd_list, featEntropyD, categories, sampNames, cyclesFiles, AMP_classifications,
                   AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count)
 
+    f2gf.close()
     print("done")
