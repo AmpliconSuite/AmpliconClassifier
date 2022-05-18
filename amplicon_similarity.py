@@ -400,7 +400,7 @@ if __name__ == "__main__":
         sys.stderr.write("--classification_file must be present with --require_classifications\n")
         sys.exit(1)
     elif args.required_classifications:
-        if args.required_classifications == ["any", ]:
+        if "any" in args.required_classifications:
             required_classes = {"ecDNA", "BFB", "Complex non-cyclic", "Linear amplification"}
         else:
             required_classes = set(args.required_classifications)

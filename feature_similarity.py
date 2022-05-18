@@ -79,7 +79,7 @@ if __name__ == "__main__":
             featbasename = os.path.basename(f)
             featfields = featbasename.rsplit("_")
             feat = featfields[-3]
-            if args.required_classifications == "any" or feat in args.required_classifications:
+            if "any" in args.required_classifications or feat in args.required_classifications:
                 # fullpath = classBedDir + "/" + f
                 # amp2bed[amp][feat] = bed_to_interval_dict(fullpath)
                 featname = f.rsplit("_intervals.bed")[0]
