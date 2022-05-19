@@ -18,7 +18,7 @@ cn_cut = 4.5
 min_de = 1
 min_de_size = 2500
 # negative log likelihood model fit similarity score model parameters from null distribution
-alpha0, beta0 = 1.0407843068316383, 7.0222490956961359
+alpha0, beta0 = 1.0394200524867749, 7.018186407386179
 '''
 input:
 tab-separated file listing for each amplicon/sample 
