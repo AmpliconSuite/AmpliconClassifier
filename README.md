@@ -46,7 +46,7 @@ If passing a list of amplicons, the `--input` argument must be formatted as foll
 
 `sample_name_amplicon1   /path/to/sample_name_amplicon1_cycles.txt   /path/to/sample_name_amplicon1_graph.txt`
 
-**To generate the input file automatically**, you can use the `make_input.sh` script, which takes a path and an output prefix. 
+**To generate the multi-amplicon input file automatically**, you can use the `make_input.sh` script, which takes a path and an output prefix. 
 
 `make_input.sh /path/to/AA/output/directory/ [some_prefix]`
 
