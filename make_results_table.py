@@ -135,7 +135,8 @@ if __name__ == "__main__":
 
 
     tsv_ofname = classBase + "_result_table.tsv"
-    html_ofname = classBase + "_GenePatternNotebook_result_table.html"
+    # html_ofname = classBase + "_GenePatternNotebook_result_table.html"
+    html_ofname = "index.html"
 
     with open(tsv_ofname, 'w') as outfile:
         for ll in output_table_lines:
