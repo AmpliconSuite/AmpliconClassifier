@@ -36,23 +36,23 @@ source ~/.bashrc
 
 ### 2. Usage:
 
-`amplicon_classifier.py` takes an AA graph file and an AA cycles file as input.
+`amplicon_classifier.py` takes a collection of (or single) AA graph files and corresponding AA cycles file as inputs.
 
 To classify a single amplicon,
 
 `python amplicon_classifier.py --ref [hg19, GRCh37, or GRCh38] --cycles [/path/to/amplicon_cycles.txt] --graph [/path/to/amplicon_graph.txt] > classifier_stdout.log`
 
-Alternatively you can generate classifications for a list of amplicons:
-
-`python amplicon_classifier.py --ref [hg19, GRCh37, or GRCh38] --input [file with list of your amplicons] > classifier_stdout.log`
-
 If passing a list of amplicons, the `--input` argument must be formatted as follows, with one amplicon per line:
 
 `sample_name_amplicon1   /path/to/sample_name_amplicon1_cycles.txt   /path/to/sample_name_amplicon1_graph.txt`
 
-To generate the input file automatically, you can use the `make_input.sh` script, which takes a path and an output prefix. 
+**To generate the multi-amplicon input file automatically**, you can use the `make_input.sh` script, which takes a path and an output prefix. 
 
 `make_input.sh /path/to/AA/output/directory/ [some_prefix]`
+
+To subsequently generate classifications for a list of amplicons:
+
+`python amplicon_classifier.py --ref [hg19, GRCh37, or GRCh38] --input [file with list of your amplicons] > classifier_stdout.log`
 
 and it will search for the cycles and graph files in that directory, and pair the locations into a text file compatible with the `--input` argument.
 
