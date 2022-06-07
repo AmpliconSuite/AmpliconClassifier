@@ -35,7 +35,7 @@ if __name__ == "__main__":
     parser.add_argument("--include_path_in_feature_name", help="Include path of file when reporting feature name "
                         "(useful for comparing against runs with similar names", action='store_true', default=False)
     parser.add_argument("--required_classifications", help="Which features to consider in the similarity calculation.",
-                        choices=["ecDNA", "BFB", "Complex non-cyclic", "Linear amplification", "any"], nargs='+',
+                        choices=["ecDNA", "BFB", "CNC", "Linear", "any"], nargs='+',
                         default="any")
 
     args = parser.parse_args()
@@ -47,6 +47,22 @@ if __name__ == "__main__":
         sys.stderr.write("$AC_SRC not found. Please first set AC_SRC bash variable using AC installation instructions "
                          "in Readme.\n")
         sys.exit(1)
+
+    if "any" in args.required_classifications:
+        required_classes = {"ecDNA", "BFB", "Complex non-cyclic", "Linear amplification"}
+    else:
+        required_classes = set(args.required_classifications)
+
+    if "CNC" in required_classes:
+        required_classes.remove("CNC")
+        required_classes.add("Complex non-cyclic")
+
+    if "Linear" in required_classes:
+        required_classes.remove("Linear")
+        required_classes.add("Linear amplification")
+
+    print("Required classifications set to")
+    print(required_classes)
 
     if args.ref == "hg38": args.ref = "GRCh38"
     add_chr_tag = args.add_chr_tag
@@ -79,7 +95,7 @@ if __name__ == "__main__":
             featbasename = os.path.basename(f)
             featfields = featbasename.rsplit("_")
             feat = featfields[-3]
-            if "any" in args.required_classifications or feat in args.required_classifications:
+            if feat in required_classes:
                 # fullpath = classBedDir + "/" + f
                 # amp2bed[amp][feat] = bed_to_interval_dict(fullpath)
                 featname = f.rsplit("_intervals.bed")[0]

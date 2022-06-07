@@ -341,6 +341,8 @@ def compute_similarity(outfile, s2a_graph, pairs, outdata):
         pval = score_to_pval(s)
         if s != 0:
             outdata.append([a, b, s, pcent, pval] + featList)
+        # else:
+        #     print("removed", [a, b, s, pcent, pval])
         # outfile.write("\t".join([a, b, str(s), str(pcent), str(pval)] + [str(x) for x in featList]) + "\n")
 
 
@@ -391,7 +393,7 @@ if __name__ == "__main__":
     parser.add_argument("--classification_file", help="Path to amplicon_classification_profiles.tsv file")
     parser.add_argument("--required_classifications", help="Amplicons must have received one or more or the following "
                         "classifications. Requires --classification_file.", choices=["ecDNA", "BFB",
-                        "Complex non-cyclic", "Linear amplification", "any"], nargs='+')
+                        "CNC", "Linear", "any"], nargs='+')
     parser.add_argument("--required_amplicon_ID", help="Require that any similarity scores reported are including this "
                                                        "amplicon ID", default=None)
 
@@ -405,8 +407,19 @@ if __name__ == "__main__":
         else:
             required_classes = set(args.required_classifications)
 
+        if "CNC" in required_classes:
+            required_classes.remove("CNC")
+            required_classes.add("Complex non-cyclic")
+
+        if "Linear" in required_classes:
+            required_classes.remove("Linear")
+            required_classes.add("Linear amplification")
+
     else:
         required_classes = set()
+
+    print("Required classifications set to")
+    print(required_classes)
 
     if args.classification_file:
         a2class = read_classifications(args.classification_file)
