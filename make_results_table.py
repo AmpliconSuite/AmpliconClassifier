@@ -3,6 +3,7 @@
 import argparse
 from collections import defaultdict
 import os
+import shutil
 import sys
 
 
@@ -33,18 +34,32 @@ def read_complexity_scores(entropy_file):
     return amplicon_complexity_dict
 
 
+def copy_AA_files(ll):
+    ldir = "files/"
+    if not os.path.exists(ldir):
+        os.makedirs(ldir)
+
+    for i in range(-3, 0):
+        s = ll[i]
+        if s != "Not found":
+            shutil.copy(s, ldir)
+            ll[i] = ldir + os.path.basename(ll[i])
+
+
 def html_table(output_table_lines, html_ofname):
     with open(html_ofname, 'w') as outfile:
         outfile.write("<style>\ntable, th, td {\n    border: 1px solid black;\n}\n</style>\n")
         outfile.write('<table>\n')
         for ind, ll in enumerate(output_table_lines):
-            hll = [x.replace("/opt/gpbeta_2/gp_home/", "https://beta.genepattern.org/gp/") for x in ll]
+            # hll = [x.replace("/opt/gpbeta_2/gp_home/", "files/") for x in ll]
             if ind != 0:
-                for i in range(-3,0):
-                    s = hll[i]
-                    hll[i] = "<a href=" + s + ">File</a>"
+                copy_AA_files(ll)
+                for i in range(-3, 0):
+                    s = ll[i]
+                    if s != "Not found":
+                        ll[i] = "<a href=" + s + ">File</a>"
             outfile.write('<tr><td>')
-            outfile.write('</td>\n    <td>'.join(hll))
+            outfile.write('</td>\n    <td>'.join(ll))
             outfile.write('</td></tr>\n')
 
         outfile.write('</table>\n')
