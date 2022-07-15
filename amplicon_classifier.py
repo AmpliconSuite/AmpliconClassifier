@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.9"
+__version__ = "0.4.10"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
@@ -611,8 +611,7 @@ if __name__ == "__main__":
                                                            "low CN decompositions (default = 0.1). Higher values "
                                                            "filter more of the low-weight decompositions.", type=float,
                         default=0.1)
-    parser.add_argument("-v", "--version", action='version', version='amplicon_classifier {version} \n Author: '
-                        '{author}'.format(version=__version__, author=__author__))
+    parser.add_argument("-v", "--version", action='version', version=__version__)
 
     args = parser.parse_args()
 
@@ -820,11 +819,15 @@ if __name__ == "__main__":
                                                                             bfb_cycle_inds, set(), args.add_chr_tag)
             featEntropyD[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
 
+        # TODO: Get the non-ec or BFB cycles, and compute the complexity score.
+        # elif not bfbStat and not ecStat and not ampClass == "No amp/Invalid":
+        #     featEntropyD[(sName, ampN, ampClass + "_1")] = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
+        #                                                                     bfb_cycle_inds, set(), args.add_chr_tag)
+
         # get genes
-        feat_gene_truncs, feat_gene_cns, feat_to_ongene = get_genes.extract_gene_list(sName, ampN, gene_lookup,
-                                                                    cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters,
-                                                                    invalidInds, bfbStat, ecStat, ampClass, graphFile,
-                                                                    args.add_chr_tag, args.o, ampN_to_graph, f2gf)
+        feat_gene_truncs, feat_gene_cns, feat_to_ongene = get_genes.amplicon_annotation(
+            sName, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat,
+            ampClass, graphFile, args.add_chr_tag, args.o, ampN_to_graph, f2gf, lcD)
 
         ftgd_list.append([sName, ampN, feat_gene_truncs, feat_gene_cns, feat_to_ongene])
 
@@ -837,7 +840,7 @@ if __name__ == "__main__":
         edgeTypeCountD = defaultdict(float)
         if graphFile:
             posCycleLookup = buildPosCycleLookup(cycleList, segSeqD)
-            bps = parseBPG(graphFile, args.add_chr_tag, lcD)
+            bps = bpg_edges(graphFile, args.add_chr_tag, lcD)
             for bp in bps:
                 lCycles, rCycles = bpgEdgeToCycles(bp, posCycleLookup)
                 # indices of left and right cycles on the discordant edges, and the index-ordered list of types

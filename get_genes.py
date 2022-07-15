@@ -4,6 +4,7 @@ from ac_util import *
 
 # This file is imported by amplicon_classifier.py to get genes
 
+
 def merge_intervals(feature_dict, tol=1):
     for item, usort_intd in feature_dict.items():
         for chrom, usort_ints in usort_intd.items():
@@ -91,8 +92,8 @@ def get_gseg_cns(graphf, add_chr_tag):
     return gseg_cn_d
 
 
-def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds,
-                      bfbStat, ecStat, ampClass, graphf, add_chr_tag, prefix, ampN_to_graph, f2gf):
+def amplicon_annotation(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds,
+                      bfbStat, ecStat, ampClass, graphf, add_chr_tag, prefix, ampN_to_graph, f2gf, lcD):
     feature_dict = {}
     gseg_cn_d = get_gseg_cns(graphf, add_chr_tag)
     invalidSet = set(invalidInds)
@@ -150,12 +151,8 @@ def extract_gene_list(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_in
         else:
             feature_dict["unknown_1"] = other_interval_dict
 
-    # merge all the intervals in each list of intervals
-    # tot_init_intervals = sum([len(ilist) for fd in feature_dict.values() for ilist in fd.values()])
     merge_intervals(feature_dict)
-    # tot_final_intervals = sum([len(ilist) for fd in feature_dict.values() for ilist in fd.values()])
-    # print("Feature extraction: started with " + str(tot_init_intervals) + " unmerged intervals, finished with " + str(
-    #     tot_final_intervals) + " intervals")
-
+    bpg_linelist = summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD)
+    write_bpg_summary(prefix, sname, ampN, bpg_linelist)
     write_interval_beds(prefix, sname, ampN, feature_dict, ampN_to_graph, f2gf)
     return get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d)

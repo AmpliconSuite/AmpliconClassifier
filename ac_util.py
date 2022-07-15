@@ -5,15 +5,18 @@ from intervaltree import IntervalTree, Interval
 
 
 class breakpoint(object):
-    def __init__(self, lchrom, lpos, rchrom, rpos, cn):
+    def __init__(self, lchrom, lpos, rchrom, rpos, supp, ldir, rdir):
         self.lchrom = lchrom
         self.lpos = lpos
         self.rchrom = rchrom
         self.rpos = rpos
-        self.cn = cn
+        self.support = supp
+        self.ldir = ldir
+        self.rdir = rdir
 
     def to_string(self):
-        return self.lchrom + ":" + str(self.lpos) + " | " + self.rchrom + ":" + str(self.rpos) + "\t" + str(self.cn)
+        return self.lchrom + ":" + str(self.lpos) + str(self.ldir) + " | " + self.rchrom + ":" + str(self.rpos) + \
+               str(self.rdir) + "\t" + str(self.support)
 
 
 # -------------------------------------------
@@ -62,6 +65,19 @@ def write_gene_results(outname, ftg_list):
                     outfile.write("\t".join([sname, anum, feat_name, gname, gene_cn, ts, inongene]) + "\n")
 
 
+# write a summary of the breakpoints in the graph
+def write_bpg_summary(prefix, sname, ampN, bpg_linelist):
+    outdir = prefix + "_SV_summaries/"
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+
+    trim_sname = sname.rsplit("/")[-1].rsplit("_amplicon")[0]
+    full_fname = outdir + trim_sname + "_" + ampN + "_SV_summary.tsv"
+    with open(full_fname, 'w') as outfile:
+        for line in bpg_linelist:
+            outfile.write(line + "\n")
+
+
 # print all the intervals to bed files
 def write_interval_beds(prefix, sname, ampN, feature_dict, ampN_to_graph, f2gf):
         outdir = prefix + "_classification_bed_files/"
@@ -76,7 +92,7 @@ def write_interval_beds(prefix, sname, ampN, feature_dict, ampN_to_graph, f2gf):
             full_fname = outdir + trim_sname + "_" + ampN + "_" + feat_name + "_intervals.bed"
             if not feat_name.startswith("unknown"):
                 f2gf.write(full_fname + "\t" + ampN_to_graph[ampN] + "\n")
-            with open( full_fname, 'w') as outfile:
+            with open(full_fname, 'w') as outfile:
                 for chrom, ilist in curr_fd.items():
                     if not chrom:
                         continue
@@ -92,6 +108,59 @@ def write_ec_per_sample(outname, samp_to_ec_count):
         outfile.write("#sample\tecDNA_count\n")
         for s, c in samp_to_ec_count.items():
             outfile.write("\t".join([s, str(c)]) + "\n")
+
+
+# write a summary of the breakpoints
+def summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD):
+    linelist = ["chrom1\tpos1\tchrom2\tpos2\tsvtype\tread_support\tfeatures\torientation",]
+    bps = bpg_edges(graphf, add_chr_tag, lcD)
+    for bp in bps:
+        c1, c2 = bp.lchrom, bp.rchrom
+        p1, p2 = bp.lpos, bp.rpos
+        ldir, rdir = bp.ldir, bp.rdir
+        if c1 == c2:
+            if p1 > p2:
+                p1, p2 = p2, p1
+                ldir, rdir = rdir, ldir
+
+        if c1 != c2:
+            etype = "interchromosomal"
+        else:
+            if ldir == "+" and rdir == "-":
+                etype = "deletion-like"
+
+            elif ldir == "-" and rdir == "+":
+                etype = "duplication-like"
+
+            else:
+                if p2 - p1 < 25000:
+                    etype = "foldback"
+                else:
+                    etype = "inversion"
+
+        fl = []
+        for f, intd in feature_dict.items():
+            hitl, hitr = False, False
+            for p in intd[c1]:
+                if p[0] <= p1 <= p[1]:
+                    hitl = True
+                    break
+
+            for p in intd[c2]:
+                if p[0] <= p2 <= p[1]:
+                    hitr = True
+                    break
+
+            if hitl and hitr:
+                fl.append(f.rsplit("_")[0])
+
+        if not fl:
+            fl.append("None")
+
+        fs = "|".join(fl)
+        linelist.append("\t".join([str(x) for x in [c1, p1, c2, p2, etype, bp.support, fs, ldir+rdir]]))
+
+    return linelist
 
 
 # ------------------------------------------------------------
@@ -291,7 +360,7 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
     return segSeqD, cycleList, cycleCNs
 
 
-def parseBPG(bpgf, add_chr_tag, lcD):
+def bpg_edges(bpgf, add_chr_tag, lcD):
     bps = []
     with open(bpgf) as infile:
         for line in infile:
@@ -299,8 +368,10 @@ def parseBPG(bpgf, add_chr_tag, lcD):
             if line.startswith("discordant"):
                 fields = line.rstrip().rsplit()
                 l, r = fields[1].rsplit("->")
-                lchrom, lpos = l[:-1].rsplit(":")
-                rchrom, rpos = r[:-1].rsplit(":")
+                lchrom, lpos = l.rsplit(":")
+                rchrom, rpos = r.rsplit(":")
+                lpos, ldir = lpos[:-1], lpos[-1]
+                rpos, rdir = rpos[:-1], rpos[-1]
                 lpos, rpos = int(lpos), int(rpos)
                 if add_chr_tag and not lchrom.startswith('chr'):
                     lchrom = "chr" + lchrom
@@ -309,8 +380,8 @@ def parseBPG(bpgf, add_chr_tag, lcD):
                 if lcD[lchrom][lpos] or lcD[rchrom][rpos]:
                     continue
 
-                cn = float(fields[2])
-                currBP = breakpoint(lchrom, lpos, rchrom, rpos, cn)
+                support = int(fields[3])
+                currBP = breakpoint(lchrom, lpos, rchrom, rpos, support, ldir, rdir)
                 bps.append(currBP)
 
     return bps

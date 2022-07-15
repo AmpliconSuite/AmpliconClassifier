@@ -2,6 +2,7 @@
 
 import argparse
 from collections import defaultdict
+import json
 import os
 import shutil
 import sys
@@ -39,7 +40,7 @@ def copy_AA_files(ll):
     if not os.path.exists(ldir):
         os.makedirs(ldir)
 
-    for i in range(-3, 0):
+    for i in range(-4, 0):
         s = ll[i]
         if s != "Not found":
             shutil.copy(s, ldir)
@@ -71,10 +72,12 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: "
                         "sample_name cycles.txt graph.txt.", required=True)
     parser.add_argument("--classification_file", help="Path to amplicon_classification_profiles.tsv file", required=True)
+    parser.add_argument("--metadata_dict", help="Path to [sample]_run_metadata.json file", default="")
     args = parser.parse_args()
 
     output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Oncogenes",
-                   "Complexity score", "Feature BED file", "AA PNG file", "AA PDF file"]
+                   "Complexity score", "Reference version", "Feature BED file", "AA PNG file", "AA PDF file",
+                   "Run metadata JSON"]
 
     output_table_lines = [output_head, ]
     with open(args.input) as input_file, open(args.classification_file) as classification_file:
@@ -84,6 +87,13 @@ if __name__ == "__main__":
         entropy_file = classBase + "_feature_entropy.tsv"
         amplicon_gene_dict = read_amplicon_gene_list(gene_file)
         amplicon_complexity_dict = read_complexity_scores(entropy_file)
+        if args.metadata_dict:
+            metadata_dict = json.load(args.metadata_dict, 'r')
+
+        else:
+            args.metadata_dict = "Not found"
+            metadata_dict = defaultdict(lambda: "NA")
+
         class_head = next(classification_file).rstrip().rsplit("\t")
         for input_line, classification_line in zip(input_file, classification_file):
             input_fields = input_line.rstrip().rsplit()
@@ -143,11 +153,11 @@ if __name__ == "__main__":
                     oncogenes = "|".join(sorted([g[0] for g in raw_glist if g[2]]))
                     complexity = amplicon_complexity_dict[featureID]
 
-                    featureData.append([featureID, feature, intervals, oncogenes, complexity, os.path.abspath(featureBed)])
+                    featureData.append([featureID, feature, intervals, oncogenes, complexity,
+                                        metadata_dict["ref_genome"], os.path.abspath(featureBed)])
 
             for ft in featureData:
-                output_table_lines.append([sample_name, AA_amplicon_number] + ft + image_locs)
-
+                output_table_lines.append([sample_name, AA_amplicon_number] + ft + image_locs + [args.metadata_dict,])
 
     tsv_ofname = classBase + "_result_table.tsv"
     # html_ofname = classBase + "_GenePatternNotebook_result_table.html"
