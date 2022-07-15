@@ -112,7 +112,7 @@ def write_ec_per_sample(outname, samp_to_ec_count):
 
 # write a summary of the breakpoints
 def summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD):
-    linelist = ["chrom1\tpos1\tchrom2\tpos2\tsvtype\tread_support\tfeatures\torientation",]
+    linelist = ["chrom1\tpos1\tchrom2\tpos2\tsv_type\tread_support\tfeatures\torientation",]
     bps = bpg_edges(graphf, add_chr_tag, lcD)
     for bp in bps:
         c1, c2 = bp.lchrom, bp.rchrom
