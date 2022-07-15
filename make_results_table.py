@@ -88,7 +88,7 @@ if __name__ == "__main__":
         amplicon_gene_dict = read_amplicon_gene_list(gene_file)
         amplicon_complexity_dict = read_complexity_scores(entropy_file)
         if args.metadata_dict:
-            metadata_dict = json.load(args.metadata_dict, 'r')
+            metadata_dict = json.load(open(args.metadata_dict, 'r'))
 
         else:
             args.metadata_dict = "Not found"
