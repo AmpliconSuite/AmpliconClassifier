@@ -112,7 +112,7 @@ def write_ec_per_sample(outname, samp_to_ec_count):
 
 # write a summary of the breakpoints
 def summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD):
-    linelist = ["chrom1\tpos1\tchrom2\tpos2\tsv_type\tread_support\tfeatures\torientation",]
+    linelist = ["chrom1\tpos1\tchrom2\tpos2\tsv_type\tread_support\tfeatures\torientation\tpos1_flanking_coordinate\tpos2_flanking_coordinate",]
     bps = bpg_edges(graphf, add_chr_tag, lcD)
     for bp in bps:
         c1, c2 = bp.lchrom, bp.rchrom
@@ -122,6 +122,16 @@ def summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD):
             if p1 > p2:
                 p1, p2 = p2, p1
                 ldir, rdir = rdir, ldir
+
+        if ldir == "+":
+            p1_1before = p1 - 1
+        else:
+            p1_1before = p1 + 1
+
+        if rdir == "+":
+            p2_1before = p2 - 1
+        else:
+            p2_1before = p2 + 1
 
         if c1 != c2:
             etype = "interchromosomal"
@@ -158,7 +168,7 @@ def summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD):
             fl.append("None")
 
         fs = "|".join(fl)
-        linelist.append("\t".join([str(x) for x in [c1, p1, c2, p2, etype, bp.support, fs, ldir+rdir]]))
+        linelist.append("\t".join([str(x) for x in [c1, p1, c2, p2, etype, bp.support, fs, ldir+rdir, p1_1before, p2_1before]]))
 
     return linelist
 
