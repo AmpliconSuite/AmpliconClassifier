@@ -47,14 +47,13 @@ def copy_AA_files(ll):
             ll[i] = ldir + os.path.basename(ll[i])
 
 
-def html_table(output_table_lines, html_ofname):
+def write_html_table(output_table_lines, html_ofname):
     with open(html_ofname, 'w') as outfile:
         outfile.write("<style>\ntable, th, td {\n    border: 1px solid black;\n}\n</style>\n")
         outfile.write('<table>\n')
         for ind, ll in enumerate(output_table_lines):
             # hll = [x.replace("/opt/gpbeta_2/gp_home/", "files/") for x in ll]
             if ind != 0:
-                copy_AA_files(ll)
                 for i in range(-3, 0):
                     s = ll[i]
                     if s != "Not found":
@@ -64,6 +63,20 @@ def html_table(output_table_lines, html_ofname):
             outfile.write('</td></tr>\n')
 
         outfile.write('</table>\n')
+
+
+def write_json_dict(output_table_lines, json_ofname):
+    # zip the head to the line to make a dict and dump them.
+    dlist = []
+    h = output_table_lines[0]
+    for ll in output_table_lines[1:]:
+        td = dict(zip(h, ll))
+        dlist.append(td)
+
+    with open(json_ofname, 'w') as outfile:
+        json.dump(dlist, outfile)
+
+    pass
 
 
 if __name__ == "__main__":
@@ -162,6 +175,7 @@ if __name__ == "__main__":
     tsv_ofname = classBase + "_result_table.tsv"
     # html_ofname = classBase + "_GenePatternNotebook_result_table.html"
     html_ofname = "index.html"
+    json_ofname = classBase + "_result_data.json"
 
     with open(tsv_ofname, 'w') as outfile:
         for ll in output_table_lines:
@@ -169,4 +183,8 @@ if __name__ == "__main__":
             oline = "\t".join(ll) + "\n"
             outfile.write(oline)
 
-    html_table(output_table_lines, html_ofname)
+    for ll in output_table_lines[1:]:
+        copy_AA_files(ll)
+
+    write_json_dict(output_table_lines, json_ofname)
+    write_html_table(output_table_lines, html_ofname)
