@@ -5,17 +5,17 @@
 
 **Info about accessing the legacy version:**
 
-For the legacy version used in Kim et al., *Nature Genetics*, 2020 please see the scripts and README in the "legacy_natgen_2020" folder of this repo.
+For the legacy version used in [Kim et al., *Nature Genetics*, 2020](https://www.nature.com/articles/s41588-020-0678-2) please see the scripts and README in the "legacy_natgen_2020" folder of this repo.
 The legacy version is only recommended for reproducing the paper results, and not for state-of-the-art amplicon classification. The legacy version was developed by Nam Nguyen, Jens Luebeck, and Hoon Kim.
 The current version is developed and maintained by Jens Luebeck.
 
-If using AmpliconClassifier, please cite:
-
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Kim H, Nguyen N, et al. [“Extrachromosomal DNA is associated with oncogene amplification and poor outcome across multiple cancers.”](https://www.nature.com/articles/s41588-020-0678-2)
-*Nature Genetics*. 2020.
-<br />
-<br />
 ### Current version: 0.4.10
+If using AmpliconClassifier (current version), please cite:
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Luebeck et al., [Extrachromosomal DNA in the cancerous transformation of Barrett's esophagus](https://www.biorxiv.org/content/10.1101/2022.07.25.501144v1).
+*biorXiv*. 2022.
+<br />
+<br />
 
 ***Please note that this software is actively being developed. Stable versions are released on the main branch.***
 
@@ -62,15 +62,15 @@ If combining data from both GRCh37 and hg19 in the same classification run, you 
 
 ### 3. Output:
 
-****`[output_prefix]_amplicon_classification_profiles.tsv`**** 
+#### ****`[output_prefix]_amplicon_classification_profiles.tsv`**** 
 
-This contains an abstract classification of the amplicon, and also indicates in separate columns "BFB+" and "ecDNA+" status.
+Contains an abstract classification of the amplicon, and also indicates in separate columns "BFB+" and "ecDNA+" status.
 Note that amplicons receiving a "Cyclic" classification may be ecDNA+, BFB+ or both.
 
 | Column name                    | Contents                                                                                                                                                                                |
 |--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `sample_name`                  | Sample name prefix                                                                                                                                                                      |
-| `amplicon_number`              | AA amplicon index, e.g. `[samplename]_amplicon2`                                                                                                                                        |
+| `amplicon_number`              | AA amplicon index, e.g. `amplicon2`                                                                                                                                        |
 | `amplicon_decomposition_class` | Abstract description of the AA amplicon type. Note that `Cyclic` can refer to either BFB or ecDNA. Please see the following columns for that distinction.                                                                                    |
 | `ecDNA+`                       | Prediction about whether the AA amplicon contains ecDNA. Note, an AA amplicon may contain regions surrounding the ecDNA, or multiple linked ecDNA. Either `Positive` or `None detected` |
 | `BFB+`                         | Prediction about whether the AA amplicon is the result of a BFB. Either `Positive` or `None detected`                                                                                   |
@@ -78,10 +78,38 @@ Note that amplicons receiving a "Cyclic" classification may be ecDNA+, BFB+ or b
 
 Because an ecDNA may overlap with a BFB, they are reported separately.
 
-****`[output_prefix]_gene_list.tsv`****
- 
-This will reports the genes present on amplicons with each classification, and which genomic feature (e.g. ecDNA_1, BFB_1, etc), it is located on, along with the copy number and which end(s) of the gene have been lost ("truncated"), will be one of `None`, `5p` (5-prime end), `3p` (3-prime end) or `5p_3p` if both. 
-This **will also create a folder in the current working directory which stores .bed files with the predicted feature regions.**  
+#### ****`[output_prefix]_gene_list.tsv`****
+Reports the genes present on amplicons with each classification, and which genomic feature (e.g. ecDNA_1, BFB_1, etc), it is located on, along with the copy number and which end(s) of the gene have been lost ("truncated"), will be one of `None`, `5p` (5-prime end), `3p` (3-prime end) or `5p_3p` if both. Genes are sourced from RefGene and most lncRNAs and micro-RNAs are excluded from the report.
+
+ | Column name                    | Contents                                                                                                                                                                                |
+|--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `sample_name`                  | Sample name prefix |
+| `amplicon_number`              | AA amplicon index, e.g. `amplicon2` |
+| `feature` | Which feature inside the amplicon the gene is present on. May be `unknown` if cannot be confidently assigned to a feature. |
+| `gene`                       | Gene name (RefGene) |
+| `gene_cn`                         | Maximum copy number of genomic segments (larger than 1kbp) overlapping the gene, as reported by AA |
+| `truncated`              | Which end(s) of the gene have been lost ("truncated"), will be one of `None`, `5p` (5-prime end), `3p` (3-prime end) or `5p_3p` if both |
+| `is_canonical_oncogene` | Reports if gene is present in [COSMIC](https://cancer.sanger.ac.uk/cosmic/curation), [ONGene](https://ongene.bioinfo-minzhao.org/), or the combined oncogene lists reported in [Luebeck et al. biorXiv, 2022](https://www.biorxiv.org/content/10.1101/2022.07.25.501144v1). |
+
+#### ****`[output_prefix]_gene_list.tsv`****
+Reports amplicon complexity scores as measured by the number of genomic segments and the diversity of copy number among all the amplicon decompositions performed by AA. For more information please see [this pre-print](https://www.biorxiv.org/content/10.1101/2022.07.25.501144v1).
+
+ | Column name                    | Contents   |
+|--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `sample_name`                  | Sample name prefix |
+| `amplicon_number`              | AA amplicon index, e.g. `amplicon2` |
+| `feature` | Which feature inside the amplicon the gene is present on. May be `unknown` if cannot be confidently assigned to a feature. |
+| `total_feature_entropy`                       | This is the amplicon complexity score. |
+| `decomp_entropy`                         | Amount of entropy or diversity captured in the AA decompositions overlapping this feature. |
+| `Amp_nseg_entropy`              | Amount of entropy or diversity captured by the number of genomic segments overlapping this feature. |
+
+ #### ****`[output_prefix]_ecDNA_counts.tsv`****
+ This two-column file reports the `sample_name` and the number of ecDNA identified in the sample across all amplicons from the sample.
+
+Additionally, there are three directories that can be created by `amplicon_classifier.py`. They are
+- `[prefix]_classification_bed_files/`, which contains bed files of the regions classified into each feature. May contain bed files marked `unknown` if the region could not be confidently assigned.
+- `[prefix]_SV_summaries/`, which contains tab-separated files summarizing the SVs detected by AA and what features the overlap in the amplicon.
+- `[prefix]_annotated_cycles_files/`, which contains AA cycles files with additional annotations about length of discovered paths/cycles and their classification status.
 
 
 ### 4. Description of command line arguments:
@@ -120,7 +148,7 @@ One may wish to compare two overlapping focal amplifications and quantify their 
 or longitudinal sampling. We provide a script which ***a)*** identifies overlap between pairs of amplicons (using the same input file as `amplicon_classifier.py`), 
 ***b)*** computes measurements of the similarity of the two overlapping amplicons based on shared breakpoints and shared genomic content - 
 using both a Jaccard index approach and also our own *Symmetric Similarity Score* and *Asymmetric Similarity Score* approaches, and ***c)*** compares the scores against
-the similarity scores for overlapping amplicons derived from unrelated origins (data derived from Turner et al. _Nature_ 2017 and deCarvalho et al. _Nature Genetics_ 2018, Bergstrom et al. _Nature_ 2020 and the Seattle Barrett's Study).
+the similarity scores for overlapping amplicons derived from unrelated origins (data derived from Turner et al. _Nature_ 2017 and deCarvalho et al. _Nature Genetics_ 2018, Bergstrom et al. _Nature_ 2020 and Paulson et al. _Nature Communications_).
 The output file `*_similarity_scores.tsv` reports the following columns:
 - Amplicon 1 ID & Amplicon 2 ID
 - Symmetric Similarity Score (a combination of GenomicSegment and Breakpoint scores)
