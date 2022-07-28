@@ -22,7 +22,8 @@ if __name__ == "__main__":
     # parser.add_argument("-i", "--input", help="Path to list of AA amplicon files to use. Each line formatted as: \
     # samplename /path/to/sample_amplicon1_cycles.txt /path/to/sample_amplicon1_graph.txt", required=True)
     parser.add_argument("-f", "--feature_input", help="Path to list of AC feature bed files and corresponding graphs. "
-                        "Input file for -f generated automatically by AC, 'feature_to_graph.txt'.", required=True)
+                        "Input file for -f generated automatically by AC, '[sample]_features_to_graph.txt'.",
+                        required=True)
     parser.add_argument("-o", help="Output filename prefix")
     parser.add_argument("--min_cn", type=float, help="Minimum CN to consider as amplification (default 4.5",
                         default=4.5)

@@ -663,7 +663,6 @@ if __name__ == "__main__":
     # read the gene list
     refGeneFileLoc = AA_DATA_REPO + fDict["gene_filename"]
     gene_lookup = get_genes.parse_genes(refGeneFileLoc)
-    f2gf = open("feature_to_graph.txt", 'w')
 
     if not args.input:
         tempName = args.cycles.rsplit("/")[-1].rsplit(".")[0]
@@ -676,6 +675,7 @@ if __name__ == "__main__":
         if not args.o:
             args.o = os.path.basename(args.input).rsplit(".")[0]
 
+    f2gf = open(args.o + "_features_to_graph.txt", 'w')
     minCycleSize = args.min_size
 
     AMP_dvaluesList = []
