@@ -675,6 +675,11 @@ if __name__ == "__main__":
         if not args.o:
             args.o = os.path.basename(args.input).rsplit(".")[0]
 
+    f2gfname = args.o + "_features_to_graph.txt"
+    outdir_loc = os.path.abspath(os.path.dirname(f2gfname))
+    if not os.path.exists(outdir_loc) and outdir_loc != "":
+        os.makedirs(outdir_loc)
+        
     f2gf = open(args.o + "_features_to_graph.txt", 'w')
     minCycleSize = args.min_size
 
