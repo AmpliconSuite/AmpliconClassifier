@@ -36,8 +36,7 @@ if __name__ == "__main__":
     parser.add_argument("--include_path_in_feature_name", help="Include path of file when reporting feature name "
                         "(useful for comparing against runs with similar names", action='store_true', default=False)
     parser.add_argument("--required_classifications", help="Which features to consider in the similarity calculation.",
-                        choices=["ecDNA", "BFB", "CNC", "Linear", "any"], nargs='+',
-                        default="any")
+                        choices=["ecDNA", "BFB", "CNC", "Linear", "any"], nargs='+', default="any")
 
     args = parser.parse_args()
 
@@ -48,6 +47,14 @@ if __name__ == "__main__":
         sys.stderr.write("$AC_SRC not found. Please first set AC_SRC bash variable using AC installation instructions "
                          "in Readme.\n")
         sys.exit(1)
+
+    try:
+        AA_DATA_REPO = os.environ["AA_DATA_REPO"] + "/" + args.ref + "/"
+    except KeyError:
+        sys.stderr.write("$AA_DATA_REPO not set. Please see AA installation instructions.\n")
+        sys.exit(1)
+
+    lcD, cg5D = set_lcd(AA_DATA_REPO, args.no_LC_filter)
 
     if "any" in args.required_classifications:
         required_classes = {"ecDNA", "BFB", "Complex non-cyclic", "Linear amplification"}
@@ -70,19 +77,11 @@ if __name__ == "__main__":
     cn_cut = args.min_cn
 
     if not args.o:
-        args.o = os.path.basename(args.input).rsplit(".")[0]
+        args.o = os.path.basename(args.feature_input).rsplit(".")[0]
 
-    outpre = args.o + "_feature_similarity/"
-    if not os.path.exists(outpre):
-        os.makedirs(outpre)
-
-    try:
-        AA_DATA_REPO = os.environ["AA_DATA_REPO"] + "/" + args.ref + "/"
-    except KeyError:
-        sys.stderr.write("$AA_DATA_REPO not set. Please see AA installation instructions.\n")
-        sys.exit(1)
-
-    lcD, cg5D = set_lcd(AA_DATA_REPO, args.no_LC_filter)
+    odir = "/".join(args.o.rsplit("/")[:-1])
+    if odir != "" and not os.path.exists(odir):
+        os.makedirs(odir)
 
     # read bed files for each feature
     # amp2bed = defaultdict(lambda: defaultdict(str))
@@ -124,9 +123,9 @@ if __name__ == "__main__":
             s2a_graph = {}
             # rel_regions = join_ivalds(feat_to_bed[x[0]][1], feat_to_bed[x[1]][1])
             # read the two graph files and classify.
-            graph0 = parseBPG(feat_to_graph[x[0]], feat_to_bed[x[0]][1], cn_cut, add_chr_tag, lcD, cg5D)
-            graph1 = parseBPG(feat_to_graph[x[1]], feat_to_bed[x[1]][1], cn_cut, add_chr_tag, lcD, cg5D)
-            if not graph0[0] or not graph0[1] or not graph1[0] or not graph1[1]:
+            graph0 = parseBPG(feat_to_graph[x[0]], feat_to_bed[x[0]][1], cn_cut, add_chr_tag, lcD, cg5D, args.min_de)
+            graph1 = parseBPG(feat_to_graph[x[1]], feat_to_bed[x[1]][1], cn_cut, add_chr_tag, lcD, cg5D, args.min_de)
+            if (not graph0[0] and args.min_de > 0) or not graph0[1] or (not graph1[0] and args.min_de > 0) or not graph1[1]:
                 continue
 
             s2a_graph[x[0]] = graph0

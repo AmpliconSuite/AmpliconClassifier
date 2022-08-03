@@ -203,7 +203,7 @@ def build_CG5_database(cg5_file):
     return cg5D
 
 
-def parseBPG(bpgf, subset_ivald, cn_cut, add_chr_tag, lcD, cg5D):
+def parseBPG(bpgf, subset_ivald, cn_cut, add_chr_tag, lcD, cg5D, min_de=1):
     bps = []
     keepAll = (len(subset_ivald) == 0 or cn_cut == 0)
     segTree = defaultdict(IntervalTree)
@@ -257,7 +257,8 @@ def parseBPG(bpgf, subset_ivald, cn_cut, add_chr_tag, lcD, cg5D):
                 if cn > cn_cut:
                     segTree[lchrom].addi(lpos, rpos, cn)
 
-    if not bps:
+
+    if not bps and min_de > 0:
         return bps, defaultdict(IntervalTree)
 
     return bps, segTree
