@@ -35,6 +35,18 @@ def read_complexity_scores(entropy_file):
     return amplicon_complexity_dict
 
 
+def read_basic_stats(basic_stats_file):
+    basic_stats_dict = defaultdict(lambda: ["NA", "NA", "NA"])
+    with open(basic_stats_file) as infile:
+        h = next(infile).rstrip().rsplit("\t")
+        for line in infile:
+            fields = line.rstrip().rsplit("\t")
+            featureID = fields[0]
+            basic_stats_dict[featureID] = fields[1:]
+
+    return basic_stats_dict
+
+
 def copy_AA_files(ll):
     ldir = "files/"
     if not os.path.exists(ldir):
@@ -54,7 +66,7 @@ def write_html_table(output_table_lines, html_ofname):
         for ind, ll in enumerate(output_table_lines):
             # hll = [x.replace("/opt/gpbeta_2/gp_home/", "files/") for x in ll]
             if ind != 0:
-                for i in range(-3, 0):
+                for i in range(-4, 0):
                     s = ll[i]
                     if s != "Not found":
                         ll[i] = "<a href=" + s + ">File</a>"
@@ -70,6 +82,7 @@ def write_json_dict(output_table_lines, json_ofname):
     dlist = []
     h = output_table_lines[0]
     for ll in output_table_lines[1:]:
+
         td = dict(zip(h, ll))
         dlist.append(td)
 
@@ -89,7 +102,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Oncogenes",
-                   "Complexity score", "Reference version", "Feature BED file", "AA PNG file", "AA PDF file",
+                   "Complexity score",
+                   "Captured interval length", "Feature median copy number", "Feature maximum copy number",
+                   "Reference version", "Feature BED file", "AA PNG file", "AA PDF file",
                    "Run metadata JSON"]
 
     output_table_lines = [output_head, ]
@@ -98,8 +113,10 @@ if __name__ == "__main__":
         classBedDir = classBase + "_classification_bed_files/"
         gene_file = classBase + "_gene_list.tsv"
         entropy_file = classBase + "_feature_entropy.tsv"
+        basic_stats_file = classBase + "_feature_basic_properties.tsv"
         amplicon_gene_dict = read_amplicon_gene_list(gene_file)
         amplicon_complexity_dict = read_complexity_scores(entropy_file)
+        basic_stats_dict = read_basic_stats(basic_stats_file)
         if args.metadata_dict:
             metadata_dict = json.load(open(args.metadata_dict, 'r'))
 
@@ -160,14 +177,17 @@ if __name__ == "__main__":
                                 bfields = l.rstrip().rsplit("\t")
                                 interval_list.append(bfields[0] + ":" + bfields[1] + "-" + bfields[2])
 
-                        intervals = "|".join(interval_list)
+                        # intervals = "|".join(interval_list)
+                        intervals = str(interval_list)
 
                     raw_glist = amplicon_gene_dict[featureID]
-                    oncogenes = "|".join(sorted([g[0] for g in raw_glist if g[2]]))
+                    # oncogenes = "|".join(sorted([g[0] for g in raw_glist if g[2]]))
+                    oncogenes = str(sorted([g[0] for g in raw_glist if g[2]]))
                     complexity = amplicon_complexity_dict[featureID]
+                    basic_stats = basic_stats_dict[featureID]
 
-                    featureData.append([featureID, feature, intervals, oncogenes, complexity,
-                                        metadata_dict["ref_genome"], os.path.abspath(featureBed)])
+                    featureData.append([featureID, feature, intervals, oncogenes, complexity] + basic_stats +
+                                        [metadata_dict["ref_genome"], os.path.abspath(featureBed)])
 
             for ft in featureData:
                 output_table_lines.append([sample_name, AA_amplicon_number] + ft + image_locs + [args.metadata_dict,])

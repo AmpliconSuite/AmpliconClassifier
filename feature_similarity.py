@@ -19,8 +19,6 @@ if __name__ == "__main__":
                                                  "ecDNAs, BFBs, etc.")
     parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38",
                         choices=["hg19", "GRCh37", "hg38", "GRCh38", "mm10", "GRCm38"], required=True)
-    # parser.add_argument("-i", "--input", help="Path to list of AA amplicon files to use. Each line formatted as: \
-    # samplename /path/to/sample_amplicon1_cycles.txt /path/to/sample_amplicon1_graph.txt", required=True)
     parser.add_argument("-f", "--feature_input", help="Path to list of AC feature bed files and corresponding graphs. "
                         "Input file for -f generated automatically by AC, '[sample]_features_to_graph.txt'.",
                         required=True)
@@ -54,6 +52,7 @@ if __name__ == "__main__":
         sys.stderr.write("$AA_DATA_REPO not set. Please see AA installation instructions.\n")
         sys.exit(1)
 
+    if args.ref == "hg38": args.ref = "GRCh38"
     lcD, cg5D = set_lcd(AA_DATA_REPO, args.no_LC_filter)
 
     if "any" in args.required_classifications:
@@ -72,7 +71,6 @@ if __name__ == "__main__":
     print("Required classifications set to")
     print(required_classes)
 
-    if args.ref == "hg38": args.ref = "GRCh38"
     add_chr_tag = args.add_chr_tag
     cn_cut = args.min_cn
 
@@ -133,7 +131,7 @@ if __name__ == "__main__":
             # for y,z in s2a_graph.items():
             #     print(y,z)
 
-            compute_similarity(outfile, s2a_graph, [x], outdata)
+            compute_similarity(s2a_graph, [x], outdata)
 
         outdata.sort(key=lambda x: (x[2], x[1], x[0]), reverse=True)
         for l in outdata:

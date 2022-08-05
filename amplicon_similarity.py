@@ -327,7 +327,7 @@ def bed_to_interval_dict(bedf, add_chr_tag):
     return ivald
 
 
-def compute_similarity(outfile, s2a_graph, pairs, outdata):
+def compute_similarity(s2a_graph, pairs, outdata):
     bgsfile = os.path.dirname(os.path.realpath(__file__)) + "/resources/sorted_background_scores.txt"
     background_scores = readBackgroundScores(bgsfile)
     for a, b in pairs:
@@ -462,7 +462,7 @@ if __name__ == "__main__":
                       "BreakpointScore2\tJaccardGenomicSegment\tJaccardBreakpoint\tNumSharedBPs\tAmp1NumBPs\t"
                       "Amp2NumBPs\tAmpOverlapLen\tAmp1AmpLen\tAmp2AmpLen\n")
         outdata = []
-        compute_similarity(outfile, s2a_graph, pairs, outdata)
+        compute_similarity(s2a_graph, pairs, outdata)
         outdata.sort(key=lambda x: (x[2], x[1], x[0]), reverse=True)
         for l in outdata:
             outfile.write("\t".join([str(x) for x in l]) + "\n")

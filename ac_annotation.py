@@ -1,26 +1,67 @@
-#!/usr/bin/env python3
-
 from ac_util import *
 
-# This file is imported by amplicon_classifier.py to get genes
 
+# write a summary of the breakpoints
+def summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD):
+    linelist = ["chrom1\tpos1\tchrom2\tpos2\tsv_type\tread_support\tfeatures\torientation\tpos1_flanking_coordinate\tpos2_flanking_coordinate",]
+    bps = bpg_edges(graphf, add_chr_tag, lcD)
+    for bp in bps:
+        c1, c2 = bp.lchrom, bp.rchrom
+        p1, p2 = bp.lpos, bp.rpos
+        ldir, rdir = bp.ldir, bp.rdir
+        if c1 == c2:
+            if p1 > p2:
+                p1, p2 = p2, p1
+                ldir, rdir = rdir, ldir
 
-def merge_intervals(feature_dict, tol=1):
-    for item, usort_intd in feature_dict.items():
-        for chrom, usort_ints in usort_intd.items():
-            # sort ints
-            sort_ints = sorted(usort_ints)
-            # merge sorted ints
-            mi = [sort_ints[0]]
-            for ival in sort_ints[1:]:
-                if ival[0] <= mi[-1][1] + tol:
-                    ui = (mi[-1][0], max(ival[1], mi[-1][1]))
-                    mi[-1] = ui
+        if ldir == "+":
+            p1_1before = p1 - 1
+        else:
+            p1_1before = p1 + 1
 
+        if rdir == "+":
+            p2_1before = p2 - 1
+        else:
+            p2_1before = p2 + 1
+
+        if c1 != c2:
+            etype = "interchromosomal"
+        else:
+            if ldir == "+" and rdir == "-":
+                etype = "deletion-like"
+
+            elif ldir == "-" and rdir == "+":
+                etype = "duplication-like"
+
+            else:
+                if p2 - p1 < 25000:
+                    etype = "foldback"
                 else:
-                    mi.append(ival)
+                    etype = "inversion"
 
-            feature_dict[item][chrom] = mi
+        fl = []
+        for f, intd in feature_dict.items():
+            hitl, hitr = False, False
+            for p in intd[c1]:
+                if p[0] <= p1 <= p[1]:
+                    hitl = True
+                    break
+
+            for p in intd[c2]:
+                if p[0] <= p2 <= p[1]:
+                    hitr = True
+                    break
+
+            if hitl and hitr:
+                fl.append(f.rsplit("_")[0])
+
+        if not fl:
+            fl.append("None")
+
+        fs = "|".join(fl)
+        linelist.append([c1, p1, c2, p2, etype, bp.support, fs, ldir+rdir, p1_1before, p2_1before])
+
+    return linelist
 
 
 def get_gene_ends(gs, ge, strand, a, b):
@@ -41,11 +82,8 @@ def get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d):
     ongene = os.path.dirname(os.path.realpath(__file__)) + "/resources/combined_oncogene_list.txt"
     ongene_set = set()
     with open(ongene) as infile:
-        # h = next(infile).rstrip().rsplit()
-        for l in infile:
-            fields = l.rstrip().rsplit()
-            # fd = dict(zip(h, fields))
-            # ongene_set.add(fd['OncogeneName'])
+        for line in infile:
+            fields = line.rstrip().rsplit()
             ongene_set.add(fields[0])
 
     feat_to_gene_trunc = defaultdict(lambda: defaultdict(set))
@@ -92,14 +130,51 @@ def get_gseg_cns(graphf, add_chr_tag):
     return gseg_cn_d
 
 
-def amplicon_annotation(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds,
-                      bfbStat, ecStat, ampClass, graphf, add_chr_tag, prefix, ampN_to_graph, f2gf, lcD):
+def amplicon_len_and_cn(feature_dict, gseg_cn_d):
+    prop_dict = {}
+    for feat_name, curr_fd in feature_dict.items():
+        if "unknown_" in feat_name:
+            continue
+
+        feat_size = 0
+        cn_list = []
+        for chrom, intlist in curr_fd.items():
+            for a, b in intlist:
+                feat_size+=(b-a)
+                cns = gseg_cn_d[chrom][a:b]
+                for d in cns:
+                    if d.end - d.begin > 1000:
+                        cn_list.append((d.data, min(d.end, b) - max(d.begin, a)))
+
+        if not cn_list:
+            continue
+
+        cn_list.sort()
+        tl = sum(x[1] for x in cn_list)
+        mid = tl/2.0
+        rs = 0
+        median_cn = 0
+        for cn, s in cn_list:
+            rs+=s
+            if rs >= mid:
+                median_cn = cn
+                break
+
+        # max cn is the last element of the cn_list
+        prop_dict[feat_name] = (feat_size, median_cn, cn_list[-1][0])
+
+    return prop_dict
+
+
+def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass,
+                        graphf, add_chr_tag, lcD):
     feature_dict = {}
     gseg_cn_d = get_gseg_cns(graphf, add_chr_tag)
     invalidSet = set(invalidInds)
     all_used = invalidSet.union(bfb_cycle_inds)
     used_segs = defaultdict(IntervalTree)
     graph_cns = get_graph_cns(graphf, add_chr_tag)
+    other_class_c_inds = []
     if bfbStat:
         # collect unmerged genomic intervals comprising the feature
         bfb_interval_dict = defaultdict(list)
@@ -116,7 +191,6 @@ def amplicon_annotation(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_
     if ecStat:
         # collect unmerged genomic intervals comprising the feature
         for amp_ind, ec_cycle_inds in enumerate(ecIndexClusters):
-            # print(amp_ind, ec_cycle_inds)
             ec_interval_dict = defaultdict(list)
             for e_ind in ec_cycle_inds:
                 all_used.add(e_ind)
@@ -145,6 +219,7 @@ def amplicon_annotation(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_
                         chrom, l, r = segSeqD[abs(c_id)]
                         if not used_segs[chrom][l:r] and not chrom is None:
                             other_interval_dict[chrom].append((l, r))
+                            other_class_c_inds.append(o_ind)
 
         if not ecStat and not bfbStat:
             feature_dict[ampClass + "_1"] = other_interval_dict
@@ -153,6 +228,5 @@ def amplicon_annotation(sname, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_
 
     merge_intervals(feature_dict)
     bpg_linelist = summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD)
-    write_bpg_summary(prefix, sname, ampN, bpg_linelist)
-    write_interval_beds(prefix, sname, ampN, feature_dict, ampN_to_graph, f2gf)
-    return get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d)
+    prop_dict = amplicon_len_and_cn(feature_dict, gseg_cn_d)
+    return bpg_linelist, gseg_cn_d, other_class_c_inds, feature_dict, prop_dict

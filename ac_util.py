@@ -18,162 +18,27 @@ class breakpoint(object):
         return self.lchrom + ":" + str(self.lpos) + str(self.ldir) + " | " + self.rchrom + ":" + str(self.rpos) + \
                str(self.rdir) + "\t" + str(self.support)
 
-
-# -------------------------------------------
-# getting genes
-def parse_genes(gene_file):
-    print("reading " + gene_file)
-    t = defaultdict(IntervalTree)
-    seenNames = set()
-    with open(gene_file) as infile:
-        for line in infile:
-            if line.startswith("#"):
-                continue
-
-            fields = line.rstrip().split()
-            if not fields:
-                continue
-
-            chrom, s, e, strand = fields[0], int(fields[3]), int(fields[4]), fields[6]
-            # parse the line and get the name
-            propFields = {x.split("=")[0]: x.split("=")[1] for x in fields[-1].rstrip(";").split(";")}
-            try:
-                gname = propFields["Name"]
-            except KeyError:
-                gname = propFields["gene_name"]
-            is_other_feature = (gname.startswith("LOC") or gname.startswith("LINC") or gname.startswith("MIR"))
-            if gname not in seenNames and not is_other_feature:
-                seenNames.add(gname)
-                t[chrom][s:e] = (gname, strand)
-
-    print("read " + str(len(seenNames)) + " genes\n")
-    return t
-
-
-# take a list of 'feat_to_genes' dicts
-def write_gene_results(outname, ftg_list):
-    with open(outname, 'w') as outfile:
-        head = ["sample_name", "amplicon_number", "feature", "gene", "gene_cn", "truncated", "is_canonical_oncogene"]
-        outfile.write("\t".join(head) + "\n")
-        for sname, anum, truncd, cnd, ogd in ftg_list:
-            for feat_name in sorted(truncd.keys()):
-                for gname in sorted(truncd[feat_name].keys()):
-                    truncs = [x for x in ["5p", "3p"] if x not in truncd[feat_name][gname]]
-                    gene_cn = str(cnd[feat_name][gname])
-                    inongene = str(ogd[feat_name][gname])
-                    ts = "_".join(truncs) if truncs else "None"
-                    outfile.write("\t".join([sname, anum, feat_name, gname, gene_cn, ts, inongene]) + "\n")
-
-
-# write a summary of the breakpoints in the graph
-def write_bpg_summary(prefix, sname, ampN, bpg_linelist):
-    outdir = prefix + "_SV_summaries/"
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
-
-    trim_sname = sname.rsplit("/")[-1].rsplit("_amplicon")[0]
-    full_fname = outdir + trim_sname + "_" + ampN + "_SV_summary.tsv"
-    with open(full_fname, 'w') as outfile:
-        for line in bpg_linelist:
-            outfile.write(line + "\n")
-
-
-# print all the intervals to bed files
-def write_interval_beds(prefix, sname, ampN, feature_dict, ampN_to_graph, f2gf):
-        outdir = prefix + "_classification_bed_files/"
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)
-
-        trim_sname = sname.rsplit("/")[-1].rsplit("_amplicon")[0]
-        for feat_name, curr_fd in feature_dict.items():
-            if not curr_fd:
-                continue
-
-            full_fname = outdir + trim_sname + "_" + ampN + "_" + feat_name + "_intervals.bed"
-            if not feat_name.startswith("unknown"):
-                f2gf.write(full_fname + "\t" + ampN_to_graph[ampN] + "\n")
-            with open(full_fname, 'w') as outfile:
-                for chrom, ilist in curr_fd.items():
-                    if not chrom:
-                        continue
-
-                    for i in ilist:
-                        l = map(str, [chrom, i[0], i[1]])
-                        outfile.write("\t".join(l) + "\n")
-
-
-# write the number of ecDNA per sample
-def write_ec_per_sample(outname, samp_to_ec_count):
-    with open(outname, 'w') as outfile:
-        outfile.write("#sample\tecDNA_count\n")
-        for s, c in samp_to_ec_count.items():
-            outfile.write("\t".join([s, str(c)]) + "\n")
-
-
-# write a summary of the breakpoints
-def summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD):
-    linelist = ["chrom1\tpos1\tchrom2\tpos2\tsv_type\tread_support\tfeatures\torientation\tpos1_flanking_coordinate\tpos2_flanking_coordinate",]
-    bps = bpg_edges(graphf, add_chr_tag, lcD)
-    for bp in bps:
-        c1, c2 = bp.lchrom, bp.rchrom
-        p1, p2 = bp.lpos, bp.rpos
-        ldir, rdir = bp.ldir, bp.rdir
-        if c1 == c2:
-            if p1 > p2:
-                p1, p2 = p2, p1
-                ldir, rdir = rdir, ldir
-
-        if ldir == "+":
-            p1_1before = p1 - 1
-        else:
-            p1_1before = p1 + 1
-
-        if rdir == "+":
-            p2_1before = p2 - 1
-        else:
-            p2_1before = p2 + 1
-
-        if c1 != c2:
-            etype = "interchromosomal"
-        else:
-            if ldir == "+" and rdir == "-":
-                etype = "deletion-like"
-
-            elif ldir == "-" and rdir == "+":
-                etype = "duplication-like"
-
-            else:
-                if p2 - p1 < 25000:
-                    etype = "foldback"
-                else:
-                    etype = "inversion"
-
-        fl = []
-        for f, intd in feature_dict.items():
-            hitl, hitr = False, False
-            for p in intd[c1]:
-                if p[0] <= p1 <= p[1]:
-                    hitl = True
-                    break
-
-            for p in intd[c2]:
-                if p[0] <= p2 <= p[1]:
-                    hitr = True
-                    break
-
-            if hitl and hitr:
-                fl.append(f.rsplit("_")[0])
-
-        if not fl:
-            fl.append("None")
-
-        fs = "|".join(fl)
-        linelist.append("\t".join([str(x) for x in [c1, p1, c2, p2, etype, bp.support, fs, ldir+rdir, p1_1before, p2_1before]]))
-
-    return linelist
-
-
 # ------------------------------------------------------------
+
+
+def merge_intervals(feature_dict, tol=1):
+    for item, usort_intd in feature_dict.items():
+        for chrom, usort_ints in usort_intd.items():
+            # sort ints
+            sort_ints = sorted(usort_ints)
+            # merge sorted ints
+            mi = [sort_ints[0]]
+            for ival in sort_ints[1:]:
+                if ival[0] <= mi[-1][1] + tol:
+                    ui = (mi[-1][0], max(ival[1], mi[-1][1]))
+                    mi[-1] = ui
+
+                else:
+                    mi.append(ival)
+
+            feature_dict[item][chrom] = mi
+
+
 def get_amp_outside_bounds(graphf, add_chr_tag):
     # get the interval of the first amp (x)
     # get the interval of the last amp (y)
@@ -333,9 +198,6 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
                 cd = dict(cf)
                 ss = cd["Segments"]
                 num_ss = [int(x[-1] + x[:-1]) for x in ss.rsplit(",")]
-                # print(num_ss)
-                # if any([segSeqD[abs(x)][0] == "hs37d5" for x in num_ss if x != 0]):
-                #     continue
                 lcCycle = False
                 pop_inds = []
                 for seg_ind, seg in enumerate(num_ss):
@@ -374,7 +236,6 @@ def bpg_edges(bpgf, add_chr_tag, lcD):
     bps = []
     with open(bpgf) as infile:
         for line in infile:
-            # if line.startswith("discordant") or line.startswith("concordant"):
             if line.startswith("discordant"):
                 fields = line.rstrip().rsplit()
                 l, r = fields[1].rsplit("->")
@@ -468,93 +329,3 @@ def read_patch_regions(ref):
 
     return patch_links
 
-
-# write a cycles file with the cycles -> some corrected
-def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters,
-                                          invalidInds, rearrCycleInds):
-
-    outdir = prefix + "_annotated_cycles_files/"
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
-
-    with open(outdir + outname, 'w') as outfile:
-        outfile.write("List of cycle segments\n")
-        seg_ind = 0
-        for k in sorted(segSeqD.keys()):
-            if k != 0:
-                seg_ind += 1
-                ll = "\t".join(["Segment", str(seg_ind), segSeqD[k][0], str(segSeqD[k][1]), str(segSeqD[k][2])])
-                outfile.write(ll + "\n")
-
-        for ind, cyc in enumerate(cycleList):
-            ccn = cycleCNs[ind]
-            clen = sum([segSeqD[abs(x)][2] - segSeqD[abs(x)][1] for x in cyc])
-            cl = ",".join([str(abs(x)) + "-" if x < 0 else str(abs(x)) + "+" for x in cyc])
-            acclass = ""
-            isCyclic = cyc[0] != 0
-            for ec_i, ec_cycset in enumerate(ecIndexClusters):
-                if ind in ec_cycset:
-                    acclass += "ecDNA-like_"
-
-            if ind in bfb_cycle_inds:
-                acclass += "BFB-like_"
-
-            if ind in invalidInds:
-                acclass += "Invalid"
-
-            acclass = acclass.rstrip("_")
-            if not acclass:
-                if ind in rearrCycleInds or isCyclic:
-                    acclass = "Rearranged"
-                else:
-                    acclass = "Linear"
-
-            l1 = ";".join(["Cycle=" + str(ind+1), "Copy_count=" + str(ccn), "Length=" + str(clen),
-                           "IsCyclicPath=" + str(isCyclic), "CycleClass=" + acclass, "Segments=" + cl])
-            outfile.write(l1 + "\n")
-
-
-def write_outputs(args, ftgd_list, featEntropyD, categories, sampNames, cyclesFiles, AMP_classifications,
-                  AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count):
-    # Genes
-    gene_extraction_outname = args.o + "_gene_list.tsv"
-    write_gene_results(gene_extraction_outname, ftgd_list)
-    ecDNA_count_outname = args.o + "_ecDNA_counts.tsv"
-    write_ec_per_sample(ecDNA_count_outname, samp_to_ec_count)
-
-    # Feature entropy
-    if args.report_complexity:
-        with open(args.o + "_feature_entropy.tsv", 'w') as outfile:
-            outfile.write("sample\tamplicon\tfeature\ttotal_feature_entropy\tdecomp_entropy\tAmp_nseg_entropy\n")
-            sorted_keys = sorted(featEntropyD.keys())
-            for k in sorted_keys:
-                vt = featEntropyD[k]
-                ol = map(str, k + vt)
-                outfile.write("\t".join(ol) + "\n")
-
-    # Amplicon profiles
-    with open(args.o + "_amplicon_classification_profiles.tsv", 'w') as outfile:
-        oh = ["sample_name", "amplicon_number", "amplicon_decomposition_class", "ecDNA+", "BFB+", "ecDNA_amplicons"]
-        if args.verbose_classification:
-            oh += categories
-
-        outfile.write("\t".join(oh) + "\n")
-        for ind, sname in enumerate(sampNames):
-            ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
-            ampClass, ecStat, bfbStat, ecAmpliconCount = AMP_classifications[ind]
-            ecOut = "Positive" if ecStat else "None detected"
-            bfbOut = "Positive" if bfbStat else "None detected"
-            ov = [sname.rsplit("_amplicon")[0], ampN, ampClass, ecOut, bfbOut, str(ecAmpliconCount)]
-            if args.verbose_classification:
-                ov += [str(x) for x in AMP_dvaluesList[ind]]
-
-            outfile.write("\t".join(ov) + "\n")
-
-    # Edge profiles
-    if args.verbose_classification:
-        with open(args.o + "_edge_classification_profiles.tsv", 'w') as outfile:
-            outfile.write("\t".join(["sample_name", "amplicon_number"] + mixing_cats) + "\n")
-            for ind, sname in enumerate(sampNames):
-                ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
-                outfile.write(
-                    "\t".join([sname.rsplit("_amplicon")[0], ampN] + [str(x) for x in EDGE_dvaluesList[ind]]) + "\n")

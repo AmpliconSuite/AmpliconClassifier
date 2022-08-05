@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.10"
+__version__ = "0.4.11"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
@@ -9,8 +9,8 @@ from math import log
 import operator
 import sys
 
-from ac_util import *
-import get_genes
+from ac_io import *
+from radar_plotting import *
 
 tot_min_del = 5000  # minimum size of deletion before non-trivial
 minCycleSize = 10000
@@ -22,13 +22,11 @@ decomposition_strictness = 0.1
 
 # bfb thresholds
 min_score_for_bfb = 0.25
-# min_fb_reads_for_bfb = 10
 fb_dist_cut = 25000
 
-# graph properties
-graph_cns = defaultdict(IntervalTree)
-
 # ------------------------------------------------------------
+
+
 # Methods to compute values used in classification
 def get_size(cycle, segSeqD):
     return sum(segSeqD[abs(x)][2] - segSeqD[abs(x)][1] for x in cycle)
@@ -71,10 +69,7 @@ def isRearranged(cycle, segSeqD):
 
         dist_diff = get_diff(cycle[i], cycle[i + 1], segSeqD)
         max_del_size = max(dist_diff, max_del_size)
-        # tot_del_size += dist_diff
-        # if tot_del_size > tot_min_del:
-        #     print("Delsize")
-        #     return True
+
     if max_del_size > tot_min_del:
         return True
 
@@ -97,7 +92,6 @@ def tot_rearr_edges(graphf, add_chr_tag):
                 lpos, ldir = int(lpd[:-1]), lpd[-1]
                 rpos, rdir = int(rpd[:-1]), rpd[-1]
                 if ldir == rdir:
-                    # if lchrom == rchrom and abs(rpos - lpos) < fb_dist_cut:
                     rearr_e += 1
 
                 elif abs(rpos - lpos) > fb_dist_cut:
@@ -107,7 +101,7 @@ def tot_rearr_edges(graphf, add_chr_tag):
 
 
 def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, exclude_inds, add_chr_tag):
-    #construct intervaltree of valid regions
+    # construct intervaltree of valid regions
     hit_region_it = defaultdict(IntervalTree)
     for i in feature_inds:
         cycle = cycleList[i]
@@ -133,15 +127,12 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
                 cn = float(fields[3])
                 size = float(fields[5]) / 1000.
 
-                # if cn > 1:
                 segs += 1
                 totalGraphWeight += (size * cn)
 
             elif line.startswith("BreakpointEdge"):
                 break
 
-    # cycleWeights = [0] * len(feature_inds)
-    # for ind, cycle in enumerate(cycleList):
     cycleWeights = []
     new_feat_inds = set()
     for ind, cycle in enumerate(cycleList):
@@ -159,10 +150,6 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
                     new_feat_inds.add(len(cycleWeights))
 
                 cycleWeights.append(wca)
-
-
-    # scW = sorted(cycleWeights, reverse=True)
-    # cf = cycleWeights[0]/totalGraphWeight
 
     cf = 0
     fe_ent = 0
@@ -182,7 +169,6 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
         cf+=added_cf
         cf = round(cf, 5)
         rf = (1 - cf)
-        # print(rf, cf, totalGraphWeight)
         if rf > 0:
             fu_ent = -1 * rf * log(rf)
         else:
@@ -234,7 +220,6 @@ def compute_f_from_AA_graph(graphf, add_chr_tag):
             elif line.startswith("sequence"):
                 if not lcD[fields[1].rsplit(":")[0]].overlaps(int(fields[1].rsplit(":")[1][:-1]),
                                                               int(fields[2].rsplit(":")[1][:-1])):
-
                     ccn = float(fields[3])
                     seglen = int(fields[5])
                     if seglen > 1000:
@@ -293,7 +278,6 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, graphf, add_chr_tag):
             # check if front and back are connected via everted edge
             front_to_back_connection = amp_encompassed(cycle, segSeqD, graphf, add_chr_tag)
             if front_to_back_connection:
-                # print("Cycle has front to back link", cycle)
                 illegalBFB = True
 
             else:
@@ -329,9 +313,6 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, graphf, add_chr_tag):
             non_bfb_cycle_inds.append(ind)
 
     hasEC = nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs)
-    # if len(cycleList) >= 5:
-    #     minBFBCyclesRequired = 2
-    # else:
     minBFBCyclesRequired = 2
     if FB_breaks > 1.5 and tot_bfb_supp_cycles >= minBFBCyclesRequired:
         tot = float(FB_breaks + distal_breaks + lin_breaks)
@@ -420,20 +401,13 @@ def classifyBFB(fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN):
     elif nonbfb_sig > 0.5 and bfb_cyc_ratio < 0.6:
         return None
 
-    # if bfb_cyc_ratio < 0.85:
-    #     # if nonbfb_sig > 0.55:
-    #     #     return None
-    #
-    #     if args.use_BFB_linked_cyclic_class:
-    #         return "BFB-linked cyclic"
-
     return "BFB"
 
 
 # ------------------------------------------------------------
 # structure metanalysis
 
-def check_max_cn(ec_cycle_inds, cycleList, segSeqD):
+def check_max_cn(ec_cycle_inds, cycleList, segSeqD, graph_cns):
     for e_ind in ec_cycle_inds:
         for c_id in cycleList[e_ind]:
             chrom, l, r = segSeqD[abs(c_id)]
@@ -447,7 +421,7 @@ def check_max_cn(ec_cycle_inds, cycleList, segSeqD):
     return False
 
 
-def get_amount_sigamp(ec_cycle_inds, cycleList, segSeqD):
+def get_amount_sigamp(ec_cycle_inds, cycleList, segSeqD, graph_cns):
     used_content = defaultdict(set)
     for e_ind in ec_cycle_inds:
         for c_id in cycleList[e_ind]:
@@ -468,7 +442,7 @@ def get_amount_sigamp(ec_cycle_inds, cycleList, segSeqD):
     return total_sigamp
 
 
-def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices=None):
+def clusterECCycles(cycleList, cycleCNs, segSeqD, graph_cns, excludableCycleIndices=None):
     padding = 500000
     indices = [x for x in range(len(cycleList)) if cycleList[x][0] != 0 and x not in excludableCycleIndices]
     clusters = []
@@ -519,16 +493,361 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices=None):
             for ival in v:
                 currIndexSet.add(ival.data)
 
-        if get_amount_sigamp(currIndexSet, cycleList, segSeqD) > 10000:
+        if get_amount_sigamp(currIndexSet, cycleList, segSeqD, graph_cns) > 10000:
             indexClusters.append(currIndexSet)
 
     # remove those where the max CN is below threshold
-    indexClusters = [x for x in indexClusters if check_max_cn(x, cycleList, segSeqD)]
+    indexClusters = [x for x in indexClusters if check_max_cn(x, cycleList, segSeqD, graph_cns)]
 
     return indexClusters
 
 # ------------------------------------------------------------
 
+
+def plotting():
+    textCategories = ["No amp/Invalid", "Linear\namplification", "Trivial\ncycle", "Complex\nnon-cyclic",
+                      "Complex\ncyclic", "BFB\nfoldback"]
+    if args.plotstyle == "grouped":
+        print("plotting")
+        make_classification_radar(textCategories, AMP_dvaluesList, args.o + "_amp_class", sampNames)
+        make_classification_radar(mixing_cats, EDGE_dvaluesList, args.o + "_edge_class", sampNames)
+
+    elif args.plotstyle == "individual":
+        print("plotting")
+        for a, e, s in zip(AMP_dvaluesList, EDGE_dvaluesList, sampNames):
+            print(textCategories, a)
+            make_classification_radar(textCategories, [a[:len(textCategories)], ], args.o + "_" + s + "_amp_class",
+                                      sampNames)
+            make_classification_radar(mixing_cats, [e, ], args.o + "_" + s + "_edge_class", sampNames)
+
+
+def filter_similar_amplicons():
+    # import some stuff from feature similarity.py and run it.
+    print("\nSamples are assumed to be independent as --filter_similar was set.\nFiltering highly similar amplicons"
+          " (p < 0.05) across independent samples...\n")
+    required_classes = {"ecDNA", "BFB", "Complex non-cyclic", "Linear amplification"}
+    cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
+    cg5D = build_CG5_database(cg5Path)
+    add_chr_tag = args.add_chr_tag
+    feat_to_ivald = {}
+    for full_featname, curr_fd in full_featname_to_intervals.items():
+        curr_feat = full_featname.rsplit("_")[-2]
+        if curr_feat in required_classes:
+            ivald = defaultdict(IntervalTree)
+            for c, intlist in curr_fd.items():
+                for a, b in intlist:
+                    ivald[c].addi(a, b)
+
+            feat_to_ivald[full_featname] = (None, ivald)
+
+    pairs = get_pairs(feat_to_ivald)
+    print("Total of " + str(len(pairs)) + " pairs of features to compare.")
+    fsim_data = []
+    for x in pairs:
+        s2a_graph = {}
+        graph0 = parseBPG(full_featname_to_graph[x[0]], feat_to_ivald[x[0]][1], cn_cut, add_chr_tag, lcD, cg5D, 0)
+        graph1 = parseBPG(full_featname_to_graph[x[1]], feat_to_ivald[x[1]][1], cn_cut, add_chr_tag, lcD, cg5D, 0)
+        if not graph0[1] or not graph1[1]:
+            continue
+
+        s2a_graph[x[0]] = graph0
+        s2a_graph[x[1]] = graph1
+
+        compute_similarity(s2a_graph, [x], fsim_data)
+
+    fsim_data.sort(key=lambda x: (x[2], x[1], x[0]), reverse=True)
+
+    feats_to_filter = set()
+    for fields in fsim_data[:10]:
+        if float(fields[4]) > 0.05:
+            break
+
+        splitname = fields[0].rsplit("_")
+        amp, feat, fnum = splitname[-3:]
+        sampname = "_".join(splitname[:-3])
+        feats_to_filter.add((sampname, amp, feat, fnum))
+
+        splitname = fields[1].rsplit("_")
+        amp, feat, fnum = splitname[-3:]
+        sampname = "_".join(splitname[:-3])
+        feats_to_filter.add((sampname, amp, feat, fnum))
+
+    if not feats_to_filter:
+        return
+
+    samp_amp_to_filt_ivald = defaultdict(lambda: defaultdict(IntervalTree))
+    samp_filt_set = set()
+    samp_amp_filt_set = set()
+    samp_amp_to_feat = defaultdict(set)
+    print("The following " + str(len(feats_to_filter)) + " features will be removed:")
+    for x in feats_to_filter:
+        full_featname = "_".join(x)
+        print(full_featname)
+        samp_amp = x[0] + "_" + x[1]
+        samp_filt_set.add(x[0])
+        samp_amp_filt_set.add(samp_amp)
+        samp_amp_to_filt_ivald[samp_amp] = feat_to_ivald[full_featname][1]
+        samp_amp_to_feat[samp_amp].add((x[2], x[3]))
+
+    # now do the filtering
+    '''
+    The following may be affected
+    ftgd_list = []  # store list of feature gene classifications   -- removes from dictionary
+    ftci_list = []  # store list of cycles file info               -- adds invalid tag to relevant cycles
+    bpgi_list = []  # store list of bpg                            -- set feature of edge to "None"
+    fd_list = []  # store list of feature_dicts                    -- delete feature from feature_dict
+    prop_list = [] # store list of basic amplicon properties       -- delete feature from prop_dict
+    featEntropyD = {}                                              -- delete feature from feature entropy dict
+    AMP_classifications = []                                       -- apply amplicon de-classification logic
+    samp_to_ec_count = defaultdict(int)                            -- decrement the count as needed
+    '''
+
+    # map amplicon to the false regions
+
+    for sname, anum, truncd, _, _ in ftgd_list:
+        if sname + "_" + anum in samp_amp_filt_set:
+            for feat_name in sorted(truncd.keys()):
+                fname, fnum = feat_name.rsplit("_")
+                if (sname, anum, fname, fnum) in feats_to_filter:
+                    truncd[feat_name].clear()
+
+    for ind, x in enumerate(ftci_list):
+        # annotated_cycle_outname = os.path.basename(cyclesFile).rsplit("_cycles")[0] + "_annotated_cycles.txt"
+        # outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds, rearrCycleInds = x
+        outname = x[0]
+        cycleList = x[1]
+        segSeqD = x[3]
+        invalidInds = x[6]
+        samp_amp = outname.rsplit("_annotated_cycles.txt")[0]
+        if samp_amp in samp_amp_filt_set:
+            filt_ivald = samp_amp_to_filt_ivald[samp_amp]
+            for cind, cyc in enumerate(cycleList):
+                for x in cyc:
+                    if filt_ivald[segSeqD[abs(x)][0]][segSeqD[abs(x)][1]:segSeqD[abs(x)][2]]:
+                        invalidInds.append(cind)
+                        break
+
+            ftci_list[ind][6] = invalidInds
+
+    for ind, (sname, bpg_linelist, feature_dict, prop_dict) in enumerate(zip(sampNames, bpgi_list, fd_list, prop_list)):
+        ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
+        samp_amp = sname + "_" + ampN
+        if samp_amp in samp_amp_filt_set:
+            filt_ivald = samp_amp_to_filt_ivald[samp_amp]
+            for bpgi_ind, bpg_line in enumerate(bpg_linelist):
+                if filt_ivald[bpg_line[0]][bpg_line[1]] or filt_ivald[bpg_line[2]][bpg_line[3]]:
+                    bpg_line[6] = "None"
+
+            keys_to_del = set()
+            for feat_name, curr_fd in feature_dict.items():
+                fname, fnum = feat_name.rsplit("_")
+                if (sname, ampN, fname, fnum) in feats_to_filter:
+                    keys_to_del.add(feat_name)
+
+            for k in keys_to_del:
+                del feature_dict[k]
+                del prop_dict[k]
+
+    for sname, ampN, fname, fnum in feats_to_filter:
+        del featEntropyD[(sname, ampN, fname + "_" + fnum)]
+
+    for ind, sname in enumerate(sampNames):
+        ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
+        samp_amp = sname + "_" + ampN
+        if samp_amp in samp_amp_filt_set:
+            ampClass, ecStat, bfbStat, ecAmpliconCount = AMP_classifications[ind]
+            feats_to_remove = [x[0] for x in samp_amp_to_feat[samp_amp]]
+            was_ec_or_bfb = False
+            if "BFB" in feats_to_remove:
+                bfbStat = False
+                was_ec_or_bfb = True
+
+            for x in feats_to_remove:
+                if "ecDNA" in x:
+                    ecAmpliconCount-=1
+                    samp_to_ec_count[sname]-=1
+
+            if ecAmpliconCount == 0 and ecStat:
+                ecStat = False
+                was_ec_or_bfb = True
+
+            if not ecStat and not bfbStat:
+                if not was_ec_or_bfb:
+                    ampClass = "No amp/Invalid"
+
+                else:
+                    # TODO: Update this based on reclassification or "layered" classification.
+                    ampClass = "No amp/Invalid"
+
+            AMP_classifications[ind] = (ampClass, ecStat, bfbStat, ecAmpliconCount)
+
+
+def run_classification(segSeqD, cycleList, cycleCNs):
+    cycleTypes = []
+    cycleWeights = []
+    invalidInds = []
+    rearrCycleInds = set()
+    graph_cns = get_graph_cns(graphFile, args.add_chr_tag)
+    fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
+    rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
+    totalCompCyclicCont = 0
+    totCyclicCont = 0
+    for ind, cycle in enumerate(cycleList):
+        hasNonCircLen1 = True if len(cycle) == 3 and cycle[0] == 0 else False
+        oneCycle = (len(cycleList) == 1)
+        isSingleton = hasNonCircLen1 or oneCycle
+        if cycleIsNoAmpInvalid(cycle, cycleCNs[ind], segSeqD, isSingleton, maxCN) and not args.force:
+            invalidInds.append(ind)
+            cycleTypes.append("No amp/Invalid")
+
+        else:
+            circCyc = isCircular(cycle)
+            compCyc = isRearranged(cycle, segSeqD)
+            if compCyc:
+                rearrCycleInds.add(ind)
+                if circCyc:
+                    totalCompCyclicCont += get_size(cycle, segSeqD)
+
+            if circCyc:
+                totCyclicCont += get_size(cycle, segSeqD)
+
+            cycleTypes.append(ampDefs[(circCyc, compCyc)])
+
+        currWt = weightedCycleAmount(cycle, cycleCNs[ind], segSeqD)
+        cycleWeights.append(currWt)
+
+    totalWeight = max(sum(cycleWeights), 1)
+    AMP_dvaluesDict = {x: 0.0 for x in categories}
+    for i, wt in zip(cycleTypes, cycleWeights):
+        AMP_dvaluesDict[i] += (wt / totalWeight)
+
+    # anything stored in AMP_dvaluesDict prior to running classify will get used in classification
+    # make sure you're not putting in other properties before here.
+    ampClass = classifyAmpliconProfile(AMP_dvaluesDict, rearr_e, totalCompCyclicCont, totCyclicCont, tot_over_min_cn)
+    # decomposition/amplicon complexity
+    totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD, range(len(cycleList)),
+                                                        set(), args.add_chr_tag)
+    AMP_dvaluesDict["Amp_entropy"] = totalEnt
+    AMP_dvaluesDict["Amp_decomp_entropy"] = decompEnt
+    AMP_dvaluesDict["Amp_nseg_entropy"] = nEnt
+
+    # now layer on the bfb classification
+    # first compute some properties
+    fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
+
+    fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC, non_bfb_cycle_inds, bfb_cycle_inds = cycles_file_bfb_props(cycleList, segSeqD,
+        cycleCNs, graphFile, args.add_chr_tag)
+
+    # "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp"
+    AMP_dvaluesDict["foldback_read_prop"] = fb_prop
+    AMP_dvaluesDict["BFB_bwp"] = fb_bwp
+    AMP_dvaluesDict["Distal_bwp"] = nfb_bwp
+    AMP_dvaluesDict["BFB_cwp"] = bfb_cwp
+    bfbClass = classifyBFB(fb_prop, fb_bwp, nfb_bwp, bfb_cwp, maxCN)
+
+    ecStat = False
+    bfbStat = False
+    if ampClass == "Cyclic" and not bfbClass:
+        ecStat = True
+        bfb_cycle_inds = []
+
+    elif bfbClass and ampClass != "No amp/Invalid":
+        bfbStat = True
+        if bfbHasEC:
+            ecStat = True
+
+    else:
+        bfb_cycle_inds = []
+
+    # determine number of ecDNA present
+    ecIndexClusters = []
+    if ecStat:
+        excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
+        ecIndexClusters = clusterECCycles(cycleList, cycleCNs, segSeqD, graph_cns, excludableCycleIndices)
+        ecAmpliconCount = max(len(ecIndexClusters), 1)
+
+    else:
+        ecAmpliconCount = 0
+
+    # if no ecDNA-like intervals were identified, update and re-call.
+    if ecStat and not ecIndexClusters:
+        if not bfbStat:
+            remaining_classes = ["No amp/Invalid", "Linear amplification", "Complex non-cyclic"]
+            remaining_scores = [AMP_dvaluesDict[x] for x in remaining_classes]
+            ampClass = remaining_classes[remaining_scores.index(max(remaining_scores))]
+
+        ecStat = False
+
+    samp_to_ec_count[sName] += ecAmpliconCount
+    # write entropy for each feature
+    ecEntropies = []
+    if ecAmpliconCount == 1 and not ecIndexClusters:
+        ecEntropies.append((totalEnt, decompEnt, nEnt))
+
+    for ecCycleList in ecIndexClusters:
+        c_ex_I = bfb_cycle_inds if bfbStat else set()
+        totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD, ecCycleList,
+                                                            c_ex_I, args.add_chr_tag)
+        ecEntropies.append((totalEnt, decompEnt, nEnt))
+
+    for ind, etup in enumerate(ecEntropies):
+        featEntropyD[(sName, ampN, "ecDNA_" + str(ind + 1))] = etup
+
+    if bfbStat:
+        bfb_totalEnt, bfb_decompEnt, bfb_nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
+                                                                        bfb_cycle_inds, set(), args.add_chr_tag)
+        featEntropyD[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
+
+    bpg_linelist, gseg_cn_d, other_class_c_inds, feature_dict, prop_dict = amplicon_annotation(cycleList, segSeqD,
+        bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass, graphFile, args.add_chr_tag, lcD)
+    bpgi_list.append(bpg_linelist)
+    fd_list.append(feature_dict)
+    prop_list.append(prop_dict)
+    trim_sname = sName.rsplit("/")[-1].rsplit("_amplicon")[0]
+    for feat_name, curr_fd in feature_dict.items():
+        if curr_fd:
+            full_fname = trim_sname + "_" + ampN + "_" + feat_name
+            full_featname_to_graph[full_fname] = graphFile
+            full_featname_to_intervals[full_fname] = curr_fd
+
+    if not bfbStat and not ecStat and not ampClass == "No amp/Invalid":
+        featEntropyD[(sName, ampN, ampClass + "_1")] = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
+            other_class_c_inds, set(), args.add_chr_tag)
+
+    feat_gene_truncs, feat_gene_cns, feat_to_ongene = get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d)
+    ftgd_list.append([sName, ampN, feat_gene_truncs, feat_gene_cns, feat_to_ongene])
+
+    # store this additional information
+    AMP_classifications.append((ampClass, ecStat, bfbStat, ecAmpliconCount))
+    dvalues = [AMP_dvaluesDict[x] for x in categories]
+    AMP_dvaluesList.append(dvalues)
+
+    # edge classification
+    edgeTypeCountD = defaultdict(float)
+    if graphFile:
+        posCycleLookup = buildPosCycleLookup(cycleList, segSeqD)
+        bps = bpg_edges(graphFile, args.add_chr_tag, lcD)
+        for bp in bps:
+            lCycles, rCycles = bpgEdgeToCycles(bp, posCycleLookup)
+            # indices of left and right cycles on the discordant edges, and the index-ordered list of types
+            resD = classifyConnections(lCycles, rCycles, cycleTypes)
+            for k, v in resD.items():
+                edgeTypeCountD[mixLookups[k]] += v
+
+        # norm the values
+        eTCDSum = float(sum(edgeTypeCountD.values()))
+        for k, v in edgeTypeCountD.items():
+            edgeTypeCountD[k] = v / eTCDSum
+
+    edvalues = [edgeTypeCountD[x] for x in mixing_cats]
+    EDGE_dvaluesList.append(edvalues)
+
+    annotated_cycle_outname = os.path.basename(cyclesFile).rsplit("_cycles")[0] + "_annotated_cycles.txt"
+    ftci_list.append([annotated_cycle_outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters,
+                      invalidInds, rearrCycleInds])
+
+
+# ------------------------------------------------------------
 '''
 Amplicon Classes:
 #if not invalid
@@ -602,19 +921,22 @@ if __name__ == "__main__":
                         action='store_true')
     parser.add_argument("--verbose_classification", help="Generate verbose output with raw classification scores.",
                         action='store_true')
-    parser.add_argument("--annotate_cycles_file", help="Create an annotated cycles file, indicating the classification "
-                        "of the paths and cycles present.", action='store_true')
+    # parser.add_argument("--annotate_cycles_file", help="Create an annotated cycles file, indicating the classification "
+    #                     "of the paths and cycles present.", action='store_true')
     parser.add_argument("--no_LC_filter", help="Do not filter low-complexity cycles. Not recommended to set this flag.",
                         action='store_true', default=False)
     parser.add_argument("--exclude_bed", help="List of regions in which to ignore classification.")
     parser.add_argument("--decomposition_strictness", help="Value between 0 and 1 reflecting how strictly to filter "
-                                                           "low CN decompositions (default = 0.1). Higher values "
-                                                           "filter more of the low-weight decompositions.", type=float,
-                        default=0.1)
+                        "low CN decompositions (default = 0.1). Higher values filter more of the low-weight "
+                        "decompositions.", type=float, default=0.1)
+    parser.add_argument("--filter_similar", help="Only use if all samples are of independent origins (not replicates "
+                        "and not multi-region biopsies). Permits filtering of false-positive amps arising in multiple "
+                        "independent samples based on similarity calculation", action='store_true')
     parser.add_argument("-v", "--version", action='version', version=__version__)
 
     args = parser.parse_args()
 
+    # PRE-RUN CHECKS
     if not (args.cycles and args.graph) and not args.input:
         print("Need to specify (--cycles & --graph) or --input\n")
         sys.exit(1)
@@ -652,18 +974,6 @@ if __name__ == "__main__":
         for k, t in addtnl_lcD.items():
             lcD[k].update(t)
 
-    # gene_lookup = {}
-    ftgd_list = []  # store list of feature gene classifications
-    # gene_file_location_lookup = {"hg19": "human_hg19_september_2011/Genes_July_2010_hg19.gff",
-    #                              "GRCh38": "genes_hg38.gff",
-    #                              "GRCh37": "human_hg19_september_2011/Genes_July_2010_hg19.gff"}
-    #
-    # refGeneFileLoc = AA_DATA_REPO + gene_file_location_lookup[args.ref]
-
-    # read the gene list
-    refGeneFileLoc = AA_DATA_REPO + fDict["gene_filename"]
-    gene_lookup = get_genes.parse_genes(refGeneFileLoc)
-
     if not args.input:
         tempName = args.cycles.rsplit("/")[-1].rsplit(".")[0]
         flist = [[tempName, args.cycles, args.graph]]
@@ -675,14 +985,22 @@ if __name__ == "__main__":
         if not args.o:
             args.o = os.path.basename(args.input).rsplit(".")[0]
 
-    f2gfname = args.o + "_features_to_graph.txt"
-    outdir_loc = os.path.abspath(os.path.dirname(f2gfname))
+    outdir_loc = os.path.abspath(os.path.dirname(args.o + "_temp"))
     if not os.path.exists(outdir_loc) and outdir_loc != "":
         os.makedirs(outdir_loc)
-        
-    f2gf = open(args.o + "_features_to_graph.txt", 'w')
+
     minCycleSize = args.min_size
 
+    # read the gene list
+    refGeneFileLoc = AA_DATA_REPO + fDict["gene_filename"]
+    gene_lookup = parse_genes(refGeneFileLoc)
+
+    # GLOBAL STORAGE VARIABLES
+    ftgd_list = []  # store list of feature gene classifications
+    ftci_list = []  # store list of cycles file info
+    bpgi_list = []  # store list of bpg
+    fd_list = []  # store list of feature_dicts
+    prop_list = [] # store list of basic amplicon properties
     AMP_dvaluesList = []
     EDGE_dvaluesList = []
     AMP_classifications = []
@@ -691,6 +1009,10 @@ if __name__ == "__main__":
     featEntropyD = {}
     samp_to_ec_count = defaultdict(int)
     ampN_to_graph = {}
+    full_featname_to_graph = {}
+    full_featname_to_intervals = {}
+
+    # ITERATE OVER FILES CONDUCT THE CLASSIFICATION
     for fpair in flist:
         if len(fpair) > 2:
             sName, cyclesFile, graphFile = fpair[:3]
@@ -707,190 +1029,22 @@ if __name__ == "__main__":
             sys.stderr.write("File list not properly formatted\n")
             sys.exit(1)
 
-        cycleTypes = []
-        cycleWeights = []
-        invalidInds = []
-        rearrCycleInds = set()
-        graph_cns = get_graph_cns(graphFile, args.add_chr_tag)
-        fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
-        rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
-        totalCompCyclicCont = 0
-        totCyclicCont = 0
-        for ind, cycle in enumerate(cycleList):
-            hasNonCircLen1 = True if len(cycle) == 3 and cycle[0] == 0 else False
-            oneCycle = (len(cycleList) == 1)
-            isSingleton = hasNonCircLen1 or oneCycle
-            if cycleIsNoAmpInvalid(cycle, cycleCNs[ind], segSeqD, isSingleton, maxCN) and not args.force:
-                invalidInds.append(ind)
-                cycleTypes.append("No amp/Invalid")
+        run_classification(segSeqD, cycleList, cycleCNs)
 
-            else:
-                circCyc = isCircular(cycle)
-                compCyc = isRearranged(cycle, segSeqD)
-                if compCyc:
-                    rearrCycleInds.add(ind)
-                    if circCyc:
-                        totalCompCyclicCont += get_size(cycle, segSeqD)
+    print("Classification stage completed")
 
-                if circCyc:
-                    totCyclicCont += get_size(cycle, segSeqD)
+    if args.filter_similar:
+        from feature_similarity import *
+        filter_similar_amplicons()
 
-                cycleTypes.append(ampDefs[(circCyc, compCyc)])
 
-            currWt = weightedCycleAmount(cycle, cycleCNs[ind], segSeqD)
-            cycleWeights.append(currWt)
+    # make any requested visualizations
+    plotting()
 
-        totalWeight = max(sum(cycleWeights), 1)
-        AMP_dvaluesDict = {x: 0.0 for x in categories}
-        for i, wt in zip(cycleTypes, cycleWeights):
-            AMP_dvaluesDict[i] += (wt / totalWeight)
-
-        # anything stored in AMP_dvaluesDict prior to running classify will get used in classification
-        # make sure you're not putting in other properties before here.
-        ampClass = classifyAmpliconProfile(AMP_dvaluesDict, rearr_e, totalCompCyclicCont, totCyclicCont, tot_over_min_cn)
-
-        # decomposition/amplicon complexity
-        totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
-                                                            range(len(cycleList)), set(), args.add_chr_tag)
-        AMP_dvaluesDict["Amp_entropy"] = totalEnt
-        AMP_dvaluesDict["Amp_decomp_entropy"] = decompEnt
-        AMP_dvaluesDict["Amp_nseg_entropy"] = nEnt
-
-        # now layer on the bfb classification
-        # first compute some properties
-        fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
-
-        fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC, non_bfb_cycle_inds, bfb_cycle_inds = cycles_file_bfb_props(cycleList,
-                                                                        segSeqD, cycleCNs, graphFile, args.add_chr_tag)
-        # "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp"
-        AMP_dvaluesDict["foldback_read_prop"] = fb_prop
-        AMP_dvaluesDict["BFB_bwp"] = fb_bwp
-        AMP_dvaluesDict["Distal_bwp"] = nfb_bwp
-        AMP_dvaluesDict["BFB_cwp"] = bfb_cwp
-
-        bfbClass = classifyBFB(fb_prop, fb_bwp, nfb_bwp, bfb_cwp, maxCN)
-
-        ecStat = False
-        bfbStat = False
-        if ampClass == "Cyclic" and not bfbClass:
-            ecStat = True
-            bfb_cycle_inds = []
-
-        elif bfbClass and ampClass != "No amp/Invalid":
-            bfbStat = True
-            if bfbHasEC:
-                ecStat = True
-
-        else:
-            bfb_cycle_inds = []
-
-        # determine number of ecDNA present
-        ecIndexClusters = []
-        ecAmpliconCount = 0
-        if ecStat:
-            excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
-            ecIndexClusters = clusterECCycles(cycleList, cycleCNs, segSeqD, excludableCycleIndices)
-            ecAmpliconCount = max(len(ecIndexClusters), 1)
-
-        else:
-            ecAmpliconCount = 0
-
-        # if no ecDNA-like intervals were identified, update and re-call.
-        if ecStat and not ecIndexClusters:
-            if not bfbStat:
-                remaining_classes = ["No amp/Invalid", "Linear amplification", "Complex non-cyclic"]
-                remaining_scores = [AMP_dvaluesDict[x] for x in remaining_classes]
-                ampClass = remaining_classes[remaining_scores.index(max(remaining_scores))]
-
-            ecStat = False
-
-        samp_to_ec_count[sName] += ecAmpliconCount
-        # write entropy for each feature
-        ecEntropies = []
-        if ecAmpliconCount == 1 and not ecIndexClusters:
-            ecEntropies.append((totalEnt, decompEnt, nEnt))
-
-        for ecCycleList in ecIndexClusters:
-            c_ex_I = bfb_cycle_inds if bfbStat else set()
-            totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
-                                                                ecCycleList, c_ex_I, args.add_chr_tag)
-            ecEntropies.append((totalEnt, decompEnt, nEnt))
-
-        for ind, etup in enumerate(ecEntropies):
-            featEntropyD[(sName, ampN, "ecDNA_" + str(ind+1))] = etup
-
-        if bfbStat:
-            bfb_totalEnt, bfb_decompEnt, bfb_nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
-                                                                            bfb_cycle_inds, set(), args.add_chr_tag)
-            featEntropyD[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
-
-        # TODO: Get the non-ec or BFB cycles, and compute the complexity score.
-        # elif not bfbStat and not ecStat and not ampClass == "No amp/Invalid":
-        #     featEntropyD[(sName, ampN, ampClass + "_1")] = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
-        #                                                                     bfb_cycle_inds, set(), args.add_chr_tag)
-
-        # get genes
-        feat_gene_truncs, feat_gene_cns, feat_to_ongene = get_genes.amplicon_annotation(
-            sName, ampN, gene_lookup, cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat,
-            ampClass, graphFile, args.add_chr_tag, args.o, ampN_to_graph, f2gf, lcD)
-
-        ftgd_list.append([sName, ampN, feat_gene_truncs, feat_gene_cns, feat_to_ongene])
-
-        # store this additional information
-        AMP_classifications.append((ampClass, ecStat, bfbStat, ecAmpliconCount))
-        dvalues = [AMP_dvaluesDict[x] for x in categories]
-        AMP_dvaluesList.append(dvalues)
-
-        # edge classification
-        edgeTypeCountD = defaultdict(float)
-        if graphFile:
-            posCycleLookup = buildPosCycleLookup(cycleList, segSeqD)
-            bps = bpg_edges(graphFile, args.add_chr_tag, lcD)
-            for bp in bps:
-                lCycles, rCycles = bpgEdgeToCycles(bp, posCycleLookup)
-                # indices of left and right cycles on the discordant edges, and the index-ordered list of types
-                resD = classifyConnections(lCycles, rCycles, cycleTypes)
-                for k, v in resD.items():
-                    edgeTypeCountD[mixLookups[k]] += v
-
-            # norm the values
-            eTCDSum = float(sum(edgeTypeCountD.values()))
-            for k, v in edgeTypeCountD.items():
-                edgeTypeCountD[k] = v / eTCDSum
-
-        dvalues = [edgeTypeCountD[x] for x in mixing_cats]
-        EDGE_dvaluesList.append(dvalues)
-
-        #write the annotated cycles file
-        if args.annotate_cycles_file:
-            outname = os.path.basename(cyclesFile).rsplit("_cycles")[0] + "_annotated_cycles.txt"
-            write_annotated_corrected_cycles_file(args.o, outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds,
-                                                  ecIndexClusters, invalidInds, rearrCycleInds)
-
-    # PLOTTING
-    textCategories = ["No amp/Invalid", "Linear\namplification", "Trivial\ncycle", "Complex\nnon-cyclic",
-                      "Complex\ncyclic", "BFB\nfoldback"]
-    if args.plotstyle == "grouped":
-        from radar_plotting import *
-
-        print("plotting")
-        make_classification_radar(textCategories, AMP_dvaluesList, args.o + "_amp_class", sampNames)
-        make_classification_radar(mixing_cats, EDGE_dvaluesList, args.o + "_edge_class", sampNames)
-
-    elif args.plotstyle == "individual":
-        from radar_plotting import *
-
-        print("plotting")
-        for a, e, s in zip(AMP_dvaluesList, EDGE_dvaluesList, sampNames):
-            print(textCategories, a)
-            make_classification_radar(textCategories, [a[:len(textCategories)], ], args.o + "_" + s + "_amp_class",
-                                      sampNames)
-            make_classification_radar(mixing_cats, [e, ], args.o + "_" + s + "_edge_class", sampNames)
-
+    print("Writing outputs...")
     #OUTPUT FILE WRITING
-    print("writing output files")
-    write_outputs(args, ftgd_list, featEntropyD, categories, sampNames, cyclesFiles, AMP_classifications,
-                  AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count)
+    write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
+                  AMP_classifications, AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count, fd_list,
+                  ampN_to_graph, prop_list)
 
-    f2gf.close()
     print("done")
