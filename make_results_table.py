@@ -87,7 +87,7 @@ def write_json_dict(output_table_lines, json_ofname):
         dlist.append(td)
 
     with open(json_ofname, 'w') as outfile:
-        json.dump(dlist, outfile)
+        json.dump(dlist, outfile, sort_keys=True)
 
     pass
 

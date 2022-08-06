@@ -4,6 +4,7 @@ __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 from amplicon_similarity import *
 cn_cut = 4.5
 
+
 # union of intervaltrees for each chromosome
 def join_ivalds(ivald1, ivald2):
     joined_ivald = defaultdict(IntervalTree)
@@ -124,6 +125,9 @@ if __name__ == "__main__":
             graph0 = parseBPG(feat_to_graph[x[0]], feat_to_bed[x[0]][1], cn_cut, add_chr_tag, lcD, cg5D, args.min_de)
             graph1 = parseBPG(feat_to_graph[x[1]], feat_to_bed[x[1]][1], cn_cut, add_chr_tag, lcD, cg5D, args.min_de)
             if (not graph0[0] and args.min_de > 0) or not graph0[1] or (not graph1[0] and args.min_de > 0) or not graph1[1]:
+                print("skipping", x)
+                print(graph0)
+                print(graph1)
                 continue
 
             s2a_graph[x[0]] = graph0

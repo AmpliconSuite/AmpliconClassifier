@@ -73,7 +73,7 @@ def write_bpg_summary(prefix, sname, ampN, bpg_linelist):
 
 
 # print all the intervals to bed files
-def write_interval_beds(prefix, sname, ampN, feature_dict, ampN_to_graph, f2gf):
+def write_interval_beds(prefix, sname, ampN, feature_dict, samp_amp_to_graph, f2gf):
     # the matching and filename stuff is already done in amplicon_classifier. consider refactoring to make use of that
     outdir = prefix + "_classification_bed_files/"
     if not os.path.exists(outdir):
@@ -86,7 +86,7 @@ def write_interval_beds(prefix, sname, ampN, feature_dict, ampN_to_graph, f2gf):
 
         full_fname = outdir + trim_sname + "_" + ampN + "_" + feat_name + "_intervals.bed"
         if not feat_name.startswith("unknown"):
-            f2gf.write(full_fname + "\t" + ampN_to_graph[ampN] + "\n")
+            f2gf.write(full_fname + "\t" + samp_amp_to_graph[sname + "_" + ampN] + "\n")
         with open(full_fname, 'w') as outfile:
             for chrom, ilist in curr_fd.items():
                 if not chrom:
@@ -143,7 +143,7 @@ def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, 
 
 def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count, fd_list,
-                  ampN_to_graph, prop_list):
+                  samp_amp_to_graph, prop_list):
     # Genes
     gene_extraction_outname = args.o + "_gene_list.tsv"
     write_gene_results(gene_extraction_outname, ftgd_list)
@@ -191,7 +191,7 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
     for ind, (sname, bpg_linelist, feature_dict, prop_dict) in enumerate(zip(sampNames, bpgi_list, fd_list, prop_list)):
         ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
         write_bpg_summary(args.o, sname, ampN, bpg_linelist)
-        write_interval_beds(args.o, sname, ampN, feature_dict, ampN_to_graph, f2gf)
+        write_interval_beds(args.o, sname, ampN, feature_dict, samp_amp_to_graph, f2gf)
         write_basic_properties(feat_basic_propf, sname, ampN, prop_dict)
 
     f2gf.close()

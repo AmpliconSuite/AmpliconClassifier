@@ -257,7 +257,6 @@ def parseBPG(bpgf, subset_ivald, cn_cut, add_chr_tag, lcD, cg5D, min_de=1):
                 if cn > cn_cut:
                     segTree[lchrom].addi(lpos, rpos, cn)
 
-
     if not bps and min_de > 0:
         return bps, defaultdict(IntervalTree)
 

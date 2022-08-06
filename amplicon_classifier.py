@@ -1008,19 +1008,19 @@ if __name__ == "__main__":
     cyclesFiles = []
     featEntropyD = {}
     samp_to_ec_count = defaultdict(int)
-    ampN_to_graph = {}
+    samp_amp_to_graph = {}
     full_featname_to_graph = {}
     full_featname_to_intervals = {}
 
     # ITERATE OVER FILES CONDUCT THE CLASSIFICATION
     for fpair in flist:
         if len(fpair) > 2:
-            sName, cyclesFile, graphFile = fpair[:3]
-            sName = sName.rsplit("_amplicon")[0]
+            orig_sName, cyclesFile, graphFile = fpair[:3]
+            sName = orig_sName.rsplit("_amplicon")[0]
             sampNames.append(sName)
             cyclesFiles.append(cyclesFile)
             ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
-            ampN_to_graph[ampN] = graphFile
+            samp_amp_to_graph[sName + "_" + ampN] = graphFile
             print(sName, ampN)
             segSeqD, cycleList, cycleCNs = parseCycle(cyclesFile, graphFile, args.add_chr_tag, lcD, patch_links)
 
@@ -1032,19 +1032,17 @@ if __name__ == "__main__":
         run_classification(segSeqD, cycleList, cycleCNs)
 
     print("Classification stage completed")
-
     if args.filter_similar:
         from feature_similarity import *
         filter_similar_amplicons()
-
 
     # make any requested visualizations
     plotting()
 
     print("Writing outputs...")
-    #OUTPUT FILE WRITING
+    # OUTPUT FILE WRITING
     write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count, fd_list,
-                  ampN_to_graph, prop_list)
+                  samp_amp_to_graph, prop_list)
 
     print("done")
