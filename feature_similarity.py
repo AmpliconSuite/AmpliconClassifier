@@ -54,6 +54,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     if args.ref == "hg38": args.ref = "GRCh38"
+    elif args.ref == "GRCm38": args.ref = "mm10"
     lcD, cg5D = set_lcd(AA_DATA_REPO, args.no_LC_filter)
 
     if "any" in args.required_classifications:
@@ -126,8 +127,6 @@ if __name__ == "__main__":
             graph1 = parseBPG(feat_to_graph[x[1]], feat_to_bed[x[1]][1], cn_cut, add_chr_tag, lcD, cg5D, args.min_de)
             if (not graph0[0] and args.min_de > 0) or not graph0[1] or (not graph1[0] and args.min_de > 0) or not graph1[1]:
                 print("skipping", x)
-                print(graph0)
-                print(graph1)
                 continue
 
             s2a_graph[x[0]] = graph0

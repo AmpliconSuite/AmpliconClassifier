@@ -944,6 +944,7 @@ if __name__ == "__main__":
     print("AmpliconClassifier " + __version__)
     print(" ".join(sys.argv))
     if args.ref == "hg38": args.ref = "GRCh38"
+    elif args.ref == "GRCm38": args.ref = "mm10"
     patch_links = read_patch_regions(args.ref)
     if 0 <= args.decomposition_strictness <= 1:
         decomposition_strictness= args.decomposition_strictness
@@ -978,12 +979,18 @@ if __name__ == "__main__":
         tempName = args.cycles.rsplit("/")[-1].rsplit(".")[0]
         flist = [[tempName, args.cycles, args.graph]]
         if not args.o:
-            args.o = os.path.basename(args.cycles).rsplit("_cycles.txt")[0]
+            args.o = os.getcwd() + "/" + os.path.basename(args.cycles).rsplit("_cycles.txt")[0]
+
+        elif not args.o.startswith("/"):
+            args.o = os.getcwd() + "/" + args.o
 
     else:
         flist = readFlist(args.input)
         if not args.o:
-            args.o = os.path.basename(args.input).rsplit(".")[0]
+            args.o = os.getcwd() + "/" + os.path.basename(args.input).rsplit(".")[0]
+
+        elif not args.o.startswith("/"):
+            args.o = os.getcwd() + "/" + args.o
 
     outdir_loc = os.path.abspath(os.path.dirname(args.o + "_temp"))
     if not os.path.exists(outdir_loc) and outdir_loc != "":

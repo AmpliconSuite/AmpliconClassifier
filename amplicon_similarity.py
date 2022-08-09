@@ -435,6 +435,7 @@ if __name__ == "__main__":
         args.o = os.path.basename(args.input).rsplit(".")[0]
 
     if args.ref == "hg38": args.ref = "GRCh38"
+    elif args.ref == "GRCm38": args.ref = "mm10"
 
     # check if aa data repo set, construct LC datatabase
     try:
