@@ -4,7 +4,7 @@
 #arg 2: output name
 
 find $1 -name "*_cycles.txt" | grep -v "annotated_cycles" | sort > scf.txt
-find $1 -name "*_graph.txt" | sort > sgf.txt
+find $1 -name "*_graph.txt" | grep -v "features_to_graph" | sort > sgf.txt
 if [ "$(wc -l < scf.txt)" -ne "$(wc -l < sgf.txt)" ]; then
   echo "ERROR: Unequal numbers of cycles and graph files found!"
   exit
