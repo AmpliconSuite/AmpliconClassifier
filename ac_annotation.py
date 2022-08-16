@@ -3,7 +3,8 @@ from ac_util import *
 
 # write a summary of the breakpoints
 def summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD):
-    linelist = ["chrom1\tpos1\tchrom2\tpos2\tsv_type\tread_support\tfeatures\torientation\tpos1_flanking_coordinate\tpos2_flanking_coordinate",]
+    linelist = [["chrom1", "pos1", "chrom2", "pos2", "sv_type", "read_support", "features", "orientation",
+                 "pos1_flanking_coordinate", "pos2_flanking_coordinate"]]
     bps = bpg_edges(graphf, add_chr_tag, lcD)
     for bp in bps:
         c1, c2 = bp.lchrom, bp.rchrom
