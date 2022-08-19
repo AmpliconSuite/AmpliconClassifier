@@ -648,8 +648,9 @@ def filter_similar_amplicons():
                 del feature_dict[k]
                 del prop_dict[k]
 
-    for sname, ampN, fname, fnum in feats_to_filter:
-        del featEntropyD[(sname, ampN, fname + "_" + fnum)]
+    if featEntropyD:
+        for sname, ampN, fname, fnum in feats_to_filter:
+            del featEntropyD[(sname, ampN, fname + "_" + fnum)]
 
     for ind, sname in enumerate(sampNames):
         ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
