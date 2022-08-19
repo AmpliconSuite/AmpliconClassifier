@@ -308,7 +308,7 @@ def readFlist(filelist):
         for line in infile:
             line = line.rstrip()
             if line:
-                fields = line.rsplit()
+                fields = line.rsplit("\t")
                 if len(fields) < 2:
                     print("Bad formatting in: ", line)
                 else:
