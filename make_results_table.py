@@ -47,11 +47,7 @@ def read_basic_stats(basic_stats_file):
     return basic_stats_dict
 
 
-def copy_AA_files(ll):
-    ldir = "files/"
-    if not os.path.exists(ldir):
-        os.makedirs(ldir)
-
+def copy_AA_files(ll, ldir):
     for i in range(-4, 0):
         s = ll[i]
         if s != "Not found":
@@ -110,6 +106,10 @@ if __name__ == "__main__":
     output_table_lines = [output_head, ]
     with open(args.input) as input_file, open(args.classification_file) as classification_file:
         classBase = args.classification_file.rsplit("_amplicon_classification_profiles.tsv")[0]
+        ldir = os.path.dirname(classBase) + "/files/"
+        if not os.path.exists(ldir):
+            os.makedirs(ldir)
+
         classBedDir = classBase + "_classification_bed_files/"
         gene_file = classBase + "_gene_list.tsv"
         entropy_file = classBase + "_feature_entropy.tsv"
@@ -128,6 +128,8 @@ if __name__ == "__main__":
         for input_line, classification_line in zip(input_file, classification_file):
             input_fields = input_line.rstrip().rsplit()
             sample_name = input_fields[0].rsplit("_amplicon")[0]
+            shutil.copy(input_fields[1], ldir)
+            shutil.copy(input_fields[2], ldir)
             amplicon_prefix = input_fields[1].rsplit("_cycles.txt")[0]
             if not ":" in amplicon_prefix: amplicon_prefix.replace("//","/")
             AA_amplicon_number = amplicon_prefix.rsplit("_amplicon")[-1]
@@ -204,7 +206,7 @@ if __name__ == "__main__":
             outfile.write(oline)
 
     for ll in output_table_lines[1:]:
-        copy_AA_files(ll)
+        copy_AA_files(ll, ldir)
 
     write_json_dict(output_table_lines, json_ofname)
     write_html_table(output_table_lines, html_ofname)
