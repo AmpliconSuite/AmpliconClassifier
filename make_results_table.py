@@ -95,12 +95,13 @@ if __name__ == "__main__":
                         "sample_name cycles.txt graph.txt.", required=True)
     parser.add_argument("--classification_file", help="Path to amplicon_classification_profiles.tsv file", required=True)
     parser.add_argument("--metadata_dict", help="Path to [sample]_run_metadata.json file", default="")
+    parser.add_argument("--cnv_bed", help="Path to the CNV bed file used for this run.", default="")
     args = parser.parse_args()
 
     output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Oncogenes",
                    "Complexity score",
                    "Captured interval length", "Feature median copy number", "Feature maximum copy number",
-                   "Reference version", "Feature BED file", "AA PNG file", "AA PDF file",
+                   "Reference version", "Feature BED file", "CNV BED file", "AA PNG file", "AA PDF file",
                    "Run metadata JSON"]
 
     output_table_lines = [output_head, ]
@@ -121,8 +122,15 @@ if __name__ == "__main__":
             metadata_dict = json.load(open(args.metadata_dict, 'r'))
 
         else:
-            args.metadata_dict = "Not found"
+            args.metadata_dict = "Not provided"
             metadata_dict = defaultdict(lambda: "NA")
+
+        if args.cnv_bed:
+            shutil.copy(args.cnv_bed, ldir)
+            args.cnv_bed = ldir + os.path.basename(args.cnv_bed)
+
+        else:
+            args.cnv_bed = "Not provided"
 
         class_head = next(classification_file).rstrip().rsplit("\t")
         for input_line, classification_line in zip(input_file, classification_file):
@@ -189,7 +197,7 @@ if __name__ == "__main__":
                     basic_stats = basic_stats_dict[featureID]
 
                     featureData.append([featureID, feature, intervals, oncogenes, complexity] + basic_stats +
-                                        [metadata_dict["ref_genome"], os.path.abspath(featureBed)])
+                                        [metadata_dict["ref_genome"], os.path.abspath(featureBed), os.path.abspath(args.cnv_bed)])
 
             for ft in featureData:
                 output_table_lines.append([sample_name, AA_amplicon_number] + ft + image_locs + [args.metadata_dict,])
