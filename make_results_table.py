@@ -126,7 +126,9 @@ if __name__ == "__main__":
             metadata_dict = defaultdict(lambda: "NA")
 
         if args.cnv_bed:
-            shutil.copy(args.cnv_bed, ldir)
+            if not os.path.exists(ldir + os.path.basename(args.cnv_bed)):
+                shutil.copy(args.cnv_bed, ldir)
+
             args.cnv_bed = ldir + os.path.basename(args.cnv_bed)
 
         else:
