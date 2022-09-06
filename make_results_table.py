@@ -51,7 +51,9 @@ def copy_AA_files(ll, ldir):
     for i in range(-4, 0):
         s = ll[i]
         if s != "Not found":
-            shutil.copy(s, ldir)
+            if not os.path.exists(ldir + s):
+                shutil.copy(s, ldir)
+
             ll[i] = ldir + os.path.basename(ll[i])
 
 
