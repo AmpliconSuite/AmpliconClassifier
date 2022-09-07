@@ -64,7 +64,7 @@ def write_html_table(output_table_lines, html_ofname):
         for ind, ll in enumerate(output_table_lines):
             # hll = [x.replace("/opt/gpbeta_2/gp_home/", "files/") for x in ll]
             if ind != 0:
-                for i in range(-4, 0):
+                for i in range(-5, 0):
                     s = ll[i]
                     if s != "Not found":
                         ll[i] = "<a href=" + s + ">File</a>"
