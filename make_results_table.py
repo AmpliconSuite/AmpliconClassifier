@@ -48,10 +48,10 @@ def read_basic_stats(basic_stats_file):
 
 
 def copy_AA_files(ll, ldir):
-    for i in range(-4, 0):
+    for i in range(-5, 0):
         s = ll[i]
         if s != "Not found":
-            if not os.path.exists(ldir + s):
+            if not os.path.exists(ldir + os.path.basename(s)):
                 shutil.copy(s, ldir)
 
             ll[i] = ldir + os.path.basename(ll[i])
