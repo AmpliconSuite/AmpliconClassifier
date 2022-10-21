@@ -215,6 +215,7 @@ def parseBPG(bpgf, subset_ivald, cn_cut, add_chr_tag, lcD, cg5D, min_de=1):
                 l, r = fields[1].rsplit("->")
                 lchrom, lpos = l[:-1].rsplit(":")
                 rchrom, rpos = r[:-1].rsplit(":")
+                ldir, rdir = l[-1], r[-1]
                 if add_chr_tag and not lchrom.startswith('chr'):
                     lchrom = "chr" + lchrom
                     rchrom = "chr" + rchrom
@@ -229,7 +230,7 @@ def parseBPG(bpgf, subset_ivald, cn_cut, add_chr_tag, lcD, cg5D, min_de=1):
                 elif keepAll and not (segTree[lchrom].overlaps(lpos) or segTree[rchrom].overlaps(rpos)):
                     continue
 
-                elif lchrom == rchrom and abs(lpos - rpos) < min_de_size:
+                elif lchrom == rchrom and abs(lpos - rpos) < min_de_size and ldir != rdir:
                     continue
 
                 cn = float(fields[2])

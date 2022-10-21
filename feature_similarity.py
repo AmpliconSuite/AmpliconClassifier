@@ -24,18 +24,18 @@ if __name__ == "__main__":
                         "Input file for -f generated automatically by AC, '[sample]_features_to_graph.txt'.",
                         required=True)
     parser.add_argument("-o", help="Output filename prefix")
-    parser.add_argument("--min_cn", type=float, help="Minimum CN to consider as amplification (default 4.5",
+    parser.add_argument("--min_cn", type=float, help="Minimum CN to consider as amplification (default 4.5).",
                         default=4.5)
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files",
                         action='store_true', default=False)
     parser.add_argument("--no_LC_filter", help="Do not filter low-complexity cycles. Not recommended to set this flag.",
                         action='store_true', default=False)
     parser.add_argument("--min_de", type=int, help="Set the minimum number of discordant edges in the amplicon "
-                                                   "required to be considered for similarity (default 1).", default=1)
+                                                   "required to be considered for similarity (default 0).", default=0)
     parser.add_argument("--include_path_in_feature_name", help="Include path of file when reporting feature name "
                         "(useful for comparing against runs with similar names", action='store_true', default=False)
-    parser.add_argument("--required_classifications", help="Which features to consider in the similarity calculation.",
-                        choices=["ecDNA", "BFB", "CNC", "Linear", "any"], nargs='+', default="any")
+    parser.add_argument("--required_classifications", help="Which features to consider in the similarity calculation. "
+                        "(default 'any')", choices=["ecDNA", "BFB", "CNC", "Linear", "any"], nargs='+', default="any")
 
     args = parser.parse_args()
 

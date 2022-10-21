@@ -56,7 +56,16 @@ def write_gene_results(outname, ftg_list):
 
 def write_basic_properties(feat_basic_propf, sname, ampN, prop_dict):
     for feat_name, props in prop_dict.items():
-        feat_basic_propf.write("\t".join([sname + "_" + ampN + "_" + feat_name, ] + [str(x) for x in props]) + "\n")
+        borderline_flag = ""
+        if (feat_name.startswith("ecDNA") or feat_name.startswith("BFB")) and props[-1] < 8:
+            borderline_flag+="LowCN"
+        elif props[-1] < 5:
+            borderline_flag+="LowCN"
+
+        if not borderline_flag:
+            borderline_flag = "None"
+
+        feat_basic_propf.write("\t".join([sname + "_" + ampN + "_" + feat_name, ] + [str(x) for x in props] + [borderline_flag,]) + "\n")
 
 
 # write a summary of the breakpoints in the graph
@@ -184,7 +193,7 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
                                               ecIndexClusters, invalidInds, rearrCycleInds)
 
     feat_basic_propf = open(args.o + "_feature_basic_properties.tsv", 'w')
-    prop_head = ["feature_ID", "captured_region_size_bp", "median_feature_CN", "max_feature_CN"]
+    prop_head = ["feature_ID", "captured_region_size_bp", "median_feature_CN", "max_feature_CN", "borderline_flag"]
     feat_basic_propf.write("\t".join(prop_head) + "\n")
     f2gf = open(args.o + "_features_to_graph.txt", 'w')
 

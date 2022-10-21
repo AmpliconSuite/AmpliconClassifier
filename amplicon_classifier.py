@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.11"
+__version__ = "0.4.12"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
@@ -558,7 +558,7 @@ def filter_similar_amplicons():
     fsim_data.sort(key=lambda x: (x[2], x[1], x[0]), reverse=True)
 
     feats_to_filter = set()
-    for fields in fsim_data[:10]:
+    for fields in fsim_data:
         if float(fields[4]) > 0.05:
             break
 
@@ -686,16 +686,15 @@ def filter_similar_amplicons():
             AMP_classifications[ind] = (ampClass, ecStat, bfbStat, ecAmpliconCount)
 
 
-def run_classification(segSeqD, cycleList, cycleCNs):
+def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn):
     cycleTypes = []
     cycleWeights = []
-    invalidInds = []
     rearrCycleInds = set()
-    graph_cns = get_graph_cns(graphFile, args.add_chr_tag)
-    fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
-    rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
     totalCompCyclicCont = 0
     totCyclicCont = 0
+    AMP_dvaluesDict = {x: 0.0 for x in categories}
+    invalidInds = []
+
     for ind, cycle in enumerate(cycleList):
         hasNonCircLen1 = True if len(cycle) == 3 and cycle[0] == 0 else False
         oneCycle = (len(cycleList) == 1)
@@ -721,13 +720,24 @@ def run_classification(segSeqD, cycleList, cycleCNs):
         cycleWeights.append(currWt)
 
     totalWeight = max(sum(cycleWeights), 1)
-    AMP_dvaluesDict = {x: 0.0 for x in categories}
     for i, wt in zip(cycleTypes, cycleWeights):
         AMP_dvaluesDict[i] += (wt / totalWeight)
 
     # anything stored in AMP_dvaluesDict prior to running classify will get used in classification
     # make sure you're not putting in other properties before here.
     ampClass = classifyAmpliconProfile(AMP_dvaluesDict, rearr_e, totalCompCyclicCont, totCyclicCont, tot_over_min_cn)
+
+    return totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights, rearrCycleInds
+
+
+def run_classification(segSeqD, cycleList, cycleCNs):
+    graph_cns = get_graph_cns(graphFile, args.add_chr_tag)
+    fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
+    rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
+
+    totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights, rearrCycleInds = get_raw_cycle_props(
+        cycleList, maxCN, rearr_e, tot_over_min_cn)
+
     # decomposition/amplicon complexity
     totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD, range(len(cycleList)),
                                                         set(), args.add_chr_tag)
@@ -763,7 +773,7 @@ def run_classification(segSeqD, cycleList, cycleCNs):
     else:
         bfb_cycle_inds = []
 
-    # determine number of ecDNA present
+    # determine number of ecDNA present (excluding BFB cycles)
     ecIndexClusters = []
     if ecStat:
         excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
@@ -804,6 +814,7 @@ def run_classification(segSeqD, cycleList, cycleCNs):
 
     bpg_linelist, gseg_cn_d, other_class_c_inds, feature_dict, prop_dict = amplicon_annotation(cycleList, segSeqD,
         bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass, graphFile, args.add_chr_tag, lcD)
+
     bpgi_list.append(bpg_linelist)
     fd_list.append(feature_dict)
     prop_list.append(prop_dict)

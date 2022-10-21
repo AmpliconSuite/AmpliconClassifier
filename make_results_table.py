@@ -50,7 +50,7 @@ def read_basic_stats(basic_stats_file):
 def copy_AA_files(ll, ldir):
     for i in range(-5, 0):
         s = ll[i]
-        if s != "Not found":
+        if not s.endswith("Not found") and not s.endswith("Not provided"):
             if not os.path.exists(ldir + os.path.basename(s)):
                 shutil.copy(s, ldir)
 
@@ -66,7 +66,7 @@ def write_html_table(output_table_lines, html_ofname):
             if ind != 0:
                 for i in range(-5, 0):
                     s = ll[i]
-                    if s != "Not found":
+                    if not s.endswith("Not found") and not s.endswith("Not provided"):
                         ll[i] = "<a href=" + s + ">File</a>"
             outfile.write('<tr><td>')
             outfile.write('</td>\n    <td>'.join(ll))
@@ -101,15 +101,17 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Oncogenes",
-                   "Complexity score",
+                   "All genes", "Complexity score",
                    "Captured interval length", "Feature median copy number", "Feature maximum copy number",
-                   "Reference version", "Feature BED file", "CNV BED file", "AA PNG file", "AA PDF file",
-                   "Run metadata JSON"]
+                   "Reference version", "Tissue of origin", "Sample type", "Feature BED file", "CNV BED file",
+                   "AA PNG file", "AA PDF file", "Run metadata JSON"]
 
     output_table_lines = [output_head, ]
     with open(args.input) as input_file, open(args.classification_file) as classification_file:
         classBase = args.classification_file.rsplit("_amplicon_classification_profiles.tsv")[0]
         ldir = os.path.dirname(classBase) + "/files/"
+        if ldir == "/files/": ldir = "files/"
+
         if not os.path.exists(ldir):
             os.makedirs(ldir)
 
@@ -197,11 +199,13 @@ if __name__ == "__main__":
                     raw_glist = amplicon_gene_dict[featureID]
                     # oncogenes = "|".join(sorted([g[0] for g in raw_glist if g[2]]))
                     oncogenes = str(sorted([g[0] for g in raw_glist if g[2]]))
+                    all_genes = str(sorted([g[0] for g in raw_glist]))
                     complexity = amplicon_complexity_dict[featureID]
                     basic_stats = basic_stats_dict[featureID]
 
-                    featureData.append([featureID, feature, intervals, oncogenes, complexity] + basic_stats +
-                                        [metadata_dict["ref_genome"], os.path.abspath(featureBed), os.path.abspath(args.cnv_bed)])
+                    featureData.append([featureID, feature, intervals, oncogenes, all_genes, complexity] + basic_stats +
+                                        [metadata_dict["ref_genome"], metadata_dict["tissue_of_origin"], metadata_dict["sample_type"],
+                                         os.path.abspath(featureBed), os.path.abspath(args.cnv_bed)])
 
             for ft in featureData:
                 output_table_lines.append([sample_name, AA_amplicon_number] + ft + image_locs + [args.metadata_dict,])
