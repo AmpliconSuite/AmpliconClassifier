@@ -95,9 +95,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Organize AC results into a table")
     parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: "
                         "sample_name cycles.txt graph.txt.", required=True)
-    parser.add_argument("--classification_file", help="Path to amplicon_classification_profiles.tsv file", required=True)
-    parser.add_argument("--metadata_dict", help="Path to [sample]_run_metadata.json file", default="")
-    parser.add_argument("--cnv_bed", help="Path to the CNV bed file used for this run.", default="")
+    parser.add_argument("--classification_file", help="Path of amplicon_classification_profiles.tsv file",
+                        required=True)
+    parser.add_argument("--run_metadata_file", help="Path of run metadata, [sample]_run_metadata.json file (for single"
+                                                    " sample).", default="")
+    parser.add_argument("--cnv_bed", help="Path of the CNV_CALLS.bed file used for this run (for single sample).",
+                        default="")
+    parser.add_argument("--sample_metadata_list", help="Path of two-column file mapping sample name to sample json "
+                                                       "metadata file (for multiple samples).", default="")
+    parser.add_argument("--run_metadata_list", help="Path of two-column file mapping sample name to run json file (for"
+                                                    " multiple samples).", default="")
+    parser.add_argument("--sample_cnv_bed_list", help="Path of two-column file mapping sample name to CNV_CALLS.bed"
+                                                      " file (for multiple samples).", default="")
     args = parser.parse_args()
 
     output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Oncogenes",
@@ -105,6 +114,33 @@ if __name__ == "__main__":
                    "Captured interval length", "Feature median copy number", "Feature maximum copy number",
                    "Reference version", "Tissue of origin", "Sample type", "Feature BED file", "CNV BED file",
                    "AA PNG file", "AA PDF file", "Run metadata JSON"]
+
+    sample_metadata_dict = defaultdict(lambda: "NA")
+    sample_metadata_path = defaultdict(lambda: "Not provided")
+    if args.sample_metadata_list:
+        with open(args.sample_metadata_list) as infile:
+            for line in infile:
+                fields = line.rstrip().rsplit("\t")
+                sample_metadata_path[fields[0]] = fields[1]
+                curr_sample_metadata = json.load(open(fields[1], 'r'))
+                sample_metadata_dict[fields[0]] = curr_sample_metadata
+
+    run_metadata_dict = defaultdict(lambda: "NA")
+    run_metadata_path = defaultdict(lambda: "Not provided")
+    if args.run_metadata_list:
+        with open(args.run_metadata_list) as infile:
+            for line in infile:
+                fields = line.rstrip().rsplit("\t")
+                run_metadata_path[fields[0]] = fields[1]
+                curr_run_metadata = json.load(open(fields[1], 'r'))
+                run_metadata_dict[fields[0]] = curr_run_metadata
+
+    sample_cnv_calls_path = defaultdict(lambda: "Not provided")
+    if args.sample_to_cnv_bed_list:
+        with open(args.sample_to_cnv_bed_list) as infile:
+            for line in infile:
+                fields = line.rstrip().rsplit("\t")
+                sample_cnv_calls_path[fields[0]] = fields[1]
 
     output_table_lines = [output_head, ]
     with open(args.input) as input_file, open(args.classification_file) as classification_file:
@@ -122,21 +158,26 @@ if __name__ == "__main__":
         amplicon_gene_dict = read_amplicon_gene_list(gene_file)
         amplicon_complexity_dict = read_complexity_scores(entropy_file)
         basic_stats_dict = read_basic_stats(basic_stats_file)
-        if args.metadata_dict:
-            metadata_dict = json.load(open(args.metadata_dict, 'r'))
 
-        else:
-            args.metadata_dict = "Not provided"
-            metadata_dict = defaultdict(lambda: "NA")
+        if args.run_metadata_file:
+            metadata_dict = json.load(open(args.run_metadata_file, 'r'))
+            run_metadata_dict = defaultdict(lambda: metadata_dict)
+            run_metadata_path = defaultdict(lambda: os.path.abspath(args.run_metadata_file))
 
         if args.cnv_bed:
             if not os.path.exists(ldir + os.path.basename(args.cnv_bed)):
                 shutil.copy(args.cnv_bed, ldir)
 
             args.cnv_bed = ldir + os.path.basename(args.cnv_bed)
+            sample_cnv_calls_path = defaultdict(lambda: os.path.abspath(args.cnv_bed))
 
-        else:
-            args.cnv_bed = "Not provided"
+        elif args.sample_to_cnv_bed_list:
+            for k, f in sample_cnv_calls_path.items():
+                ofloc = ldir + os.path.basename(f)
+                if not os.path.exists(ofloc):
+                    shutil.copy(f, ldir)
+
+                sample_cnv_calls_path[k] = os.path.abspath(ofloc)
 
         class_head = next(classification_file).rstrip().rsplit("\t")
         for input_line, classification_line in zip(input_file, classification_file):
@@ -145,7 +186,8 @@ if __name__ == "__main__":
             shutil.copy(input_fields[1], ldir)
             shutil.copy(input_fields[2], ldir)
             amplicon_prefix = input_fields[1].rsplit("_cycles.txt")[0]
-            if not ":" in amplicon_prefix: amplicon_prefix.replace("//","/")
+            if ":" not in amplicon_prefix:
+                amplicon_prefix.replace("//", "/")
             AA_amplicon_number = amplicon_prefix.rsplit("_amplicon")[-1]
 
             classD = dict(zip(class_head, classification_line.rstrip().rsplit("\t")))
@@ -176,6 +218,9 @@ if __name__ == "__main__":
             elif not amps_classes and classD["amplicon_decomposition_class"] != "No amp/Invalid":
                 amps_classes.append((classD["amplicon_decomposition_class"], 1))
 
+            curr_sample_metadata = sample_metadata_dict[sample_name]
+            cnv_bed_path = sample_cnv_calls_path[sample_name]
+
             # Get the AC intervals, genes and complexity
             featureData = []
             for feature, namps in amps_classes:
@@ -204,11 +249,11 @@ if __name__ == "__main__":
                     basic_stats = basic_stats_dict[featureID]
 
                     featureData.append([featureID, feature, intervals, oncogenes, all_genes, complexity] + basic_stats +
-                                        [metadata_dict["ref_genome"], metadata_dict["tissue_of_origin"], metadata_dict["sample_type"],
-                                         os.path.abspath(featureBed), os.path.abspath(args.cnv_bed)])
+                                        [curr_sample_metadata["ref_genome"], curr_sample_metadata["tissue_of_origin"], curr_sample_metadata["sample_type"],
+                                         os.path.abspath(featureBed), cnv_bed_path])
 
             for ft in featureData:
-                output_table_lines.append([sample_name, AA_amplicon_number] + ft + image_locs + [args.metadata_dict,])
+                output_table_lines.append([sample_name, AA_amplicon_number] + ft + image_locs + [sample_metadata_path[sample_name],])
 
     tsv_ofname = classBase + "_result_table.tsv"
     # html_ofname = classBase + "_GenePatternNotebook_result_table.html"

@@ -1055,6 +1055,7 @@ if __name__ == "__main__":
 
     print("Classification stage completed")
     if args.filter_similar:
+        print("Filtering similar amplicons...")
         from feature_similarity import *
         filter_similar_amplicons()
 
