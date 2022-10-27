@@ -111,11 +111,11 @@ if __name__ == "__main__":
 
     output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Oncogenes",
                    "All genes", "Complexity score",
-                   "Captured interval length", "Feature median copy number", "Feature maximum copy number",
+                   "Captured interval length", "Feature median copy number", "Feature maximum copy number", "Filter flag", 
                    "Reference version", "Tissue of origin", "Sample type", "Feature BED file", "CNV BED file",
                    "AA PNG file", "AA PDF file", "Run metadata JSON"]
 
-    sample_metadata_dict = defaultdict(lambda: "NA")
+    sample_metadata_dict = defaultdict(lambda: defaultdict(lambda: "NA"))
     sample_metadata_path = defaultdict(lambda: "Not provided")
     if args.sample_metadata_list:
         with open(args.sample_metadata_list) as infile:
@@ -125,7 +125,7 @@ if __name__ == "__main__":
                 curr_sample_metadata = json.load(open(fields[1], 'r'))
                 sample_metadata_dict[fields[0]] = curr_sample_metadata
 
-    run_metadata_dict = defaultdict(lambda: "NA")
+    run_metadata_dict = defaultdict(lambda: defaultdict(lambda: "NA"))
     run_metadata_path = defaultdict(lambda: "Not provided")
     if args.run_metadata_list:
         with open(args.run_metadata_list) as infile:
@@ -134,10 +134,11 @@ if __name__ == "__main__":
                 run_metadata_path[fields[0]] = fields[1]
                 curr_run_metadata = json.load(open(fields[1], 'r'))
                 run_metadata_dict[fields[0]] = curr_run_metadata
+                # print(fields[0], curr_run_metadata)
 
     sample_cnv_calls_path = defaultdict(lambda: "Not provided")
-    if args.sample_to_cnv_bed_list:
-        with open(args.sample_to_cnv_bed_list) as infile:
+    if args.sample_cnv_bed_list:
+        with open(args.sample_cnv_bed_list) as infile:
             for line in infile:
                 fields = line.rstrip().rsplit("\t")
                 sample_cnv_calls_path[fields[0]] = fields[1]
@@ -171,7 +172,7 @@ if __name__ == "__main__":
             args.cnv_bed = ldir + os.path.basename(args.cnv_bed)
             sample_cnv_calls_path = defaultdict(lambda: os.path.abspath(args.cnv_bed))
 
-        elif args.sample_to_cnv_bed_list:
+        elif args.sample_cnv_bed_list:
             for k, f in sample_cnv_calls_path.items():
                 ofloc = ldir + os.path.basename(f)
                 if not os.path.exists(ofloc):
@@ -220,6 +221,8 @@ if __name__ == "__main__":
 
             curr_sample_metadata = sample_metadata_dict[sample_name]
             cnv_bed_path = sample_cnv_calls_path[sample_name]
+            curr_run_metadata = run_metadata_dict[sample_name]
+            # print(curr_run_metadata)
 
             # Get the AC intervals, genes and complexity
             featureData = []
@@ -249,7 +252,7 @@ if __name__ == "__main__":
                     basic_stats = basic_stats_dict[featureID]
 
                     featureData.append([featureID, feature, intervals, oncogenes, all_genes, complexity] + basic_stats +
-                                        [curr_sample_metadata["ref_genome"], curr_sample_metadata["tissue_of_origin"], curr_sample_metadata["sample_type"],
+                                        [curr_run_metadata["ref_genome"], curr_sample_metadata["tissue_of_origin"], curr_sample_metadata["sample_type"],
                                          os.path.abspath(featureBed), cnv_bed_path])
 
             for ft in featureData:
@@ -262,7 +265,6 @@ if __name__ == "__main__":
 
     with open(tsv_ofname, 'w') as outfile:
         for ll in output_table_lines:
-
             oline = "\t".join(ll) + "\n"
             outfile.write(oline)
 
