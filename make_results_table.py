@@ -209,7 +209,7 @@ if __name__ == "__main__":
                     sys.stderr.write("Warning: image file " + f + " not found!\n")
                     image_locs[ind] = "Not found"
 
-            amps_classes = []
+            amps_classes = []  # TODO: REFINE TO PREVENT ISSUES WITH FILTERED AMPS
             if classD["ecDNA+"] == "Positive":
                 amps_classes.append(("ecDNA", int(classD["ecDNA_amplicons"])))
 
@@ -227,9 +227,20 @@ if __name__ == "__main__":
             # Get the AC intervals, genes and complexity
             featureData = []
             for feature, namps in amps_classes:
+                if feature == "ecDNA":
+                    ecDNA_files = [x for x in os.listdir(classBedDir) if x.startswith(ampliconID) and
+                                   x.rsplit("_")[-3] == "ecDNA"]
+
+                # this is necessary since AA amps can have more than one ecDNA
                 for i in range(namps):
-                    featureID = "_".join([ampliconID, feature, str(i+1)])
-                    featureBed = classBedDir + featureID + "_intervals.bed"
+                    if feature == "ecDNA":
+                        featureBed = classBedDir + ecDNA_files[i]
+                        featureID = ecDNA_files[i][:-14]
+
+                    else:
+                        featureID = "_".join([ampliconID, feature, str(i+1)])
+                        featureBed = classBedDir + featureID + "_intervals.bed"
+
                     if not os.path.exists(featureBed):
                         sys.stderr.write("Warning: image file " + f + " not found!\n")
                         intervals = "Interval file not found"
