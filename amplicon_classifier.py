@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.12"
+__version__ = "0.4.13"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
@@ -145,6 +145,7 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
                         hits = True
                         break
             if hits:
+                # print("DEBUG: cycle: ", cycle)
                 wca = weightedCycleAmount(cycle, cycleCNs[ind], segSeqD)
                 if ind in feature_inds:
                     new_feat_inds.add(len(cycleWeights))
@@ -155,18 +156,18 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
     fe_ent = 0
     added_cf = 0
     cInd = 0
+    # print("TGW", totalGraphWeight)
     if totalGraphWeight > 0:
-        while cf + added_cf < hf_cut and cInd < len(cycleWeights):
+        while cf < hf_cut and cInd < len(cycleWeights):
             if cInd in new_feat_inds:
+                added_cf = cycleWeights[cInd] / float(totalGraphWeight)
                 cf += added_cf
+                # print(cInd, "<-cInd, weight->", added_cf, cf)
                 if added_cf > 0:
                     fe_ent += (added_cf * log(added_cf))
 
-                added_cf = cycleWeights[cInd] / float(totalGraphWeight)
-
             cInd += 1
 
-        cf+=added_cf
         cf = round(cf, 5)
         rf = (1 - cf)
         if rf > 0:
@@ -177,8 +178,12 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
     else:
         print("Warning: total graph weight <= 0")
         fu_ent = 0
+        rf = 0
 
+    # print("frac remain:",rf,"unexp ent", fu_ent, "exp ent", fe_ent)
+    # print("DEBUG: Segs: ", segs)
     seg_ent = log(1.0 / segs) if segs > 0 else 0
+    # print("DEBUG: ent, ", fu_ent - fe_ent - seg_ent)
     return fu_ent - fe_ent - seg_ent, fu_ent - fe_ent, -1 * seg_ent
 
 

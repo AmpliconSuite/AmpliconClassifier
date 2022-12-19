@@ -6,7 +6,7 @@
 
 
 ### Classify [AmpliconArchitect](https://github.com/jluebeck/AmpliconArchitect) outputs to detect types of focal amplifications present.
-### Current version: 0.4.12
+### Current version: 0.4.13
 
 This tool classifies the outputs of AmpliconArchitect, [which is available here](https://github.com/jluebeck/AmpliconArchitect).
 
@@ -34,6 +34,11 @@ git clone https://github.com/jluebeck/AmpliconClassifier.git
 cd AmpliconClassifier
 echo export AC_SRC=$PWD >> ~/.bashrc
 source ~/.bashrc
+```
+
+Mac users will need to perform one additional installation step:
+```bash
+brew install coreutils
 ```
 
 ### 2. Usage:
