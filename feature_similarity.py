@@ -24,8 +24,8 @@ if __name__ == "__main__":
                         "Input file for -f generated automatically by AC, '[sample]_features_to_graph.txt'.",
                         required=True)
     parser.add_argument("-o", help="Output filename prefix")
-    parser.add_argument("--min_cn", type=float, help="Minimum CN to consider as amplification (default 4.5).",
-                        default=4.5)
+    parser.add_argument("--min_cn", type=float, help="Minimum CN to consider as amplification from regions previously "
+                        "assigned in feature bed file (default 0).", default=4.5)
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files",
                         action='store_true', default=False)
     parser.add_argument("--no_LC_filter", help="Do not filter low-complexity cycles. Not recommended to set this flag.",
