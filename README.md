@@ -1,6 +1,6 @@
 # AmpliconClassifier
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/jluebeck/AmpliconClassifier?display_name=release)
-![GitHub commits since latest release (by date)](https://img.shields.io/github/commits-since/jluebeck/AmpliconClassifier/v0.4.12/main)
+![GitHub commits since latest release (by date)](https://img.shields.io/github/commits-since/jluebeck/AmpliconClassifier/v0.4.13/main)
 ![GitHub](https://img.shields.io/github/license/jluebeck/AmpliconClassifier)
 ![GitHub all releases](https://img.shields.io/github/downloads/jluebeck/AmpliconClassifier/total)
 
