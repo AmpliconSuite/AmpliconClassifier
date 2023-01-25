@@ -36,7 +36,7 @@ def read_complexity_scores(entropy_file):
 
 
 def read_basic_stats(basic_stats_file):
-    basic_stats_dict = defaultdict(lambda: ["NA", "NA", "NA"])
+    basic_stats_dict = defaultdict(lambda: ["NA", "NA", "NA", "NA"])
     with open(basic_stats_file) as infile:
         h = next(infile).rstrip().rsplit("\t")
         for line in infile:
@@ -47,10 +47,25 @@ def read_basic_stats(basic_stats_file):
     return basic_stats_dict
 
 
+def read_summary_list(summ_map_file):
+    sumf_dict = {}
+    if not summ_map_file:
+        return sumf_dict
+
+    # key is the sample name plus the base path of the summary file.
+    with open(summ_map_file) as infile:
+        for line in infile:
+            fields = line.rstrip().rsplit("\t")
+            floc = os.path.dirname(fields[1])
+            sumf_dict[(fields[0], floc)] = fields[1]
+
+    return sumf_dict
+
+
 def copy_AA_files(ll, ldir):
     for i in range(-5, 0):
         s = ll[i]
-        if not s.endswith("Not found") and not s.endswith("Not provided"):
+        if not s.endswith("Not found") and not s.endswith("Not provided") and not s == "NA":
             if not os.path.exists(ldir + os.path.basename(s)):
                 shutil.copy(s, ldir)
 
@@ -93,10 +108,11 @@ def write_json_dict(output_table_lines, json_ofname):
 if __name__ == "__main__":
     # The input file must be the source of the classification file calls.
     parser = argparse.ArgumentParser(description="Organize AC results into a table")
-    parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: "
+    parser.add_argument("-i", "--input", help="Path to .input file produced by make_input.sh. Each line formatted as: "
                         "sample_name cycles.txt graph.txt.", required=True)
     parser.add_argument("--classification_file", help="Path of amplicon_classification_profiles.tsv file",
                         required=True)
+    parser.add_argument("--summary_map", help="Path to the _summary_map.txt file produced by make_input.sh", default="")
     parser.add_argument("--run_metadata_file", help="Path of run metadata, [sample]_run_metadata.json file (for single"
                                                     " sample).", default="")
     parser.add_argument("--cnv_bed", help="Path of the CNV_CALLS.bed file used for this run (for single sample).",
@@ -113,7 +129,10 @@ if __name__ == "__main__":
                    "All genes", "Complexity score",
                    "Captured interval length", "Feature median copy number", "Feature maximum copy number", "Filter flag", 
                    "Reference version", "Tissue of origin", "Sample type", "Feature BED file", "CNV BED file",
-                   "AA PNG file", "AA PDF file", "Run metadata JSON"]
+                   "AA PNG file", "AA PDF file", "AA summary file", "Run metadata JSON"]
+
+    sumf_used = set()
+    sumf_dict = read_summary_list(args.summary_map)
 
     sample_metadata_dict = defaultdict(lambda: defaultdict(lambda: "NA"))
     sample_metadata_path = defaultdict(lambda: "Not provided")
@@ -186,6 +205,15 @@ if __name__ == "__main__":
             sample_name = input_fields[0].rsplit("_amplicon")[0]
             shutil.copy(input_fields[1], ldir)
             shutil.copy(input_fields[2], ldir)
+
+            # what is the directory of the cycles file?
+            cfile_dir = os.path.dirname(input_fields[1])
+            if (sample_name, cfile_dir) in sumf_dict:
+                sumf = sumf_dict[(sample_name, cfile_dir)]
+                sumf_used.add((sample_name, cfile_dir))
+            else:
+                sumf = "Not provided"
+
             amplicon_prefix = input_fields[1].rsplit("_cycles.txt")[0]
             if ":" not in amplicon_prefix:
                 amplicon_prefix.replace("//", "/")
@@ -267,7 +295,32 @@ if __name__ == "__main__":
                                          os.path.abspath(featureBed), cnv_bed_path])
 
             for ft in featureData:
-                output_table_lines.append([sample_name, AA_amplicon_number] + ft + image_locs + [sample_metadata_path[sample_name],])
+                output_table_lines.append([sample_name, AA_amplicon_number] + ft + image_locs + [sumf, sample_metadata_path[sample_name]])
+
+        for k in set(sumf_dict.keys()) - sumf_used:
+            print(k[0] + " had no AA amplicons")
+            sumf = sumf_dict[k]
+            sample_name = k[0]
+            AA_amplicon_number = "NA"
+            feature = "NA"
+            featureID = sample_name + "_" + feature
+            intervals = "[]"
+            oncogenes = "[]"
+            all_genes = "[]"
+            complexity = "NA"
+            basic_stats = basic_stats_dict[featureID]
+            featureBed = "NA"
+            curr_sample_metadata = sample_metadata_dict[sample_name]
+            cnv_bed_path = sample_cnv_calls_path[sample_name]
+            curr_run_metadata = run_metadata_dict[sample_name]
+            fdl = [featureID, feature, intervals, oncogenes, all_genes, complexity] + basic_stats + \
+                  [curr_run_metadata["ref_genome"], curr_sample_metadata["tissue_of_origin"],
+                   curr_sample_metadata["sample_type"], os.path.abspath(featureBed), cnv_bed_path]
+
+            image_locs = ["NA", "NA"]
+            output_table_lines.append(
+                [sample_name, AA_amplicon_number] + fdl + image_locs + [sumf, sample_metadata_path[sample_name]])
+
 
     tsv_ofname = classBase + "_result_table.tsv"
     # html_ofname = classBase + "_GenePatternNotebook_result_table.html"
@@ -282,5 +335,6 @@ if __name__ == "__main__":
     for ll in output_table_lines[1:]:
         copy_AA_files(ll, ldir)
 
+    print("Finished creating summary tables for " + str(len(output_table_lines[1:])) + " total amplicons")
     write_json_dict(output_table_lines, json_ofname)
     write_html_table(output_table_lines, html_ofname)
