@@ -335,6 +335,6 @@ if __name__ == "__main__":
     for ll in output_table_lines[1:]:
         copy_AA_files(ll, ldir)
 
-    print("Finished creating summary tables for " + str(len(output_table_lines[1:])) + " total amplicons")
+    print("Finished creating summary tables for " + str(len(output_table_lines[1:])) + " total focal amplifications")
     write_json_dict(output_table_lines, json_ofname)
     write_html_table(output_table_lines, html_ofname)
