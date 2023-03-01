@@ -125,6 +125,10 @@ if __name__ == "__main__":
             # read the two graph files and classify.
             graph0 = parseBPG(feat_to_graph[x[0]], feat_to_bed[x[0]][1], cn_cut, add_chr_tag, lcD, cg5D, args.min_de)
             graph1 = parseBPG(feat_to_graph[x[1]], feat_to_bed[x[1]][1], cn_cut, add_chr_tag, lcD, cg5D, args.min_de)
+            if feat_to_graph[x[0]] == feat_to_graph[x[1]]:
+                print("skipping", x)
+                continue
+
             if (not graph0[0] and args.min_de > 0) or not graph0[1] or (not graph1[0] and args.min_de > 0) or not graph1[1]:
                 print("skipping", x)
                 continue

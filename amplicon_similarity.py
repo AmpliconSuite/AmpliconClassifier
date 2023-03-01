@@ -59,7 +59,7 @@ class breakpoint(object):
 def amps_overlap(gdoi1, gdoi2):
     for c1, it1 in gdoi1.items():
         it2 = gdoi2[c1]
-        if not it2:
+        if not it2 or not it1:
             continue
 
         for int1 in it1:
@@ -80,7 +80,12 @@ def nucSimilarity(g1, g2):
             for t2 in g2[c1][t1.begin:t1.end]:
                 obp += (min(t1.end, t2.end) - max(t1.begin, t2.begin))
 
-    return obp/g1_bp
+    try:
+        nS = obp/g1_bp
+        return nS
+
+    except ZeroDivisionError:
+        return 0
 
 
 def bp_dist(bplist1, bplist2, d):
@@ -205,7 +210,9 @@ def build_CG5_database(cg5_file):
 
 def parseBPG(bpgf, subset_ivald, cn_cut, add_chr_tag, lcD, cg5D, min_de=1):
     bps = []
-    keepAll = (len(subset_ivald) == 0 or cn_cut == 0)
+    no_subset = (len(subset_ivald) == 0)
+    cn_cut_0 = (cn_cut == 0 and no_subset)
+    keepAll = (no_subset or cn_cut_0)
     segTree = defaultdict(IntervalTree)
     with open(bpgf) as infile:
         for line in infile:

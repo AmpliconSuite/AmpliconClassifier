@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.13"
+__version__ = "0.4.14"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
@@ -184,7 +184,10 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
     # print("DEBUG: Segs: ", segs)
     seg_ent = log(1.0 / segs) if segs > 0 else 0
     # print("DEBUG: ent, ", fu_ent - fe_ent - seg_ent)
-    return fu_ent - fe_ent - seg_ent, fu_ent - fe_ent, -1 * seg_ent
+    totalEntropy = max(0, fu_ent - fe_ent - seg_ent)
+    decompEntropy = max(0, fu_ent - fe_ent)
+    nsegEntropy = max(0, -1*seg_ent)
+    return totalEntropy, decompEntropy, nsegEntropy
 
 
 # Compute f (foldback fraction) from the edges in the AA graph alone
@@ -252,7 +255,7 @@ def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs):
 
 
 # proportion of cycles with foldbacks
-def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, graphf, add_chr_tag):
+def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, add_chr_tag):
     FB_breaks = 0.0
     distal_breaks = 0.0
     lin_breaks = 0.0
@@ -319,6 +322,10 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, graphf, add_chr_tag):
 
     hasEC = nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs)
     minBFBCyclesRequired = 2
+
+    if set(bfb_cycle_inds).issubset(set(invalidInds)):
+        return 0, 0, 0, False, [], []
+
     if FB_breaks > 1.5 and tot_bfb_supp_cycles >= minBFBCyclesRequired:
         tot = float(FB_breaks + distal_breaks + lin_breaks)
         return FB_breaks / tot, distal_breaks / tot, bfb_weight / (non_bfb_cycle_weight + bfb_weight), hasEC, \
@@ -526,10 +533,12 @@ def plotting():
             make_classification_radar(mixing_cats, [e, ], args.o + "_" + s + "_edge_class", sampNames)
 
 
-def filter_similar_amplicons():
-    # import some stuff from feature similarity.py and run it.
+def filter_similar_amplicons(n_files):
+    # adjust the p value cutoff based on number of input amplicons
+    pval = 0.05/n_files
     print("\nSamples are assumed to be independent as --filter_similar was set.\nFiltering highly similar amplicons"
-          " (p < 0.05) across independent samples...\n")
+          " across independent samples...\n")
+    print("adjusted p-value cutoff set to 0.05/{}={}".format(str(n_files), str(pval)))
     required_classes = {"ecDNA", "BFB", "Complex non-cyclic", "Linear amplification"}
     cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
     cg5D = build_CG5_database(cg5Path)
@@ -552,7 +561,7 @@ def filter_similar_amplicons():
         s2a_graph = {}
         graph0 = parseBPG(full_featname_to_graph[x[0]], feat_to_ivald[x[0]][1], cn_cut, add_chr_tag, lcD, cg5D, 0)
         graph1 = parseBPG(full_featname_to_graph[x[1]], feat_to_ivald[x[1]][1], cn_cut, add_chr_tag, lcD, cg5D, 0)
-        if not graph0[1] or not graph1[1]:
+        if not graph0[1] or not graph1[1] or full_featname_to_graph[x[0]] == full_featname_to_graph[x[1]]:
             continue
 
         s2a_graph[x[0]] = graph0
@@ -564,7 +573,7 @@ def filter_similar_amplicons():
 
     feats_to_filter = set()
     for fields in fsim_data:
-        if float(fields[4]) > 0.05:
+        if float(fields[4]) > pval:
             break
 
         splitname = fields[0].rsplit("_")
@@ -755,7 +764,7 @@ def run_classification(segSeqD, cycleList, cycleCNs):
     fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
 
     fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC, non_bfb_cycle_inds, bfb_cycle_inds = cycles_file_bfb_props(cycleList, segSeqD,
-        cycleCNs, graphFile, args.add_chr_tag)
+        cycleCNs, invalidInds, graphFile, args.add_chr_tag)
 
     # "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp"
     AMP_dvaluesDict["foldback_read_prop"] = fb_prop
@@ -1062,7 +1071,7 @@ if __name__ == "__main__":
     if args.filter_similar:
         print("Filtering similar amplicons...")
         from feature_similarity import *
-        filter_similar_amplicons()
+        filter_similar_amplicons(len(flist))
 
     # make any requested visualizations
     plotting()

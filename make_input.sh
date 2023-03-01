@@ -10,8 +10,8 @@ outpre="${@: -1}"
 for var in ${*%${!#}}
 do
   exppath=`realpath $var`
-  find $exppath -name "*_cycles.txt" | grep -v "annotated_cycles" | grep -v _classification/files/ | sort >> scf.txt
-  find $exppath -name "*_graph.txt" | grep -v "features_to_graph" | grep -v "feature_to_graph" | grep -v _classification/files/ | sort >> sgf.txt
+  find $exppath -name "*_cycles.txt" | grep -v "annotated_cycles" | grep -v "/\._" | grep -v _classification/files/ | sort >> scf.txt
+  find $exppath -name "*_graph.txt" | grep -v "features_to_graph" | grep -v "/\._" | grep -v "feature_to_graph" | grep -v _classification/files/ | sort >> sgf.txt
   if [ "$(wc -l < scf.txt)" -ne "$(wc -l < sgf.txt)" ]; then
     echo "ERROR: Unequal numbers of cycles and graph files found!"
     exit
