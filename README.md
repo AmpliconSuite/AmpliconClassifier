@@ -47,15 +47,13 @@ brew install coreutils
 
 To classify a single amplicon,
 
-`python amplicon_classifier.py --ref [hg19, GRCh37, or GRCh38] --cycles [/path/to/amplicon_cycles.txt] --graph [/path/to/amplicon_graph.txt] > classifier_stdout.log`
+`python amplicon_classifier.py --ref [hg19, GRCh37, or GRCh38] --cycles sample_amplicon1_cycles.txt --graph sample_amplicon1_graph.txt > classifier_stdout.log`
 
-If passing a list of amplicons, the `--input` argument must be formatted as follows, with one amplicon per line:
+If classifying multiple amplicons, you can use the `make_input.sh` script **to gather the necessary input files automatically**. `make_input.sh` takes a path and an output prefix. 
 
-`sample_name_amplicon1   /path/to/sample_name_amplicon1_cycles.txt   /path/to/sample_name_amplicon1_graph.txt`
+`make_input.sh /path/to/AA/output/directories/ example_collection` 
 
-**To generate the multi-amplicon input file automatically**, you can use the `make_input.sh` script, which takes a path and an output prefix. 
-
-`make_input.sh /path/to/AA/output/directory/ [some_prefix]`
+This will create a file called `example_collection.input` This file can be given as the `--input` argument for AC.
 
 To subsequently generate classifications for a list of amplicons:
 
