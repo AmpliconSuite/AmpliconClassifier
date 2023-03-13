@@ -49,11 +49,13 @@ To classify a single amplicon,
 
 `python amplicon_classifier.py --ref [hg19, GRCh37, or GRCh38] --cycles sample_amplicon1_cycles.txt --graph sample_amplicon1_graph.txt > classifier_stdout.log`
 
-If classifying multiple amplicons, you can use the `make_input.sh` script **to gather the necessary input files automatically**. `make_input.sh` takes a path and an output prefix. 
+**More commonly, if classifying multiple amplicons, you can use the `make_input.sh` script to gather the necessary input files automatically.**
+
+`make_input.sh` takes a path and an output prefix. e.g:
 
 `make_input.sh /path/to/AA/output/directories/ example_collection` 
 
-This will create a file called `example_collection.input` This file can be given as the `--input` argument for AC.
+This will create a file called `example_collection.input` which can be given as the `--input` argument for AC.
 
 To subsequently generate classifications for a list of amplicons:
 
