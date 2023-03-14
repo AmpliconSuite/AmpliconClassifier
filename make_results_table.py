@@ -113,8 +113,10 @@ if __name__ == "__main__":
     parser.add_argument("--classification_file", help="Path of amplicon_classification_profiles.tsv file",
                         required=True)
     parser.add_argument("--summary_map", help="Path to the _summary_map.txt file produced by make_input.sh", default="")
-    parser.add_argument("--run_metadata_file", help="Path of run metadata, [sample]_run_metadata.json file (for single"
-                                                    " sample).", default="")
+    parser.add_argument("--sample_metadata_file", help="Path of sample metadata, [sample]_sample_metadata.json file"
+                                                       " (for building table with a single sample).", default="")
+    parser.add_argument("--run_metadata_file", help="Path of run metadata, [sample]_run_metadata.json file (for "
+                                                    "building table with a single sample).", default="")
     parser.add_argument("--cnv_bed", help="Path of the CNV_CALLS.bed file used for this run (for single sample).",
                         default="")
     parser.add_argument("--sample_metadata_list", help="Path of two-column file mapping sample name to sample json "
@@ -126,13 +128,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Oncogenes",
-                   "All genes", "Complexity score",
-                   "Captured interval length", "Feature median copy number", "Feature maximum copy number", "Filter flag", 
-                   "Reference version", "Tissue of origin", "Sample type", "Feature BED file", "CNV BED file",
-                   "AA PNG file", "AA PDF file", "AA summary file", "Run metadata JSON"]
+                   "All genes", "Complexity score", "Captured interval length", "Feature median copy number",
+                   "Feature maximum copy number", "Filter flag", "Reference version", "Tissue of origin",
+                   "Sample type", "Feature BED file", "CNV BED file", "AA PNG file", "AA PDF file", "AA summary file",
+                   "Run metadata JSON", "Sample metadata JSON"]
 
     sumf_used = set()
     sumf_dict = read_summary_list(args.summary_map)
+
+    classBase = args.classification_file.rsplit("_amplicon_classification_profiles.tsv")[0]
+    ldir = os.path.dirname(classBase) + "/files/"
+    if ldir == "/files/": ldir = "files/"
+    if not os.path.exists(ldir): os.makedirs(ldir)
 
     sample_metadata_dict = defaultdict(lambda: defaultdict(lambda: "NA"))
     sample_metadata_path = defaultdict(lambda: "Not provided")
@@ -140,9 +147,12 @@ if __name__ == "__main__":
         with open(args.sample_metadata_list) as infile:
             for line in infile:
                 fields = line.rstrip().rsplit("\t")
-                sample_metadata_path[fields[0]] = fields[1]
-                curr_sample_metadata = json.load(open(fields[1], 'r'))
+                csmf = os.path.abspath(fields[1])
+                sample_metadata_path[fields[0]] = os.path.abspath(csmf)
+                curr_sample_metadata = json.load(open(csmf, 'r'))
                 sample_metadata_dict[fields[0]] = curr_sample_metadata
+                if not os.path.exists(ldir + os.path.basename(csmf)):
+                    shutil.copy(csmf, ldir)
 
     run_metadata_dict = defaultdict(lambda: defaultdict(lambda: "NA"))
     run_metadata_path = defaultdict(lambda: "Not provided")
@@ -150,10 +160,12 @@ if __name__ == "__main__":
         with open(args.run_metadata_list) as infile:
             for line in infile:
                 fields = line.rstrip().rsplit("\t")
-                run_metadata_path[fields[0]] = fields[1]
-                curr_run_metadata = json.load(open(fields[1], 'r'))
+                crmf = os.path.abspath(fields[1])
+                run_metadata_path[fields[0]] = os.path.abspath(crmf)
+                curr_run_metadata = json.load(open(crmf, 'r'))
                 run_metadata_dict[fields[0]] = curr_run_metadata
-                # print(fields[0], curr_run_metadata)
+                if not os.path.exists(ldir + os.path.basename(crmf)):
+                    shutil.copy(crmf, ldir)
 
     sample_cnv_calls_path = defaultdict(lambda: "Not provided")
     if args.sample_cnv_bed_list:
@@ -164,13 +176,6 @@ if __name__ == "__main__":
 
     output_table_lines = [output_head, ]
     with open(args.input) as input_file, open(args.classification_file) as classification_file:
-        classBase = args.classification_file.rsplit("_amplicon_classification_profiles.tsv")[0]
-        ldir = os.path.dirname(classBase) + "/files/"
-        if ldir == "/files/": ldir = "files/"
-
-        if not os.path.exists(ldir):
-            os.makedirs(ldir)
-
         classBedDir = classBase + "_classification_bed_files/"
         gene_file = classBase + "_gene_list.tsv"
         entropy_file = classBase + "_feature_entropy.tsv"
@@ -179,10 +184,19 @@ if __name__ == "__main__":
         amplicon_complexity_dict = read_complexity_scores(entropy_file)
         basic_stats_dict = read_basic_stats(basic_stats_file)
 
+        if args.sample_metadata_file:
+            metadata_dict = json.load(open(args.run_metadata_file, 'r'))
+            sample_metadata_dict = defaultdict(lambda: metadata_dict)
+            sample_metadata_path = defaultdict(lambda: os.path.abspath(args.sample_metadata_file))
+            if not os.path.exists(ldir + os.path.basename(args.sample_metadata_file)):
+                shutil.copy(args.sample_metadata_file, ldir)
+
         if args.run_metadata_file:
             metadata_dict = json.load(open(args.run_metadata_file, 'r'))
             run_metadata_dict = defaultdict(lambda: metadata_dict)
             run_metadata_path = defaultdict(lambda: os.path.abspath(args.run_metadata_file))
+            if not os.path.exists(ldir + os.path.basename(args.run_metadata_file)):
+                shutil.copy(args.run_metadata_file, ldir)
 
         if args.cnv_bed:
             if not os.path.exists(ldir + os.path.basename(args.cnv_bed)):
@@ -295,7 +309,9 @@ if __name__ == "__main__":
                                          os.path.abspath(featureBed), cnv_bed_path])
 
             for ft in featureData:
-                output_table_lines.append([sample_name, AA_amplicon_number] + ft + image_locs + [sumf, sample_metadata_path[sample_name]])
+                output_table_lines.append(
+                    [sample_name, AA_amplicon_number] + ft + image_locs +
+                    [sumf, run_metadata_path[sample_name], sample_metadata_path[sample_name]])
 
         for k in set(sumf_dict.keys()) - sumf_used:
             print(k[0] + " had no AA amplicons")
@@ -319,11 +335,11 @@ if __name__ == "__main__":
 
             image_locs = ["NA", "NA"]
             output_table_lines.append(
-                [sample_name, AA_amplicon_number] + fdl + image_locs + [sumf, sample_metadata_path[sample_name]])
+                [sample_name, AA_amplicon_number] + fdl + image_locs +
+                [sumf, run_metadata_path[sample_name], sample_metadata_path[sample_name], ])
 
 
     tsv_ofname = classBase + "_result_table.tsv"
-    # html_ofname = classBase + "_GenePatternNotebook_result_table.html"
     html_ofname = "index.html"
     json_ofname = classBase + "_result_data.json"
 
@@ -335,6 +351,6 @@ if __name__ == "__main__":
     for ll in output_table_lines[1:]:
         copy_AA_files(ll, ldir)
 
-    print("Finished creating summary tables for " + str(len(output_table_lines[1:])) + " total focal amplifications")
     write_json_dict(output_table_lines, json_ofname)
     write_html_table(output_table_lines, html_ofname)
+    print("Finished creating summary tables for " + str(len(output_table_lines[1:])) + " total focal amplifications")

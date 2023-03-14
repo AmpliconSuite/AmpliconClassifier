@@ -944,14 +944,10 @@ if __name__ == "__main__":
     #                     action='store_true')
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files.",
                         action='store_true')
-    # parser.add_argument("--report_genes", help="Extract list of genes from amplicons with given classification.",
-    #                     choices=["ecdna", "bfb", "other", "all"], nargs='+', default=[])
     parser.add_argument("--report_complexity", help="Compute a measure of amplicon entropy for each amplicon.",
                         action='store_true')
     parser.add_argument("--verbose_classification", help="Generate verbose output with raw classification scores.",
                         action='store_true')
-    # parser.add_argument("--annotate_cycles_file", help="Create an annotated cycles file, indicating the classification "
-    #                     "of the paths and cycles present.", action='store_true')
     parser.add_argument("--no_LC_filter", help="Do not filter low-complexity cycles. Not recommended to set this flag.",
                         action='store_true', default=False)
     parser.add_argument("--exclude_bed", help="List of regions in which to ignore classification.")
@@ -981,7 +977,7 @@ if __name__ == "__main__":
         print("--decomposition_strictness must be a value between 0 and 1")
         sys.exit(1)
 
-    # check if aa data repo set, construct LC datatabase
+    # check if aa data repo set, construct low-complexity (LC) datatabase
     try:
         AA_DATA_REPO = os.environ["AA_DATA_REPO"] + "/" + args.ref + "/"
         fDict = {}
