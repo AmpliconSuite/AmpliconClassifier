@@ -185,7 +185,7 @@ if __name__ == "__main__":
         basic_stats_dict = read_basic_stats(basic_stats_file)
 
         if args.sample_metadata_file:
-            metadata_dict = json.load(open(args.run_metadata_file, 'r'))
+            metadata_dict = json.load(open(args.sample_metadata_file, 'r'))
             sample_metadata_dict = defaultdict(lambda: metadata_dict)
             sample_metadata_path = defaultdict(lambda: os.path.abspath(args.sample_metadata_file))
             if not os.path.exists(ldir + os.path.basename(args.sample_metadata_file)):
