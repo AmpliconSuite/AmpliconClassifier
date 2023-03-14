@@ -185,15 +185,15 @@ if __name__ == "__main__":
         basic_stats_dict = read_basic_stats(basic_stats_file)
 
         if args.sample_metadata_file:
-            metadata_dict = json.load(open(args.sample_metadata_file, 'r'))
-            sample_metadata_dict = defaultdict(lambda: metadata_dict)
+            init_sample_metadata = json.load(open(args.sample_metadata_file, 'r'))
+            sample_metadata_dict = defaultdict(lambda: init_sample_metadata)
             sample_metadata_path = defaultdict(lambda: os.path.abspath(args.sample_metadata_file))
             if not os.path.exists(ldir + os.path.basename(args.sample_metadata_file)):
                 shutil.copy(args.sample_metadata_file, ldir)
 
         if args.run_metadata_file:
-            metadata_dict = json.load(open(args.run_metadata_file, 'r'))
-            run_metadata_dict = defaultdict(lambda: metadata_dict)
+            init_run_metadata = json.load(open(args.run_metadata_file, 'r'))
+            run_metadata_dict = defaultdict(lambda: init_run_metadata)
             run_metadata_path = defaultdict(lambda: os.path.abspath(args.run_metadata_file))
             if not os.path.exists(ldir + os.path.basename(args.run_metadata_file)):
                 shutil.copy(args.run_metadata_file, ldir)
