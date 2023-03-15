@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.14"
+__version__ = "0.4.15"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
