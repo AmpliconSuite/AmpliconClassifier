@@ -353,4 +353,4 @@ if __name__ == "__main__":
 
     write_json_dict(output_table_lines, json_ofname)
     write_html_table(output_table_lines, html_ofname)
-    print("Finished creating summary tables for " + str(len(output_table_lines[1:])) + " total focal amplifications")
+    print("Finished creating summary tables for " + str(len(output_table_lines[1:])) + " total entries")
