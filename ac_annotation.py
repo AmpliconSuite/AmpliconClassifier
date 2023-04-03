@@ -184,8 +184,18 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                 for c_id in cycleList[b_ind]:
                     chrom, l, r = segSeqD[abs(c_id)]
                     if chrom:
-                        bfb_interval_dict[chrom].append((l, r))
                         used_segs[chrom].addi(l, r+1)
+                        # bfb_interval_dict[chrom].append((l, r))
+                        # chop out low cn regions
+                        seg_t = IntervalTree([Interval(l, r + 1)])
+                        olapping_low_cns = [x for x in graph_cns[chrom][l:r + 1] if x.data < 4]
+                        for x in olapping_low_cns:
+                            seg_t.chop(x.begin, x.end + 1)
+
+                        for x in seg_t:
+                            bfb_interval_dict[chrom].append((x.begin, x.end))
+
+
 
         feature_dict["BFB_1"] = bfb_interval_dict
 
@@ -219,8 +229,17 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                     if abs(c_id) not in used_segs:
                         chrom, l, r = segSeqD[abs(c_id)]
                         if not used_segs[chrom][l:r] and not chrom is None:
-                            other_interval_dict[chrom].append((l, r))
+                            used_segs[chrom].addi(l, r+1)
                             other_class_c_inds.append(o_ind)
+                            # other_interval_dict[chrom].append((l, r))
+                            # chop out low cn regions
+                            seg_t = IntervalTree([Interval(l, r + 1)])
+                            olapping_low_cns = [x for x in graph_cns[chrom][l:r + 1] if x.data < 4]
+                            for x in olapping_low_cns:
+                                seg_t.chop(x.begin, x.end + 1)
+
+                            for x in seg_t:
+                                other_interval_dict[chrom].append((x.begin, x.end))
 
         if not ecStat and not bfbStat:
             feature_dict[ampClass + "_1"] = other_interval_dict

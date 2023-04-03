@@ -62,6 +62,17 @@ def read_summary_list(summ_map_file):
     return sumf_dict
 
 
+def cycles_graph_amp_lookup(input_lines):
+    lookup = {}
+    with open(args.input) as input_file:
+        for line in input_file:
+            fields = line.rstrip().rsplit()
+            a_id = fields[1].rsplit("/")[-1].rsplit("_cycles.txt")[0]
+            lookup[a_id] = (fields[1], fields[2])
+
+    return lookup
+
+
 def copy_AA_files(ll, ldir):
     for i in range(-5, 0):
         s = ll[i]
@@ -100,7 +111,7 @@ def write_json_dict(output_table_lines, json_ofname):
         dlist.append(td)
 
     with open(json_ofname, 'w') as outfile:
-        json.dump(dlist, outfile, sort_keys=True)
+        json.dump(dlist, outfile, sort_keys=True, indent=2)
 
     pass
 
@@ -175,7 +186,8 @@ if __name__ == "__main__":
                 sample_cnv_calls_path[fields[0]] = fields[1]
 
     output_table_lines = [output_head, ]
-    with open(args.input) as input_file, open(args.classification_file) as classification_file:
+    cyc_graph_lookup_dct = cycles_graph_amp_lookup(args.input)
+    with open(args.classification_file) as classification_file:
         classBedDir = classBase + "_classification_bed_files/"
         gene_file = classBase + "_gene_list.tsv"
         entropy_file = classBase + "_feature_entropy.tsv"
@@ -214,30 +226,32 @@ if __name__ == "__main__":
                 sample_cnv_calls_path[k] = os.path.abspath(ofloc)
 
         class_head = next(classification_file).rstrip().rsplit("\t")
-        for input_line, classification_line in zip(input_file, classification_file):
-            input_fields = input_line.rstrip().rsplit()
-            sample_name = input_fields[0].rsplit("_amplicon")[0]
-            shutil.copy(input_fields[1], ldir)
-            shutil.copy(input_fields[2], ldir)
+        for classification_line in classification_file:
+            classD = dict(zip(class_head, classification_line.rstrip().rsplit("\t")))
+            sample_name = classD['sample_name']
+            ampliconID = "_".join([classD["sample_name"], classD["amplicon_number"]])
+            cycles_file, graph_file = cyc_graph_lookup_dct[ampliconID]
+            shutil.copy(cycles_file, ldir)
+            shutil.copy(graph_file, ldir)
 
             # what is the directory of the cycles file?
-            cfile_dir = os.path.dirname(input_fields[1])
+            cfile_dir = os.path.dirname(cycles_file)
             if (sample_name, cfile_dir) in sumf_dict:
                 sumf = sumf_dict[(sample_name, cfile_dir)]
                 sumf_used.add((sample_name, cfile_dir))
             else:
                 sumf = "Not provided"
 
-            amplicon_prefix = input_fields[1].rsplit("_cycles.txt")[0]
+            amplicon_prefix = cycles_file.rsplit("_cycles.txt")[0]
             if ":" not in amplicon_prefix:
                 amplicon_prefix.replace("//", "/")
-            AA_amplicon_number = amplicon_prefix.rsplit("_amplicon")[-1]
 
-            classD = dict(zip(class_head, classification_line.rstrip().rsplit("\t")))
-            ampliconID = "_".join([classD["sample_name"], classD["amplicon_number"]])
+            AA_amplicon_number = classD["amplicon_number"].lstrip("amplicon")
+
+            # TODO: REVISE THIS ERROR AFTER NEW MATCHING OF INPUTS TO CLASSIFICATIONS
             if sample_name + "_amplicon" + AA_amplicon_number != ampliconID:
                 sys.stderr.write(sample_name + "_amplicon" + AA_amplicon_number + " | " + ampliconID + "\n")
-                sys.stderr.write("File ordering in " + args.input + " does not match order in "
+                sys.stderr.write("Amplicon names in " + args.input + " do not with "
                                  + args.classification_file + "\n")
                 sys.exit(1)
 
@@ -251,7 +265,7 @@ if __name__ == "__main__":
                     sys.stderr.write("Warning: image file " + f + " not found!\n")
                     image_locs[ind] = "Not found"
 
-            amps_classes = []  # TODO: REFINE TO PREVENT ISSUES WITH FILTERED AMPS
+            amps_classes = []
             if classD["ecDNA+"] == "Positive":
                 amps_classes.append(("ecDNA", int(classD["ecDNA_amplicons"])))
 

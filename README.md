@@ -6,7 +6,7 @@
 
 
 ### Classify [AmpliconArchitect](https://github.com/jluebeck/AmpliconArchitect) outputs to detect types of focal amplifications present.
-### Current version: 0.4.15
+### Current version: 0.4.16
 
 This tool classifies the outputs of AmpliconArchitect, [which is available here](https://github.com/jluebeck/AmpliconArchitect).
 

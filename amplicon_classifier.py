@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.15"
+__version__ = "0.4.16"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
 import copy
 from math import log
 import operator
+import re
 import sys
 
 from ac_io import *
@@ -1048,7 +1049,8 @@ if __name__ == "__main__":
     for fpair in flist:
         if len(fpair) > 2:
             orig_sName, cyclesFile, graphFile = fpair[:3]
-            sName = orig_sName.rsplit("_amplicon")[0]
+            #sName = orig_sName.rsplit("_amplicon")[0]
+            sName = re.split("_amplicon[0-9]*", orig_sName)[0]
             sampNames.append(sName)
             cyclesFiles.append(cyclesFile)
             ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
