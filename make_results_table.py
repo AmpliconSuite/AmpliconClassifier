@@ -284,7 +284,7 @@ if __name__ == "__main__":
             featureData = []
             for feature, namps in amps_classes:
                 if feature == "ecDNA":
-                    ecDNA_files = [x for x in os.listdir(classBedDir) if x.startswith(ampliconID) and
+                    ecDNA_files = [x for x in os.listdir(classBedDir) if x.startswith(ampliconID + "_") and
                                    x.rsplit("_")[-3] == "ecDNA"]
 
                 # this is necessary since AA amps can have more than one ecDNA
