@@ -22,7 +22,7 @@ If referring to the legacy version, see the section at the end of the README.
 ***Please note that this software is actively being developed. Stable versions are released on the main branch.***
 
 ### 1. Prerequisites: 
-- Supports both python2 and python3.
+- Either python2 or python3.
 - `intervaltree` (python library):  `pip install intervaltree`
 - `scipy` (python library): `pip install scipy`
 - `$AA_DATA_REPO` environment variable. For instructions see [AmpliconArchitect installation](https://github.com/jluebeck/AmpliconArchitect#data-repositories). 
