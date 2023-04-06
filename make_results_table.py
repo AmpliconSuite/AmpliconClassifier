@@ -238,7 +238,6 @@ if __name__ == "__main__":
             cfile_dir = os.path.dirname(cycles_file)
             if (sample_name, cfile_dir) in sumf_dict:
                 sumf = sumf_dict[(sample_name, cfile_dir)]
-                sumf_used.add((sample_name, cfile_dir))
             else:
                 sumf = "Not provided"
 
@@ -267,12 +266,15 @@ if __name__ == "__main__":
 
             amps_classes = []
             if classD["ecDNA+"] == "Positive":
+                sumf_used.add((sample_name, cfile_dir))
                 amps_classes.append(("ecDNA", int(classD["ecDNA_amplicons"])))
 
             if classD["BFB+"] == "Positive":
+                sumf_used.add((sample_name, cfile_dir))
                 amps_classes.append(("BFB", 1))
 
             elif not amps_classes and classD["amplicon_decomposition_class"] != "No amp/Invalid":
+                sumf_used.add((sample_name, cfile_dir))
                 amps_classes.append((classD["amplicon_decomposition_class"], 1))
 
             curr_sample_metadata = sample_metadata_dict[sample_name]
@@ -328,7 +330,7 @@ if __name__ == "__main__":
                     [sumf, run_metadata_path[sample_name], sample_metadata_path[sample_name]])
 
         for k in set(sumf_dict.keys()) - sumf_used:
-            print(k[0] + " had no AA amplicons")
+            print(k[0] + " had no valid AA amplicons")
             sumf = sumf_dict[k]
             sample_name = k[0]
             AA_amplicon_number = "NA"
