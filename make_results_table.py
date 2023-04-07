@@ -136,7 +136,13 @@ if __name__ == "__main__":
                                                     " multiple samples).", default="")
     parser.add_argument("--sample_cnv_bed_list", help="Path of two-column file mapping sample name to CNV_CALLS.bed"
                                                       " file (for multiple samples).", default="")
+    parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38. "
+                                      "Required if --run_metadata_file or --run_metadata_list are not set",
+                        choices=["hg19", "GRCh37", "GRCh38", "GRCh38_viral", "mm10"])
     args = parser.parse_args()
+
+    if not args.run_metadata_file and not args.run_metadata_list and not args.ref:
+        sys.stderr.write("One of the following must be provided: --ref | --run_metadata_list | --run_medata_file\n")
 
     output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Oncogenes",
                    "All genes", "Complexity score", "Captured interval length", "Feature median copy number",
@@ -280,6 +286,8 @@ if __name__ == "__main__":
             curr_sample_metadata = sample_metadata_dict[sample_name]
             cnv_bed_path = sample_cnv_calls_path[sample_name]
             curr_run_metadata = run_metadata_dict[sample_name]
+            if curr_run_metadata['ref_genome'] == "NA" and args.ref:
+                curr_run_metadata['ref_genome'] = args.ref
             # print(curr_run_metadata)
 
             # Get the AC intervals, genes and complexity
@@ -345,6 +353,9 @@ if __name__ == "__main__":
             curr_sample_metadata = sample_metadata_dict[sample_name]
             cnv_bed_path = sample_cnv_calls_path[sample_name]
             curr_run_metadata = run_metadata_dict[sample_name]
+            if curr_run_metadata['ref_genome'] == "NA" and args.ref:
+                curr_run_metadata["ref_genome"] = args.ref
+
             fdl = [featureID, feature, intervals, oncogenes, all_genes, complexity] + basic_stats + \
                   [curr_run_metadata["ref_genome"], curr_sample_metadata["tissue_of_origin"],
                    curr_sample_metadata["sample_type"], os.path.abspath(featureBed), cnv_bed_path]
