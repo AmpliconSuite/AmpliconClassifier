@@ -228,10 +228,10 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                 for c_id in cycleList[o_ind]:
                     if abs(c_id) not in used_segs:
                         chrom, l, r = segSeqD[abs(c_id)]
+                        # print("used: ", used_segs)
                         if not used_segs[chrom][l:r] and not chrom is None:
-                            used_segs[chrom].addi(l, r+1)
+                            # used_segs[chrom].addi(l, r+1)
                             other_class_c_inds.append(o_ind)
-                            # other_interval_dict[chrom].append((l, r))
                             # chop out low cn regions
                             seg_t = IntervalTree([Interval(l, r + 1)])
                             olapping_low_cns = [x for x in graph_cns[chrom][l:r + 1] if x.data < 4]
