@@ -12,8 +12,8 @@ This tool classifies the outputs of AmpliconArchitect, [which is available here]
 
 If using AmpliconClassifier (current version, not legacy version), please cite:
 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Luebeck et al., [Extrachromosomal DNA in the cancerous transformation of Barrett's esophagus](https://www.biorxiv.org/content/10.1101/2022.07.25.501144v1).
-*biorXiv*. 2022.
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Luebeck et al., [Extrachromosomal DNA in the cancerous transformation of Barrett's esophagus](https://www.nature.com/articles/s41586-023-05937-5).
+*Nature*. 2023.
 
 If referring to the legacy version, see the section at the end of the README.
 <br />
@@ -88,18 +88,18 @@ Because an ecDNA may overlap with a BFB, they are reported separately.
 #### ****`[output_prefix]_gene_list.tsv`****
 Reports the genes present on amplicons with each classification, and which genomic feature (e.g. ecDNA_1, BFB_1, etc), it is located on, along with the copy number and which end(s) of the gene have been lost ("truncated"), will be one of `None`, `5p` (5-prime end), `3p` (3-prime end) or `5p_3p` if both. Genes are sourced from RefGene and most lncRNAs and micro-RNAs are excluded from the report.
 
- | Column name                    | Contents                                                                                                                                                                                |
-|--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `sample_name`                  | Sample name prefix |
-| `amplicon_number`              | AA amplicon index, e.g. `amplicon2` |
-| `feature` | Which feature inside the amplicon the gene is present on. May be `unknown` if cannot be confidently assigned to a feature. |
-| `gene`                       | Gene name (RefGene) |
-| `gene_cn`                         | Maximum copy number of genomic segments (larger than 1kbp) overlapping the gene, as reported by AA |
-| `truncated`              | Which end(s) of the gene have been lost ("truncated"), will be one of `None`, `5p` (5-prime end), `3p` (3-prime end) or `5p_3p` if both |
-| `is_canonical_oncogene` | Reports if gene is present in [COSMIC](https://cancer.sanger.ac.uk/cosmic/curation), [ONGene](https://ongene.bioinfo-minzhao.org/), or the combined oncogene lists reported in [Luebeck et al. biorXiv, 2022](https://www.biorxiv.org/content/10.1101/2022.07.25.501144v1). |
+ | Column name                    | Contents                                                                                                                                                                                                                                                                   |
+|--------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `sample_name`                  | Sample name prefix                                                                                                                                                                                                                                                         |
+| `amplicon_number`              | AA amplicon index, e.g. `amplicon2`                                                                                                                                                                                                                                        |
+| `feature` | Which feature inside the amplicon the gene is present on. May be `unknown` if cannot be confidently assigned to a feature.                                                                                                                                                 |
+| `gene`                       | Gene name (RefGene)                                                                                                                                                                                                                                                        |
+| `gene_cn`                         | Maximum copy number of genomic segments (larger than 1kbp) overlapping the gene, as reported by AA                                                                                                                                                                         |
+| `truncated`              | Which end(s) of the gene have been lost ("truncated"), will be one of `None`, `5p` (5-prime end), `3p` (3-prime end) or `5p_3p` if both                                                                                                                                    |
+| `is_canonical_oncogene` | Reports if gene is present in [COSMIC](https://cancer.sanger.ac.uk/cosmic/curation), [ONGene](https://ongene.bioinfo-minzhao.org/), or the combined oncogene lists reported in [Luebeck et al. Nature, 2023](https://www.nature.com/articles/s41586-023-05937-5). |
 
 #### ****`[output_prefix]_feature_entropy.tsv`****
-Reports amplicon complexity scores as measured by the number of genomic segments and the diversity of copy number among all the amplicon decompositions performed by AA. For more information please see [this pre-print](https://www.biorxiv.org/content/10.1101/2022.07.25.501144v1).
+Reports amplicon complexity scores as measured by the number of genomic segments and the diversity of copy number among all the amplicon decompositions performed by AA. For more information please see the Supplementary Information file of [this study](https://www.nature.com/articles/s41586-023-05937-5).
 
  | Column name                    | Contents   |
 |--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -158,7 +158,7 @@ One may wish to compare two overlapping focal amplifications and quantify their 
 or longitudinal sampling. We provide a script which ***a)*** identifies overlap between pairs of amplicons (using the same input file as `amplicon_classifier.py`), 
 ***b)*** computes measurements of the similarity of the two overlapping amplicons based on shared breakpoints and shared genomic content - 
 using both a Jaccard index approach and also our own *Symmetric Similarity Score* and *Asymmetric Similarity Score* approaches, and ***c)*** compares the scores against
-the similarity scores for overlapping amplicons derived from unrelated origins (data derived from Turner et al. _Nature_ 2017 and deCarvalho et al. _Nature Genetics_ 2018, Bergstrom et al. _Nature_ 2020 and Paulson et al. _Nature Communications_).
+the similarity scores for overlapping amplicons derived from unrelated origins (data derived from Turner et al. _Nature_ 2017 and deCarvalho et al. _Nature Genetics_ 2018, Bergstrom et al. _Nature_ 2020 and Paulson et al. _Nature Communications_ 2022).
 The output file `*_similarity_scores.tsv` reports the following columns:
 - Amplicon 1 ID & Amplicon 2 ID
 - Symmetric Similarity Score (a combination of GenomicSegment and Breakpoint scores)
