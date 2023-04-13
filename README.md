@@ -98,7 +98,7 @@ Reports the genes present on amplicons with each classification, and which genom
 | `truncated`              | Which end(s) of the gene have been lost ("truncated"), will be one of `None`, `5p` (5-prime end), `3p` (3-prime end) or `5p_3p` if both |
 | `is_canonical_oncogene` | Reports if gene is present in [COSMIC](https://cancer.sanger.ac.uk/cosmic/curation), [ONGene](https://ongene.bioinfo-minzhao.org/), or the combined oncogene lists reported in [Luebeck et al. biorXiv, 2022](https://www.biorxiv.org/content/10.1101/2022.07.25.501144v1). |
 
-#### ****`[output_prefix]_gene_list.tsv`****
+#### ****`[output_prefix]_feature_entropy.tsv`****
 Reports amplicon complexity scores as measured by the number of genomic segments and the diversity of copy number among all the amplicon decompositions performed by AA. For more information please see [this pre-print](https://www.biorxiv.org/content/10.1101/2022.07.25.501144v1).
 
  | Column name                    | Contents   |
@@ -115,6 +115,10 @@ Reports amplicon complexity scores as measured by the number of genomic segments
 
 Additionally, there are three directories that can be created by `amplicon_classifier.py`. They are
 - `[prefix]_classification_bed_files/`, which contains bed files of the regions classified into each feature. May contain bed files marked `unknown` if the region could not be confidently assigned.
+  - The bed files report genomic intervals using a [0-based, half-open counting system](https://genome-blog.soe.ucsc.edu/blog/2016/12/12/the-ucsc-genome-browser-coordinate-counting-systems/). This is the same system used by the UCSC genome browser.
+  - By contrast, AmpliconArchitect's graph and cycles files report genomic coordinates using a 0-based, fully closed counting system. This means that intervals reported by AC will contain one additional base on the second coordinate, which is not part of the amplicon (half-open).
+  - Intervals reported in these bed files do not represent the structure of ecDNA, and may face limitations related to missing SVs or inexactly refined amplicon endpoints (a limitation of short-reads).
+
 - `[prefix]_SV_summaries/`, which contains tab-separated files summarizing the SVs detected by AA and what features the overlap in the amplicon.
 - `[prefix]_annotated_cycles_files/`, which contains AA cycles files with additional annotations about length of discovered paths/cycles and their classification status.
 
