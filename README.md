@@ -69,7 +69,7 @@ If combining data from both GRCh37 and hg19 in the same classification run, you 
 
 ### 3. Output:
 
-#### ****`[output_prefix]_amplicon_classification_profiles.tsv`**** 
+#### ****`[prefix]_amplicon_classification_profiles.tsv`**** 
 
 Contains an abstract classification of the amplicon, and also indicates in separate columns "BFB+" and "ecDNA+" status.
 Note that amplicons receiving a "Cyclic" classification may be ecDNA+, BFB+ or both.
@@ -85,7 +85,7 @@ Note that amplicons receiving a "Cyclic" classification may be ecDNA+, BFB+ or b
 
 Because an ecDNA may overlap with a BFB, they are reported separately.
 
-#### ****`[output_prefix]_gene_list.tsv`****
+#### ****`[prefix]_gene_list.tsv`****
 Reports the genes present on amplicons with each classification, and which genomic feature (e.g. ecDNA_1, BFB_1, etc), it is located on, along with the copy number and which end(s) of the gene have been lost ("truncated"), will be one of `None`, `5p` (5-prime end), `3p` (3-prime end) or `5p_3p` if both. Genes are sourced from RefGene and most lncRNAs and micro-RNAs are excluded from the report.
 
  | Column name                    | Contents                                                                                                                                                                                                                                                                   |
@@ -96,9 +96,12 @@ Reports the genes present on amplicons with each classification, and which genom
 | `gene`                       | Gene name (RefGene)                                                                                                                                                                                                                                                        |
 | `gene_cn`                         | Maximum copy number of genomic segments (larger than 1kbp) overlapping the gene, as reported by AA                                                                                                                                                                         |
 | `truncated`              | Which end(s) of the gene have been lost ("truncated"), will be one of `None`, `5p` (5-prime end), `3p` (3-prime end) or `5p_3p` if both                                                                                                                                    |
-| `is_canonical_oncogene` | Reports if gene is present in [COSMIC](https://cancer.sanger.ac.uk/cosmic/curation), [ONGene](https://ongene.bioinfo-minzhao.org/), or the combined oncogene lists reported in [Luebeck et al. Nature, 2023](https://www.nature.com/articles/s41586-023-05937-5). |
+| `is_canonical_oncogene` | Reports if gene is present in [COSMIC](https://cancer.sanger.ac.uk/cosmic/curation), [ONGene](https://ongene.bioinfo-minzhao.org/). |
 
-#### ****`[output_prefix]_feature_entropy.tsv`****
+#### ****`[prefix]_feature_basic_properties.tsv`****
+Reports a table of basic properties such as size of captured regions, median and max CN, and a flag field to report if the call is "borderline" (ecDNA with CN < 8, other classes with CN < 5).
+
+#### ****`[prefix]_feature_entropy.tsv`****
 Reports amplicon complexity scores as measured by the number of genomic segments and the diversity of copy number among all the amplicon decompositions performed by AA. For more information please see the Supplementary Information file of [this study](https://www.nature.com/articles/s41586-023-05937-5).
 
  | Column name                    | Contents   |
@@ -110,10 +113,12 @@ Reports amplicon complexity scores as measured by the number of genomic segments
 | `decomp_entropy`                         | Amount of entropy or diversity captured in the AA decompositions overlapping this feature. |
 | `Amp_nseg_entropy`              | Amount of entropy or diversity captured by the number of genomic segments overlapping this feature. |
 
- #### ****`[output_prefix]_ecDNA_counts.tsv`****
- This two-column file reports the `sample_name` and the number of ecDNA identified in the sample across all amplicons from the sample.
 
-Additionally, there are three directories that can be created by `amplicon_classifier.py`. They are
+#### ****`[output_prefix]_ecDNA_counts.tsv`****
+This two-column file reports the `sample_name` and the number of ecDNA identified in the sample across all amplicons from the sample.
+
+#### Amplicon bed files, annotated cycles, and SV summaries
+Additionally, there are three directories  created by `amplicon_classifier.py`. They are
 - `[prefix]_classification_bed_files/`, which contains bed files of the regions classified into each feature. May contain bed files marked `unknown` if the region could not be confidently assigned.
   - The bed files report genomic intervals using a [0-based, half-open counting system](https://genome-blog.soe.ucsc.edu/blog/2016/12/12/the-ucsc-genome-browser-coordinate-counting-systems/). This is the same system used by the UCSC genome browser.
   - By contrast, AmpliconArchitect's graph and cycles files report genomic coordinates using a 0-based, fully closed counting system. This means that intervals reported by AC will contain one additional base on the second coordinate, which is not part of the amplicon (half-open).
