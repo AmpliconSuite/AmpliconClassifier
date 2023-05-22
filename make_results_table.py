@@ -123,7 +123,8 @@ if __name__ == "__main__":
                         "sample_name cycles.txt graph.txt.", required=True)
     parser.add_argument("--classification_file", help="Path of amplicon_classification_profiles.tsv file",
                         required=True)
-    parser.add_argument("--summary_map", help="Path to the _summary_map.txt file produced by make_input.sh", default="")
+    parser.add_argument("--summary_map", help="Path to the _summary_map.txt file produced by make_input.sh",
+                        required=True)
     parser.add_argument("--sample_metadata_file", help="Path of sample metadata, [sample]_sample_metadata.json file"
                                                        " (for building table with a single sample).", default="")
     parser.add_argument("--run_metadata_file", help="Path of run metadata, [sample]_run_metadata.json file (for "

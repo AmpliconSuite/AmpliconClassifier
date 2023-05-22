@@ -58,17 +58,17 @@ if __name__ == "__main__":
     lcD, cg5D = set_lcd(AA_DATA_REPO, args.no_LC_filter)
 
     if "any" in args.required_classifications:
-        required_classes = {"ecDNA", "BFB", "Complex non-cyclic", "Linear amplification"}
+        required_classes = {"ecDNA", "BFB", "Complex-non-cyclic", "Linear"}
     else:
         required_classes = set(args.required_classifications)
 
     if "CNC" in required_classes:
         required_classes.remove("CNC")
-        required_classes.add("Complex non-cyclic")
+        required_classes.add("Complex-non-cyclic")
 
     if "Linear" in required_classes:
         required_classes.remove("Linear")
-        required_classes.add("Linear amplification")
+        required_classes.add("Linear")
 
     print("Required classifications set to")
     print(required_classes)

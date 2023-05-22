@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.4.16"
+__version__ = "0.5.0"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
@@ -14,8 +14,10 @@ from ac_io import *
 from radar_plotting import *
 
 tot_min_del = 5000  # minimum size of deletion before non-trivial
-minCycleSize = 10000
+minCycleSize = 5000
 compCycContCut = 50000
+anyCycContcut = 10000
+ampLenOverMinCN = 5000
 cycCut = 0.12
 compCut = 0.3
 min_upper_cn = 4.5
@@ -51,8 +53,7 @@ def get_diff(e1, e2, segSeqD):
 
 
 def isCircular(cycle):
-    circular = False if cycle[0] == 0 and cycle[-1] == 0 else True
-    return circular
+    return cycle[0] != 0 or cycle[-1] != 0
 
 
 def isRearranged(cycle, segSeqD):
@@ -84,11 +85,8 @@ def tot_rearr_edges(graphf, add_chr_tag):
             if line.startswith("discordant"):
                 fields = line.rstrip().rsplit()
                 lbp, rbp = fields[1].split("->")
-                lchrom, lpd = lbp.rsplit(":")
-                rchrom, rpd = rbp.rsplit(":")
-                if add_chr_tag and not lchrom.startswith("chr"):
-                    lchrom = "chr" + lchrom
-                    rchrom = "chr" + rchrom
+                _, lpd = lbp.rsplit(":")
+                _, rpd = rbp.rsplit(":")
 
                 lpos, ldir = int(lpd[:-1]), lpd[-1]
                 rpos, rdir = int(rpd[:-1]), rpd[-1]
@@ -252,6 +250,9 @@ def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs):
         if length > 100000 and cycleCNs[ind] > 5:
             return True
 
+        elif args.ref == "GRCh38_viral" and is_human_viral_hybrid(args.ref, cycle, segSeqD):
+            return True
+
     return False
 
 
@@ -349,7 +350,11 @@ def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN):
     if (cn <= scale) or (maxCN < min_upper_cn):
         return True
 
+
     length = get_size(cycle, segSeqD)
+    if is_human_viral_hybrid(args.ref, cycle, segSeqD):
+        return False
+
     return length < minCycleSize
 
 
@@ -373,29 +378,32 @@ def classifyConnections(cycleSet1, cycleSet2, clfs):
     return resultDict
 
 
-# categories = ["No amp/Invalid", "Linear amplification", "Trivial cycle", "Complex non-cyclic", "Complex cyclic"]
-def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCyclicCont, totCyclicCont, tot_over_min_cn, force=False):
-    cycSig = amp_profile["Trivial cycle"] + amp_profile["Complex cyclic"]
-    if (cycSig > cycCut or totalCompCyclicCont > compCycContCut) and totCyclicCont > 10000 and tot_over_min_cn > 5000:
+# categories = ["No amp/Invalid", "Linear", "Trivial cycle", "Complex-non-cyclic", "Complex-cyclic"]
+def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCyclicCont, totCyclicCont, tot_over_min_cn, has_hybrid, force=False):
+    cycSig = amp_profile["Trivial cycle"] + amp_profile["Complex-cyclic"]
+    if (cycSig > cycCut or totalCompCyclicCont > compCycContCut) and totCyclicCont > anyCycContcut and tot_over_min_cn > ampLenOverMinCN:
         return "Cyclic"
 
-    elif amp_profile["Complex non-cyclic"] + cycSig > compCut:
-        if rearr_e > 1 and tot_over_min_cn > 5000:
-            return "Complex non-cyclic"
+    elif has_hybrid and totCyclicCont > 1000 and tot_over_min_cn > 1000:
+        return "Cyclic"
+
+    elif amp_profile["Complex-non-cyclic"] + cycSig > compCut:
+        if rearr_e > 1 and tot_over_min_cn > ampLenOverMinCN:
+            return "Complex-non-cyclic"
 
         else:
-            return "Linear amplification"
+            return "Linear"
 
     else:
         if max(amp_profile.values()) == 0:
             return "No amp/Invalid"
 
         elif amp_profile["No amp/Invalid"] > 0:
-            if amp_profile["Linear amplification"] / float(amp_profile["No amp/Invalid"]) > 0.25:
+            if amp_profile["Linear"] / float(amp_profile["No amp/Invalid"]) > 0.25:
                 if rearr_e >= 5:
-                    return "Complex non-cyclic"
+                    return "Complex-non-cyclic"
 
-                return "Linear amplification"
+                return "Linear"
 
         if force:
             del amp_profile["No amp/Invalid"]
@@ -465,7 +473,7 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, graph_cns, excludableCycleIndi
         cycle = cycleList[ind]
         csize = get_size(cycle, segSeqD)
         total_EC_size+=csize
-        if cycleCNs[ind] < args.min_flow and csize < minCycleSize:
+        if cycleCNs[ind] < args.min_flow and csize < minCycleSize and not is_human_viral_hybrid(args.ref, cycle, segSeqD):
             continue
 
         cIndsToMerge = set()
@@ -540,7 +548,7 @@ def filter_similar_amplicons(n_files):
     print("\nSamples are assumed to be independent as --filter_similar was set.\nFiltering highly similar amplicons"
           " across independent samples...\n")
     print("adjusted p-value cutoff set to 0.05/{}={}".format(str(n_files), str(pval)))
-    required_classes = {"ecDNA", "BFB", "Complex non-cyclic", "Linear amplification"}
+    required_classes = {"ecDNA", "BFB", "Complex-non-cyclic", "Linear"}
     cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
     cg5D = build_CG5_database(cg5Path)
     add_chr_tag = args.add_chr_tag
@@ -709,8 +717,11 @@ def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn):
     totCyclicCont = 0
     AMP_dvaluesDict = {x: 0.0 for x in categories}
     invalidInds = []
-
+    has_hybrid = False
+    chromSet = set()
     for ind, cycle in enumerate(cycleList):
+        has_hybrid = has_hybrid or is_human_viral_hybrid(args.ref, cycle, segSeqD)
+        chromSet |= set([segSeqD[abs(ind)][0] for ind in cycle if ind != 0])
         hasNonCircLen1 = True if len(cycle) == 3 and cycle[0] == 0 else False
         oneCycle = (len(cycleList) == 1)
         isSingleton = hasNonCircLen1 or oneCycle
@@ -740,7 +751,12 @@ def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn):
 
     # anything stored in AMP_dvaluesDict prior to running classify will get used in classification
     # make sure you're not putting in other properties before here.
-    ampClass = classifyAmpliconProfile(AMP_dvaluesDict, rearr_e, totalCompCyclicCont, totCyclicCont, tot_over_min_cn)
+
+    if args.ref == "GRCh38_viral" and not any([x.startswith("chr") for x in chromSet]) and sum(cycleWeights) >= 1:
+        ampClass = "Virus"
+
+    else:
+        ampClass = classifyAmpliconProfile(AMP_dvaluesDict, rearr_e, totalCompCyclicCont, totCyclicCont, tot_over_min_cn, has_hybrid)
 
     return totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights, rearrCycleInds
 
@@ -801,7 +817,7 @@ def run_classification(segSeqD, cycleList, cycleCNs):
     # if no ecDNA-like intervals were identified, update and re-call.
     if ecStat and not ecIndexClusters:
         if not bfbStat:
-            remaining_classes = ["No amp/Invalid", "Linear amplification", "Complex non-cyclic"]
+            remaining_classes = ["No amp/Invalid", "Linear", "Complex-non-cyclic"]
             remaining_scores = [AMP_dvaluesDict[x] for x in remaining_classes]
             ampClass = remaining_classes[remaining_scores.index(max(remaining_scores))]
 
@@ -883,10 +899,11 @@ Amplicon Classes:
 #if not invalid
 
 1) No amp/Invalid
-2) Linear amplification
-3) Complex non-cyclic
-4) BFB
-5) Cyclic (ecDNA)
+2) Linear
+3) Complex-non-cyclic
+4) Virus (viral episome w/out human DNA attached in amplicon)
+5) BFB
+6) Cyclic (ecDNA)
 
 Graph edge classes:
 1) No amp/Invalid
@@ -899,30 +916,30 @@ Graph edge classes:
 
 mixLookups = {
     frozenset(["No amp/Invalid", ]): "No amp/Invalid",
-    frozenset(["No amp/Invalid", "Linear amplification"]): "Integration",
+    frozenset(["No amp/Invalid", "Linear"]): "Integration",
     frozenset(["No amp/Invalid", "Trivial cycle"]): "Integration",
-    frozenset(["No amp/Invalid", "Complex non-cyclic"]): "Integration",
-    frozenset(["No amp/Invalid", "Complex cyclic"]): "Integration",
-    frozenset(["Linear amplification"]): "Non-cyclic",
-    frozenset(["Linear amplification", "Trivial cycle"]): "Integration",
-    frozenset(["Linear amplification", "Complex non-cyclic"]): "Non-cyclic",
-    frozenset(["Linear amplification", "Complex cyclic"]): "Integration",
+    frozenset(["No amp/Invalid", "Complex-non-cyclic"]): "Integration",
+    frozenset(["No amp/Invalid", "Complex-cyclic"]): "Integration",
+    frozenset(["Linear"]): "Non-cyclic",
+    frozenset(["Linear", "Trivial cycle"]): "Integration",
+    frozenset(["Linear", "Complex-non-cyclic"]): "Non-cyclic",
+    frozenset(["Linear", "Complex-cyclic"]): "Integration",
     frozenset(["Trivial cycle"]): "Cyclic",
-    frozenset(["Trivial cycle", "Complex non-cyclic"]): "Hybrid",
-    frozenset(["Trivial cycle", "Complex cyclic"]): "Cyclic",
-    frozenset(["Complex non-cyclic"]): "Non-cyclic",
-    frozenset(["Complex non-cyclic", "Complex cyclic"]): "Hybrid",
-    frozenset(["Complex cyclic"]): "Cyclic",
+    frozenset(["Trivial cycle", "Complex-non-cyclic"]): "Hybrid",
+    frozenset(["Trivial cycle", "Complex-cyclic"]): "Cyclic",
+    frozenset(["Complex-non-cyclic"]): "Non-cyclic",
+    frozenset(["Complex-non-cyclic", "Complex-cyclic"]): "Hybrid",
+    frozenset(["Complex-cyclic"]): "Cyclic",
 }
 
 # (circular,complex)
-categories = ["No amp/Invalid", "Linear amplification", "Trivial cycle", "Complex non-cyclic", "Complex cyclic",
+categories = ["No amp/Invalid", "Linear", "Trivial cycle", "Complex-non-cyclic", "Complex-cyclic",
               "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp", "Amp_entropy", "Amp_decomp_entropy",
               "Amp_nseg_entropy"]
 mixing_cats = ["No amp/Invalid", "Non-cyclic", "Integration", "Hybrid", "Cyclic"]
 
-ampDefs = {(False, False): "Linear amplification", (False, True): "Complex non-cyclic",
-           (True, False): "Trivial cycle", (True, True): "Complex cyclic"}
+ampDefs = {(False, False): "Linear", (False, True): "Complex-non-cyclic",
+           (True, False): "Trivial cycle", (True, True): "Complex-cyclic"}
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Classify AA amplicon type")
@@ -936,7 +953,7 @@ if __name__ == "__main__":
     parser.add_argument("--min_flow", type=float, help="Minimum flow to consider among decomposed paths (1.0).",
                         default=1.0)
     parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon "
-                        "(5000).", default=5000)
+                        "(5000).")
     parser.add_argument("-o", help="Output filename prefix")
     parser.add_argument("--plotstyle", help="Type of visualizations to produce.",
                         choices=["grouped", "individual", "noplot"], default="noplot")
@@ -945,8 +962,8 @@ if __name__ == "__main__":
     #                     action='store_true')
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files.",
                         action='store_true')
-    parser.add_argument("--report_complexity", help="Compute a measure of amplicon entropy for each amplicon.",
-                        action='store_true')
+    parser.add_argument("--report_complexity", help="[Deprecated - on by default] Compute a measure of amplicon entropy"
+                        " for each amplicon.", action='store_true', default=True)
     parser.add_argument("--verbose_classification", help="Generate verbose output with raw classification scores.",
                         action='store_true')
     parser.add_argument("--no_LC_filter", help="Do not filter low-complexity cycles. Not recommended to set this flag.",
@@ -1022,7 +1039,8 @@ if __name__ == "__main__":
     if not os.path.exists(outdir_loc) and outdir_loc != "":
         os.makedirs(outdir_loc)
 
-    minCycleSize = args.min_size
+    if args.min_size:
+        minCycleSize = args.min_size
 
     # read the gene list
     refGeneFileLoc = AA_DATA_REPO + fDict["gene_filename"]

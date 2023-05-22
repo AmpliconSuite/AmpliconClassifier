@@ -195,8 +195,6 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                         for x in seg_t:
                             bfb_interval_dict[chrom].append((x.begin, x.end))
 
-
-
         feature_dict["BFB_1"] = bfb_interval_dict
 
     if ecStat:
