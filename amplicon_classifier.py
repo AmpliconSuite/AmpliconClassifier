@@ -339,7 +339,9 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, add
 # ------------------------------------------------------------
 # Classifications
 def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN):
-    # CN flow can be split across multiple amps
+    if is_viral(args.ref, cycle, segSeqD):
+        return False
+
     if not isSingleton:
         scale = min(args.min_flow, maxCN * decomposition_strictness)
     elif maxCN > 7:
@@ -350,11 +352,7 @@ def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN):
     if (cn <= scale) or (maxCN < min_upper_cn):
         return True
 
-
     length = get_size(cycle, segSeqD)
-    if is_human_viral_hybrid(args.ref, cycle, segSeqD):
-        return False
-
     return length < minCycleSize
 
 
@@ -380,11 +378,14 @@ def classifyConnections(cycleSet1, cycleSet2, clfs):
 
 # categories = ["No amp/Invalid", "Linear", "Trivial cycle", "Complex-non-cyclic", "Complex-cyclic"]
 def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCyclicCont, totCyclicCont, tot_over_min_cn, has_hybrid, force=False):
+    if amp_profile["Virus"] == 1:
+        return "Virus"
+
     cycSig = amp_profile["Trivial cycle"] + amp_profile["Complex-cyclic"]
     if (cycSig > cycCut or totalCompCyclicCont > compCycContCut) and totCyclicCont > anyCycContcut and tot_over_min_cn > ampLenOverMinCN:
         return "Cyclic"
 
-    elif has_hybrid and totCyclicCont > 1000 and tot_over_min_cn > 1000:
+    elif has_hybrid and totCyclicCont > anyCycContcut:
         return "Cyclic"
 
     elif amp_profile["Complex-non-cyclic"] + cycSig > compCut:
@@ -732,15 +733,19 @@ def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn):
         else:
             circCyc = isCircular(cycle)
             compCyc = isRearranged(cycle, segSeqD)
-            if compCyc:
-                rearrCycleInds.add(ind)
+            if args.ref == "GRCh38_viral" and not any([x.startswith("chr") for x in chromSet]):
+                cycleTypes.append("Virus")
+
+            else:
+                if compCyc:
+                    rearrCycleInds.add(ind)
+                    if circCyc:
+                        totalCompCyclicCont += get_size(cycle, segSeqD)
+
                 if circCyc:
-                    totalCompCyclicCont += get_size(cycle, segSeqD)
+                    totCyclicCont += get_size(cycle, segSeqD)
 
-            if circCyc:
-                totCyclicCont += get_size(cycle, segSeqD)
-
-            cycleTypes.append(ampDefs[(circCyc, compCyc)])
+                cycleTypes.append(ampDefs[(circCyc, compCyc)])
 
         currWt = weightedCycleAmount(cycle, cycleCNs[ind], segSeqD)
         cycleWeights.append(currWt)
@@ -751,12 +756,7 @@ def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn):
 
     # anything stored in AMP_dvaluesDict prior to running classify will get used in classification
     # make sure you're not putting in other properties before here.
-
-    if args.ref == "GRCh38_viral" and not any([x.startswith("chr") for x in chromSet]) and sum(cycleWeights) >= 1:
-        ampClass = "Virus"
-
-    else:
-        ampClass = classifyAmpliconProfile(AMP_dvaluesDict, rearr_e, totalCompCyclicCont, totCyclicCont, tot_over_min_cn, has_hybrid)
+    ampClass = classifyAmpliconProfile(AMP_dvaluesDict, rearr_e, totalCompCyclicCont, totCyclicCont, tot_over_min_cn, has_hybrid)
 
     return totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights, rearrCycleInds
 
@@ -844,7 +844,7 @@ def run_classification(segSeqD, cycleList, cycleCNs):
         featEntropyD[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
 
     bpg_linelist, gseg_cn_d, other_class_c_inds, feature_dict, prop_dict = amplicon_annotation(cycleList, segSeqD,
-        bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass, graphFile, args.add_chr_tag, lcD)
+        bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass, graphFile, args.add_chr_tag, lcD, args.ref)
 
     bpgi_list.append(bpg_linelist)
     fd_list.append(feature_dict)
@@ -930,10 +930,11 @@ mixLookups = {
     frozenset(["Complex-non-cyclic"]): "Non-cyclic",
     frozenset(["Complex-non-cyclic", "Complex-cyclic"]): "Hybrid",
     frozenset(["Complex-cyclic"]): "Cyclic",
+    frozenset(["Virus"]): "Virus",
 }
 
 # (circular,complex)
-categories = ["No amp/Invalid", "Linear", "Trivial cycle", "Complex-non-cyclic", "Complex-cyclic",
+categories = ["No amp/Invalid", "Linear", "Trivial cycle", "Complex-non-cyclic", "Complex-cyclic", "Virus",
               "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp", "Amp_entropy", "Amp_decomp_entropy",
               "Amp_nseg_entropy"]
 mixing_cats = ["No amp/Invalid", "Non-cyclic", "Integration", "Hybrid", "Cyclic"]

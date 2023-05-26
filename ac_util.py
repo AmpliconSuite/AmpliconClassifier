@@ -44,6 +44,10 @@ def is_human_viral_hybrid(ref, cycle, segSeqD):
     return ref == "GRCh38_viral" and any([not x.startswith("chr") for x in chromList]) and any([x.startswith("chr") for x in chromList])
 
 
+def is_viral(ref, cycle, segSeqD):
+    chromList = [segSeqD[abs(ind)][0] for ind in cycle if ind != 0]
+    return ref == "GRCh38_viral" and any([not x.startswith("chr") for x in chromList])
+
 def get_amp_outside_bounds(graphf, add_chr_tag):
     # get the interval of the first amp (x)
     # get the interval of the last amp (y)

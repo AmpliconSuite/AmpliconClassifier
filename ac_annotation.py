@@ -168,7 +168,7 @@ def amplicon_len_and_cn(feature_dict, gseg_cn_d):
 
 
 def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass,
-                        graphf, add_chr_tag, lcD):
+                        graphf, add_chr_tag, lcD, ref):
     feature_dict = {}
     gseg_cn_d = get_gseg_cns(graphf, add_chr_tag)
     invalidSet = set(invalidInds)
@@ -188,7 +188,7 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                         # bfb_interval_dict[chrom].append((l, r))
                         # chop out low cn regions
                         seg_t = IntervalTree([Interval(l, r + 1)])
-                        olapping_low_cns = [x for x in graph_cns[chrom][l:r + 1] if x.data < 4]
+                        olapping_low_cns = [x for x in graph_cns[chrom][l:r + 1] if x.data < 4 and not is_human_viral_hybrid(ref, cycleList[b_ind], segSeqD)]
                         for x in olapping_low_cns:
                             seg_t.chop(x.begin, x.end + 1)
 
@@ -210,7 +210,7 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                             used_segs[chrom].addi(l, r+1)
                             # chop out low cn regions
                             seg_t = IntervalTree([Interval(l, r+1)])
-                            olapping_low_cns = [x for x in graph_cns[chrom][l:r+1] if x.data < 4]
+                            olapping_low_cns = [x for x in graph_cns[chrom][l:r+1] if x.data < 4 and not is_human_viral_hybrid(ref, cycleList[e_ind], segSeqD)]
                             for x in olapping_low_cns:
                                 seg_t.chop(x.begin, x.end+1)
 
@@ -232,7 +232,7 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                             other_class_c_inds.append(o_ind)
                             # chop out low cn regions
                             seg_t = IntervalTree([Interval(l, r + 1)])
-                            olapping_low_cns = [x for x in graph_cns[chrom][l:r + 1] if x.data < 4]
+                            olapping_low_cns = [x for x in graph_cns[chrom][l:r + 1] if x.data < 4 and ampClass != "Virus"]
                             for x in olapping_low_cns:
                                 seg_t.chop(x.begin, x.end + 1)
 
