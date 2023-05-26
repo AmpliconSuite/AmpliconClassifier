@@ -415,12 +415,16 @@ def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCyclicCont, totCyclic
         return maxCat
 
 
-def classifyBFB(fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN):
+def classifyBFB(fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN, tot_over_min_cn):
     if fb < min_score_for_bfb or cyc_sig < 0.295 or maxCN < 4:
         return None
 
     # dominated by non-classical BFB cycles
     elif nonbfb_sig > 0.5 and bfb_cyc_ratio < 0.6:
+        return None
+
+    # too small
+    elif tot_over_min_cn < 20000:
         return None
 
     return "BFB"
@@ -788,7 +792,7 @@ def run_classification(segSeqD, cycleList, cycleCNs):
     AMP_dvaluesDict["BFB_bwp"] = fb_bwp
     AMP_dvaluesDict["Distal_bwp"] = nfb_bwp
     AMP_dvaluesDict["BFB_cwp"] = bfb_cwp
-    bfbClass = classifyBFB(fb_prop, fb_bwp, nfb_bwp, bfb_cwp, maxCN)
+    bfbClass = classifyBFB(fb_prop, fb_bwp, nfb_bwp, bfb_cwp, maxCN, tot_over_min_cn)
 
     ecStat = False
     bfbStat = False
