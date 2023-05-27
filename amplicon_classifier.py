@@ -1080,6 +1080,14 @@ if __name__ == "__main__":
             samp_amp_to_graph[sName + "_" + ampN] = graphFile
             print(sName, ampN)
             segSeqD, cycleList, cycleCNs = parseCycle(cyclesFile, graphFile, args.add_chr_tag, lcD, patch_links)
+            if args.ref == "hg19" or args.ref == "GRCh37":
+                chroms = set([x[0] for k,x in segSeqD.items() if k != 0])
+                if args.ref == "hg19" and not any([x.startswith("chr") for x in chroms]):
+                    print("chrom names: " + str(chroms))
+                    print("Warning! --ref hg19 was set, but chromosome names are not consistent with hg19 ('chr1', 'chr2', etc.)\n")
+                elif args.ref == "GRCh37" and any([x.startswith("chr") for x in chroms]):
+                    print("chrom names: " + str(chroms))
+                    print("Warning! --ref GRCh37 was set, but chromosome names are not consistent with GRCh37 ('1', '2', etc.)\n")
 
         else:
             print(fpair)
