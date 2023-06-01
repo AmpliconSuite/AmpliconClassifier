@@ -156,7 +156,7 @@ Other arguments
 
 ### 5. Other utilities:
 
-#### Amplicon Similarity and Feature Similarity
+#### Feature Similarity
 One may wish to compare two overlapping focal amplifications and quantify their similarity - particularly when they are derived from multi-region 
 or longitudinal sampling. We provide a script which ***a)*** identifies overlap between pairs of amplicons (using the same input file as `amplicon_classifier.py`), 
 ***b)*** computes measurements of the similarity of the two overlapping amplicons based on shared breakpoints and shared genomic content - 
