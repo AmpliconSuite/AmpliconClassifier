@@ -339,7 +339,7 @@ if __name__ == "__main__":
                     [sumf, run_metadata_path[sample_name], sample_metadata_path[sample_name]])
 
         for k in set(sumf_dict.keys()) - sumf_used:
-            print(k[0] + " had no valid AA amplicons")
+            print(k[0] + " had no identifiable focal amplifications in the AA amplicons")
             sumf = sumf_dict[k]
             sample_name = k[0]
             AA_amplicon_number = "NA"
