@@ -4,8 +4,8 @@
 #arg 2: output name
 
 # first, find all the AA graph and cycles files from AA runs.
-touch scf.txt && rm scf.txt
-touch sgf.txt && rm sgf.txt
+rm -f scf.txt
+rm -f sgf.txt
 outpre="${@: -1}"
 for var in ${*%${!#}}
 do
@@ -22,7 +22,7 @@ cat scf.txt | rev | cut -f 1 -d '/' | cut -c12- | rev | sed 's/_amplicon[0-9]*$/
 paste san.txt scf.txt sgf.txt > $outpre.input
 
 # now find the _summary.txt files so that samples are included which did not have corresponding AA outputs.
-touch ssf.txt && rm ssf.txt
+rm -f ssf.txt
 for var in ${*%${!#}}
 do
   exppath=`realpath $var`
@@ -32,5 +32,5 @@ done
 cat ssf.txt | rev | cut -f 1 -d '/' | cut -c13- | rev | sed 's/_summary.txt$//' > ssn.txt
 paste ssn.txt ssf.txt > ${outpre}_summary_map.txt
 
-rm san.txt scf.txt sgf.txt ssf.txt ssn.txt
+rm -f san.txt scf.txt sgf.txt ssf.txt ssn.txt
 

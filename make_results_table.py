@@ -368,7 +368,7 @@ if __name__ == "__main__":
 
 
     tsv_ofname = classBase + "_result_table.tsv"
-    html_ofname = "index.html"
+    # html_ofname = "index.html"
     json_ofname = classBase + "_result_data.json"
 
     with open(tsv_ofname, 'w') as outfile:
@@ -380,5 +380,5 @@ if __name__ == "__main__":
         copy_AA_files(ll, ldir)
 
     write_json_dict(output_table_lines, json_ofname)
-    write_html_table(output_table_lines, html_ofname)
+    # write_html_table(output_table_lines, html_ofname)
     print("Finished creating summary tables for " + str(len(output_table_lines[1:])) + " total entries")
