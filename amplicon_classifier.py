@@ -28,8 +28,6 @@ min_score_for_bfb = 0.25
 fb_dist_cut = 25000
 
 # ------------------------------------------------------------
-
-
 # Methods to compute values used in classification
 def get_size(cycle, segSeqD):
     return sum(segSeqD[abs(x)][2] - segSeqD[abs(x)][1] for x in cycle)
@@ -239,7 +237,7 @@ def compute_f_from_AA_graph(graphf, add_chr_tag):
     if fbEdges < 2:
         return 0, maxCN, tot_over_min_cn
 
-    return fbCount / max(1.0, float(fbCount + nonFbCount)), maxCN, tot_over_min_cn
+    return fbCount, fbCount / max(1.0, float(fbCount + nonFbCount)), maxCN, tot_over_min_cn
 
 
 def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs):
@@ -767,7 +765,8 @@ def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn):
 
 def run_classification(segSeqD, cycleList, cycleCNs):
     graph_cns = get_graph_cns(graphFile, args.add_chr_tag)
-    fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
+    # first compute some properties about the foldbacks and copy numbers
+    fb_count, fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
     rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
 
     totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights, rearrCycleInds = get_raw_cycle_props(
@@ -780,10 +779,6 @@ def run_classification(segSeqD, cycleList, cycleCNs):
     AMP_dvaluesDict["Amp_decomp_entropy"] = decompEnt
     AMP_dvaluesDict["Amp_nseg_entropy"] = nEnt
 
-    # now layer on the bfb classification
-    # first compute some properties
-    fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
-
     fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC, non_bfb_cycle_inds, bfb_cycle_inds = cycles_file_bfb_props(cycleList, segSeqD,
         cycleCNs, invalidInds, graphFile, args.add_chr_tag)
 
@@ -793,6 +788,17 @@ def run_classification(segSeqD, cycleList, cycleCNs):
     AMP_dvaluesDict["Distal_bwp"] = nfb_bwp
     AMP_dvaluesDict["BFB_cwp"] = bfb_cwp
     bfbClass = classifyBFB(fb_prop, fb_bwp, nfb_bwp, bfb_cwp, maxCN, tot_over_min_cn)
+
+    non_fb_rearr_e = rearr_e - fb_count
+    # heuristics to catch sequencing artifact samples
+    if fb_count > 15 and fb_prop > 0.8:
+        bfbClass = False
+        if non_fb_rearr_e >= 4 and tot_over_min_cn > compCycContCut and maxCN > 10:
+            ampClass = "Complex-non-cyclic"
+        elif tot_over_min_cn > compCycContCut and maxCN > 10:
+            ampClass = "Linear"
+        else:
+            ampClass = "No amp/Invalid"
 
     ecStat = False
     bfbStat = False
