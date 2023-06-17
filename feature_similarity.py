@@ -47,14 +47,16 @@ if __name__ == "__main__":
                          "in Readme.\n")
         sys.exit(1)
 
+
+    if args.ref == "hg38": args.ref = "GRCh38"
+    elif args.ref == "GRCm38": args.ref = "mm10"
+
     try:
         AA_DATA_REPO = os.environ["AA_DATA_REPO"] + "/" + args.ref + "/"
     except KeyError:
         sys.stderr.write("$AA_DATA_REPO not set. Please see AA installation instructions.\n")
         sys.exit(1)
 
-    if args.ref == "hg38": args.ref = "GRCh38"
-    elif args.ref == "GRCm38": args.ref = "mm10"
     lcD, cg5D = set_lcd(AA_DATA_REPO, args.no_LC_filter)
 
     if "any" in args.required_classifications:

@@ -409,6 +409,7 @@ if __name__ == "__main__":
     if args.required_classifications and not args.classification_file:
         sys.stderr.write("--classification_file must be present with --require_classifications\n")
         sys.exit(1)
+
     elif args.required_classifications:
         if "any" in args.required_classifications:
             required_classes = {"ecDNA", "BFB", "Complex-non-cyclic", "Linear"}
@@ -429,6 +430,9 @@ if __name__ == "__main__":
     print("Required classifications set to")
     print(required_classes)
 
+    if args.ref == "hg38": args.ref = "GRCh38"
+    elif args.ref == "GRCm38": args.ref = "mm10"
+
     if args.classification_file:
         a2class = read_classifications(args.classification_file)
     else:
@@ -441,9 +445,6 @@ if __name__ == "__main__":
 
     if not args.o:
         args.o = os.path.basename(args.input).rsplit(".")[0]
-
-    if args.ref == "hg38": args.ref = "GRCh38"
-    elif args.ref == "GRCm38": args.ref = "mm10"
 
     # check if aa data repo set, construct LC datatabase
     try:

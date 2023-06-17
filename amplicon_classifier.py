@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.5.2"
+__version__ = "0.5.3"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
@@ -26,6 +26,7 @@ decomposition_strictness = 0.1
 # bfb thresholds
 min_score_for_bfb = 0.25
 fb_dist_cut = 25000
+
 
 # ------------------------------------------------------------
 # Methods to compute values used in classification
@@ -235,7 +236,7 @@ def compute_f_from_AA_graph(graphf, add_chr_tag):
 
     # just return 0 if there isn't enough support
     if fbEdges < 2:
-        return 0, maxCN, tot_over_min_cn
+        return 0, 0, maxCN, tot_over_min_cn
 
     return fbCount, fbCount / max(1.0, float(fbCount + nonFbCount)), maxCN, tot_over_min_cn
 
@@ -1033,9 +1034,12 @@ if __name__ == "__main__":
         tempName = args.cycles.rsplit("/")[-1].rsplit(".")[0]
         flist = [[tempName, args.cycles, args.graph]]
         if not args.o:
-            args.o = os.getcwd() + "/" + os.path.basename(args.cycles).rsplit("_cycles.txt")[0]
+            args.o = os.getcwd() + "/" + os.path.basename(args.cycles).rsplit("_cycles.txt")[0] 
 
-        elif not args.o.startswith("/"):
+        elif args.o.endswith("/"):
+            args.o += os.path.basename(args.cycles).rsplit("_cycles.txt")[0]
+
+        if not args.o.startswith("/"):
             args.o = os.getcwd() + "/" + args.o
 
     else:
@@ -1043,7 +1047,10 @@ if __name__ == "__main__":
         if not args.o:
             args.o = os.getcwd() + "/" + os.path.basename(args.input).rsplit(".")[0]
 
-        elif not args.o.startswith("/"):
+        elif args.o.endswith("/"):
+            args.o += os.path.basename(args.input).rsplit(".")[0]
+
+        if not args.o.startswith("/"):
             args.o = os.getcwd() + "/" + args.o
 
     outdir_loc = os.path.abspath(os.path.dirname(args.o + "_temp"))
