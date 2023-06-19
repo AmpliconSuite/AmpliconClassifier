@@ -144,7 +144,6 @@ Other arguments
 - `--add_chr_tag`: If you have a mix of hg19 and GRCh37 amplicons, you can set `--ref hg19` and `--add_chr_tag` to classify them all together.
 - `--min_flow`: Minumum cycle CN flow to consider among decomposed paths (default=1).
 - `--min_size`: Minimum cycle size (in bp) to consider as valid amplicon (default=5000).
-- `--report_comlexity`: Report a measurement of the amplicon's 'complexity' score, which represents a measurement of the complexity of the AA breakpoint graph decomposition.
 - `--verbose_classification`: Output verbose information in the `amplicon_classification_profiles.tsv` file, and create `edge_classification_profiles.tsv`. Useful for debugging.
 - `--force`: Disable No amp/Invalid class, if possible. Use only when extremely large CN seeds were used in AA amplicon generation (>10 Mbp intervals).
 - `--plotstyle [noplot, individual]`: Produce a radar-style plot of classification strengths. Default `noplot`.
@@ -152,7 +151,7 @@ Other arguments
 - `--exclude_bed`: Provide a bed file of regions to ignore during classification. Useful for separating linked amplicons or augmenting low-complexity annotations.
 - `--no_LC_filter`: Set this to turn off filtering low-complexity & poor mappability genome region paths & cycles.
 - `--no_LC_filter`: Set this to turn off filtering low-complexity & poor mappability genome region paths & cycles.
-- `"--filter_similar`: Only use if all samples are of independent origins (not replicates and not multi-region biopsies). Permits filtering of false-positive amps arising in multiple independent samples based on similarity calculation.
+- `--filter_similar`: Only use if all samples are of independent origins (not replicates and not multi-region biopsies). Permits filtering of false-positive amps arising in multiple independent samples based on similarity calculation.
 
 ### 5. Other utilities:
 
