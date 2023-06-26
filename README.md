@@ -3,30 +3,38 @@
 ![GitHub commits since latest release (by date)](https://img.shields.io/github/commits-since/jluebeck/AmpliconClassifier/v0.5.1/main)
 ![GitHub](https://img.shields.io/github/license/jluebeck/AmpliconClassifier)
 
-### Classify [AmpliconArchitect](https://github.com/jluebeck/AmpliconArchitect) outputs to detect types of focal amplifications present.
+### Classify [AmpliconArchitect](https://github.com/jluebeck/AmpliconArchitect) outputs to predict types of focal amplifications present.
 ### Current version: 0.5.3
 
-This tool classifies the outputs of AmpliconArchitect, [which is available here](https://github.com/jluebeck/AmpliconArchitect).
+This tool classifies the outputs of [AmpliconArchitect](https://github.com/AmpliconSuite/AmpliconSuite-pipeline).
 
-If using AmpliconClassifier (current version, not legacy version), please cite:
+If using AmpliconClassifier, please cite the following publication which describes the AmpliconClassifier methodology in the [Supplementary Information](https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-023-05937-5/MediaObjects/41586_2023_5937_MOESM1_ESM.pdf) section:
 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Luebeck et al., [Extrachromosomal DNA in the cancerous transformation of Barrett's esophagus](https://www.nature.com/articles/s41586-023-05937-5).
-*Nature*. 2023.
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Luebeck J, et al. [Extrachromosomal DNA in the cancerous transformation of Barrett’s oesophagus](https://www.nature.com/articles/s41586-023-05937-5). Nature. 2023. PMID: 37046089
 
 If referring to the legacy version, see the section at the end of the README.
 <br />
 <br />
 
-***Please note that this software is actively being developed. Stable versions are released on the main branch.***
+***Please note that this software is being actively developed. Stable versions are released on the main branch.***
 
-### 1. Prerequisites: 
-- Either python2 or python3.
-- `intervaltree` (python library):  `pip install intervaltree`
-- `scipy` (python library): `pip install scipy`
-- `$AA_DATA_REPO` environment variable. For instructions see [AmpliconArchitect installation](https://github.com/jluebeck/AmpliconArchitect#data-repositories). 
-- `matplotlib` (python library, optional): `pip install matplotlib`
+### 1. Installation: 
 
-#### Installation:
+AmpliconClassifier is included with [AmpliconSuite-pipeline](https://github.com/AmpliconSuite/AmpliconSuite-pipeline), but for re-classification, you may wish to keep a standalone installation of this module, using the instructions below.
+
+#### Requirements
+- Either python 2.7+ or python 3.0+
+- `intervaltree` and `scipy` python libraries:  
+>`conda install intervaltree scipy`  # or `pip install intervaltree scipy`
+- `$AA_DATA_REPO` environment variable and data repo files. See instructions [here](https://github.com/AmpliconSuite/AmpliconArchitect#setting-up-the-aa-data-repo). 
+- (optional) `matplotlib`: `conda install matplotlib-base` or `pip install matplotlib`
+
+Mac users will need to perform one additional installation step:
+```bash
+brew install coreutils
+```
+
+#### Setup:
 ```bash
 git clone https://github.com/jluebeck/AmpliconClassifier.git
 cd AmpliconClassifier
@@ -34,10 +42,7 @@ echo export AC_SRC=$PWD >> ~/.bashrc
 source ~/.bashrc
 ```
 
-Mac users will need to perform one additional installation step:
-```bash
-brew install coreutils
-```
+
 
 ### 2. Usage:
 
@@ -45,19 +50,19 @@ brew install coreutils
 
 To classify a single amplicon,
 
-`python amplicon_classifier.py --ref [hg19, GRCh37, or GRCh38] --cycles sample_amplicon1_cycles.txt --graph sample_amplicon1_graph.txt > classifier_stdout.log`
+>`python amplicon_classifier.py --ref [hg19, GRCh37, or GRCh38] --cycles sample_amplicon1_cycles.txt --graph sample_amplicon1_graph.txt > classifier_stdout.log`
 
 **More commonly, if classifying multiple amplicons, you can use the `make_input.sh` script to gather the necessary input files automatically.**
 
 `make_input.sh` takes a path and an output prefix. e.g:
 
-`make_input.sh /path/to/AA/output/directories/ example_collection` 
+>`make_input.sh /path/to/AA/output/directories/ example_collection` 
 
 This will create a file called `example_collection.input` which can be given as the `--input` argument for AC.
 
 To subsequently generate classifications for a list of amplicons:
 
-`python amplicon_classifier.py --ref [hg19, GRCh37, or GRCh38] --input [file with list of your amplicons] > classifier_stdout.log`
+>`python amplicon_classifier.py --ref [hg19, GRCh37, or GRCh38] --input [file with list of your amplicons] > classifier_stdout.log`
 
 and it will search for the cycles and graph files in that directory, and pair the locations into a text file compatible with the `--input` argument.
 
