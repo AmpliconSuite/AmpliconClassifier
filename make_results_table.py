@@ -143,7 +143,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if not args.run_metadata_file and not args.run_metadata_list and not args.ref:
-        sys.stderr.write("One of the following must be provided: --ref | --run_metadata_list | --run_medata_file\n")
+        sys.stderr.write("One of the following must be provided: --ref | --run_metadata_list | --run_metadata_file\n")
 
     output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Oncogenes",
                    "All genes", "Complexity score", "Captured interval length", "Feature median copy number",
