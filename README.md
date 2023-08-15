@@ -1,6 +1,5 @@
 # AmpliconClassifier
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/jluebeck/AmpliconClassifier?display_name=release)
-![GitHub commits since latest release (by date)](https://img.shields.io/github/commits-since/jluebeck/AmpliconClassifier/v0.5.1/main)
 ![GitHub](https://img.shields.io/github/license/jluebeck/AmpliconClassifier)
 
 ### Classify [AmpliconArchitect](https://github.com/jluebeck/AmpliconArchitect) outputs to predict types of focal amplifications present.
