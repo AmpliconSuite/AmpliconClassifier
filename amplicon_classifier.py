@@ -112,8 +112,13 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
     hf_cut = 0.8
     totalGraphWeight = 0
     segs = 0
+    h = "SequenceEdge: StartPosition, EndPosition, PredictedCopyCount, AverageCoverage, Size, NumberReadsMapped".rsplit()
+    h = [x.rstrip(',') for x in h]
     with open(graphf) as infile:
         for line in infile:
+            if line.startswith("SequenceEdge:"):
+                h = [x.rstrip(',') for x in line.rstrip().rsplit()]
+
             if line.startswith("sequence"):
                 fields = line.rsplit()
                 c, s, e = fields[1].rsplit(":")[0], int(fields[1].rsplit(":")[1][:-1]), int(fields[2].rsplit(":")[1][:-1])+1
@@ -124,7 +129,9 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
                     continue
 
                 cn = float(fields[3])
-                size = float(fields[5]) / 1000.
+
+                fd = dict(zip(h, fields))
+                size = float(fd['Size']) / 1000.
 
                 segs += 1
                 totalGraphWeight += (size * cn)
@@ -191,10 +198,15 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
 
 # Compute f (foldback fraction) from the edges in the AA graph alone
 def compute_f_from_AA_graph(graphf, add_chr_tag):
+    h = "SequenceEdge: StartPosition, EndPosition, PredictedCopyCount, AverageCoverage, Size, NumberReadsMapped".rsplit()
+    h = [x.rstrip(',') for x in h]
     with open(graphf) as infile:
         fbCount, nonFbCount, fbEdges, maxCN, tot_over_min_cn = 0, 0, 0, 0, 0
         for line in infile:
             fields = line.rstrip().rsplit()
+            if line.startswith("SequenceEdge:"):
+                h = [x.rstrip(',') for x in fields]
+
             if line.startswith("discordant"):
                 lbp, rbp = fields[1].split("->")
                 lchrom, lpd = lbp.rsplit(":")
@@ -228,7 +240,8 @@ def compute_f_from_AA_graph(graphf, add_chr_tag):
                 if not lcD[fields[1].rsplit(":")[0]].overlaps(int(fields[1].rsplit(":")[1][:-1]),
                                                               int(fields[2].rsplit(":")[1][:-1])):
                     ccn = float(fields[3])
-                    seglen = int(fields[5])
+                    fd = dict(zip(h, fields))
+                    seglen = int(fd['Size'])
                     if seglen > 1000:
                         if ccn > maxCN:
                             maxCN = ccn
