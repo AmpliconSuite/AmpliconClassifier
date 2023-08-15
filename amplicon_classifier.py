@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.5.3"
+__version__ = "0.5.4"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
@@ -8,6 +8,7 @@ import copy
 from math import log
 import operator
 import re
+from subprocess import call
 import sys
 
 from ac_io import *
@@ -548,7 +549,7 @@ def plotting():
 
 def filter_similar_amplicons(n_files):
     # adjust the p value cutoff based on number of input amplicons
-    pval = 0.05/n_files
+    pval = 0.05/(max(1, n_files-1))
     print("\nSamples are assumed to be independent as --filter_similar was set.\nFiltering highly similar amplicons"
           " across independent samples...\n")
     print("adjusted p-value cutoff set to 0.05/{}={}".format(str(n_files), str(pval)))
@@ -955,10 +956,11 @@ ampDefs = {(False, False): "Linear", (False, True): "Complex-non-cyclic",
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Classify AA amplicon type")
-    parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: "
-                        "sample_name cycles.txt graph.txt. Give this argument if not using -c and -g.")
-    parser.add_argument("-c", "--cycles", help="AA-formatted cycles file")
-    parser.add_argument("-g", "--graph", help="AA-formatted graph file")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--AA_results", help="Path to location of unclassified AA results to take as input.")
+    group.add_argument("-i", "--input", help="Alternative to --AA_results if make_input.sh was already run to produce the .input file")
+    group.add_argument("-c", "--cycles", help="AA-formatted cycles file. Set if classifying only a single amplicon")
+    parser.add_argument("-g", "--graph", help="AA-formatted graph file (required if --cycles given)")
     parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38.",
                         choices=["hg19", "GRCh37", "hg38", "GRCh38", "GRCh38_viral", "mm10", "GRCm38"], required=True)
 
@@ -991,13 +993,19 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # PRE-RUN CHECKS
-    if not (args.cycles and args.graph) and not args.input:
-        print("Need to specify (--cycles & --graph) or --input\n")
-        sys.exit(1)
-
     print("AmpliconClassifier " + __version__)
     print(" ".join(sys.argv))
+
+    # make input if an AA directory is given
+    if args.AA_results:
+        src_dir = os.path.dirname(os.path.realpath(os.path.abspath(sys.argv[0])))
+        cmd = src_dir + "/make_input.sh " + args.AA_results + " " + args.AA_results + "/AC"
+        print("Generating .input file...")
+        print(cmd)
+        call(cmd, shell=True)
+        args.input = args.AA_results + "/AC.input"
+        summary_map = args.AA_results + "/AC_summary_map.txt"
+
     if args.ref == "hg38": args.ref = "GRCh38"
     elif args.ref == "GRCm38": args.ref = "mm10"
     patch_links = read_patch_regions(args.ref)

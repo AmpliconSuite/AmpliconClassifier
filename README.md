@@ -4,7 +4,6 @@
 ![GitHub](https://img.shields.io/github/license/jluebeck/AmpliconClassifier)
 
 ### Classify [AmpliconArchitect](https://github.com/jluebeck/AmpliconArchitect) outputs to predict types of focal amplifications present.
-### Current version: 0.5.3
 
 This tool classifies the outputs of [AmpliconArchitect](https://github.com/AmpliconSuite/AmpliconSuite-pipeline).
 
@@ -18,7 +17,7 @@ If referring to the legacy version, see the section at the end of the README.
 
 ***Please note that this software is being actively developed. Stable versions are released on the main branch.***
 
-### 1. Installation: 
+### 1. Installation
 
 AmpliconClassifier is included with [AmpliconSuite-pipeline](https://github.com/AmpliconSuite/AmpliconSuite-pipeline), but for re-classification, you may wish to keep a standalone installation of this module, using the instructions below.
 
@@ -44,15 +43,23 @@ source ~/.bashrc
 
 
 
-### 2. Usage:
+### 2. Usage
 
 `amplicon_classifier.py` takes a collection of (or single) AA graph files and corresponding AA cycles file as inputs.
 
-To classify a single amplicon,
+**To classify a single amplicon**:
 
->`python amplicon_classifier.py --ref [hg19, GRCh37, or GRCh38] --cycles sample_amplicon1_cycles.txt --graph sample_amplicon1_graph.txt > classifier_stdout.log`
+>`python amplicon_classifier.py --ref GRCh38 --cycles sample_amplicon1_cycles.txt --graph sample_amplicon1_graph.txt > classifier_stdout.log`
 
-**More commonly, if classifying multiple amplicons, you can use the `make_input.sh` script to gather the necessary input files automatically.**
+**Most common - classifying multiple amplicons:**
+You can provide the directory containing multiple AA amplicons or multiple uniquely named samples
+>`python amplicon_classifier.py --ref GRCh38 --AA_results /path/to/AA/output/directories/ > classifier_stdout.log`
+
+AC will crawl the given location and find all relevant AA files and perform classification on them.
+
+**Less common - separate usage of `make_input.sh`:**
+
+Alternatively, you can use the `make_input.sh` script to gather the necessary input files outside of AC:
 
 `make_input.sh` takes a path and an output prefix. e.g:
 
@@ -60,17 +67,12 @@ To classify a single amplicon,
 
 This will create a file called `example_collection.input` which can be given as the `--input` argument for AC.
 
-To subsequently generate classifications for a list of amplicons:
 
->`python amplicon_classifier.py --ref [hg19, GRCh37, or GRCh38] --input [file with list of your amplicons] > classifier_stdout.log`
-
-and it will search for the cycles and graph files in that directory, and pair the locations into a text file compatible with the `--input` argument.
-
-There is also an experimental option you can set to visualize the strength of each amplicon class assigned to an amplicon, which can be turned on by setting `--plotStyle individual`.
+#### Combining classification results from GRCh37 and hg19:
 
 If combining data from both GRCh37 and hg19 in the same classification run, you can set the flag `--add_chr_tag` to add the "chr" prefix to each chromosome name and effectively unify everything as hg19-based.
 
-### 3. Output:
+### 3. Outputs
 
 #### ****`[prefix]_amplicon_classification_profiles.tsv`**** 
 
@@ -131,32 +133,32 @@ Additionally, there are three directories  created by `amplicon_classifier.py`. 
 - `[prefix]_annotated_cycles_files/`, which contains AA cycles files with additional annotations about length of discovered paths/cycles and their classification status. Using these annotated cycles files is preferred over the unannotated cycles file produced by AA.
 
 
-### 4. Description of command line arguments:
+### 4. Command-Line Options
 
-Running on a single AA amplicon:
+If running AC only on a single AA amplicon, use arguments:
 - `-c/--cycles`: AA cycles file
 - `-g/--graph`: AA graph file
 
-OR running on multiple amplicons
-- `-i/--input`: Tab-separated file containing one or more amplicons formatted as
+Else if running on multiple amplicons, use argument
+- `--AA_results`: Path to a directory containing one or more AA results. AC will search this directory recursively and index all the AA results it finds for classification.
 
-`sample_name_amplicon1   /path/to/sample_name_amplicon1_cycles.txt   /path/to/sample_name_amplicon1_graph.txt`
 
-Other arguments
-- `--ref [hg19, GRCh37, GRCh38, mm10, or GRCm38]`: (Required) Choose reference genome version used in generating AA output.
-- `-v/--version`: Print version and exit.
-- `-o`: Output filename prefix. Default is prefix of `-i` or `-c`.
-- `--add_chr_tag`: If you have a mix of hg19 and GRCh37 amplicons, you can set `--ref hg19` and `--add_chr_tag` to classify them all together.
-- `--min_flow`: Minumum cycle CN flow to consider among decomposed paths (default=1).
-- `--min_size`: Minimum cycle size (in bp) to consider as valid amplicon (default=5000).
-- `--verbose_classification`: Output verbose information in the `amplicon_classification_profiles.tsv` file, and create `edge_classification_profiles.tsv`. Useful for debugging.
-- `--force`: Disable No amp/Invalid class, if possible. Use only when extremely large CN seeds were used in AA amplicon generation (>10 Mbp intervals).
-- `--plotstyle [noplot, individual]`: Produce a radar-style plot of classification strengths. Default `noplot`.
-- `--decomposition_strictness`: Value between 0 and 1 reflecting how strictly to filter low CN decompositions (default = 0.1). Higher values filter more of the low-weight decompositions.
-- `--exclude_bed`: Provide a bed file of regions to ignore during classification. Useful for separating linked amplicons or augmenting low-complexity annotations.
-- `--no_LC_filter`: Set this to turn off filtering low-complexity & poor mappability genome region paths & cycles.
-- `--no_LC_filter`: Set this to turn off filtering low-complexity & poor mappability genome region paths & cycles.
-- `--filter_similar`: Only use if all samples are of independent origins (not replicates and not multi-region biopsies). Permits filtering of false-positive amps arising in multiple independent samples based on similarity calculation.
+| Column name                                     | Contents                                                                                                                                                                                                             |
+|-------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------| 
+| `--ref [hg19, GRCh37, GRCh38, mm10, or GRCm38]` | (Required) Choose reference genome version used in generating AA output.                                                                                                                                             |
+| `-v/--version`                                  | Print version and exit.                                                                                                                                                                                              |
+| `-o`                                            | Output filename prefix. Default is prefix of `-i` or `-c`.                                                                                                                                                           |
+| `--add_chr_tag`                                 | Adds back missing "chr" prefix to chromosome names. If you have a mix of hg19 and GRCh37 amplicons, set `--ref hg19` and `--add_chr_tag` to classify them all together.                                              |
+| `--min_flow`                                    | Minumum cycle CN flow to consider among decomposed paths (default=1).                                                                                                                                                | 
+| `--min_size`                                    | Minimum cycle size (in bp) to consider as valid amplicon (default=5000).                                                                                                                                             |
+| `--verbose_classification`                      | Output verbose information in the `amplicon_classification_profiles.tsv` file, and create `edge_classification_profiles.tsv`. Useful for debugging.                                                                  |
+| `--force`                                       | Disable No amp/Invalid class, if possible. Use only when extremely large CN seeds were used in AA amplicon generation (>10 Mbp intervals) or if debugging.                                                           |
+| `--plotstyle [noplot, individual]`              | \[experimental] Produce a radar-style plot of classification strengths. Default `noplot`.                                                                                                                            |
+| `--decomposition_strictness`                    | Value between 0 and 1 reflecting how strictly to filter low CN decompositions (default = 0.1). Higher values filter more of the low-weight decompositions.                                                           |
+| `--exclude_bed`                                 | Provide a bed file of regions to ignore during classification. Useful for separating linked amplicons or augmenting existing low-complexity annotations.                                                             |
+| `--no_LC_filter`                                | Set this to turn off filtering low-complexity & poor mappability genome region paths & cycles based on the regions in the AA data repo.                                                                              |
+| `--filter_similar`                              | Permits filtering of false-positive amps arising in multiple independent samples based on similarity calculation. Only use if all samples are of independent origins (not replicates and not multi-region biopsies). |
+| `-i/--input`                                    | If you have already run `make_input.sh`, you can give the resulting .input file instead of setting `--AA_results`                                                                                                     | 
 
 ### 5. Other utilities:
 
