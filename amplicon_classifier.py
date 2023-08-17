@@ -351,22 +351,33 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, add
 
 # ------------------------------------------------------------
 # Classifications
+
+# returns True if the cycle is no-amp or invalid
 def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN):
+    # check if contains viral sequence
     if is_viral(args.ref, cycle, segSeqD):
         return False
 
-    if not isSingleton:
+    if not isSingleton:  # check if cycle contains more than one segment
+        # decomp strictness is 0.1 by default but can be changed by command-line arg
+        # args.min_flow is 1.0 by default
         scale = min(args.min_flow, maxCN * decomposition_strictness)
+
+    # do something slightly stricter for singleton cycles since they seem to be less reliably real
+    # these are simple and semi-arbitrary rules based on analysis of many samples
     elif maxCN > 7:
         scale = min(3., maxCN / 8.)
     else:
         scale = 2.5
 
-    if (cn <= scale) or (maxCN < min_upper_cn):
+    # check if cycle flow is below threshold or max CN is below what is needed for a focal amp.
+    if (cn <= scale) or (maxCN < min_upper_cn):  # min_upper_cn is 4.5 by default but can be changed by command line arg
         return True
 
     length = get_size(cycle, segSeqD)
-    return length < minCycleSize
+
+    # anything that did not already fail the copy number checks is returns true if the size is too small
+    return length < minCycleSize  # 5kbp for minCycleSize by default
 
 
 def classifyConnections(cycleSet1, cycleSet2, clfs):
