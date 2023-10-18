@@ -579,7 +579,8 @@ def filter_similar_amplicons(n_files):
     print("adjusted p-value cutoff set to 0.05/{}={}".format(str(n_files), str(pval)))
     required_classes = {"ecDNA", "BFB", "Complex-non-cyclic", "Linear"}
     cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
-    cg5D = build_CG5_database(cg5Path)
+    # cg5D = build_CG5_database(cg5Path)  # do not include the cg5D to enable filtering of regions inappropriately included in seeds (and thus amplicons) by the user
+    cg5D = defaultdict(IntervalTree)
     add_chr_tag = args.add_chr_tag
     feat_to_ivald = {}
     for full_featname, curr_fd in full_featname_to_intervals.items():
