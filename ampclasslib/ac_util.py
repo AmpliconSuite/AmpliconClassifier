@@ -3,9 +3,10 @@ import os
 
 from intervaltree import IntervalTree, Interval
 
+lookup = str.maketrans("ACGTRYKM", "TGCAYRMK")
 
 class breakpoint(object):
-    def __init__(self, lchrom, lpos, rchrom, rpos, supp, ldir, rdir):
+    def __init__(self, lchrom, lpos, rchrom, rpos, supp, ldir, rdir, homlen="NA", homseq="NA"):
         self.lchrom = lchrom
         self.lpos = lpos
         self.rchrom = rchrom
@@ -13,6 +14,8 @@ class breakpoint(object):
         self.support = supp
         self.ldir = ldir
         self.rdir = rdir
+        self.homlen = homlen
+        self.homseq = homseq
 
     def to_string(self):
         return self.lchrom + ":" + str(self.lpos) + str(self.ldir) + " | " + self.rchrom + ":" + str(self.rpos) + \
@@ -64,7 +67,7 @@ def get_amp_outside_bounds(graphf, add_chr_tag):
                 if add_chr_tag and not c.startswith('chr'):
                     c = "chr" + c
 
-                if cn > 10:
+                if cn > 7:
                     if not xc:
                         xc, xs = c, s
 
@@ -78,7 +81,7 @@ def get_amp_outside_bounds(graphf, add_chr_tag):
                     c1 = "chr" + c1
                     c2 = "chr" + c2
 
-                # first must be +, second must be -
+                # first must be +, second must be - for everted orientation
                 if d1 == "+" and d2 == "-" and c1 == c2 and p1 > p2 and c1 == yc and c2 == xc:
                     # first must fall within 1kbp of yc,ye
                     # second must fall within 1kbp of xc,xs
@@ -245,7 +248,17 @@ def bpg_edges(bpgf, add_chr_tag, lcD):
     bps = []
     with open(bpgf) as infile:
         for line in infile:
-            if line.startswith("discordant"):
+            if line.startswith("BreakpointEdge:"):
+                fields = line.rstrip().rsplit()
+                hom_len_index = None
+                hom_seq_index = None
+                for ind, x in enumerate(fields):
+                    if x.startswith("HomologySizeIfAvailable"):
+                        hom_len_index = ind
+                    elif x.startswith("Homology/InsertionSequence"):
+                        hom_seq_index = ind
+
+            elif line.startswith("discordant"):
                 fields = line.rstrip().rsplit()
                 l, r = fields[1].rsplit("->")
                 lchrom, lpos = l.rsplit(":")
@@ -261,7 +274,15 @@ def bpg_edges(bpgf, add_chr_tag, lcD):
                     continue
 
                 support = int(fields[3])
-                currBP = breakpoint(lchrom, lpos, rchrom, rpos, support, ldir, rdir)
+                if not any([x is None for x in [hom_seq_index and hom_len_index]]):
+                    homlen = fields[hom_len_index]
+                    if homlen == "0":
+                        homlen = "None"
+                        homseq = "None"
+                    else:
+                        homseq = fields[hom_seq_index]
+
+                currBP = breakpoint(lchrom, lpos, rchrom, rpos, support, ldir, rdir, homlen=homlen, homseq=homseq)
                 bps.append(currBP)
 
     return bps

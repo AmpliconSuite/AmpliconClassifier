@@ -1,4 +1,4 @@
-from ac_annotation import *
+from ampclasslib.ac_annotation import *
 
 
 # getting genes

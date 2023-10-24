@@ -1,10 +1,10 @@
-from ac_util import *
+from ampclasslib.ac_util import *
 
 
 # write a summary of the breakpoints
 def summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD):
     linelist = [["chrom1", "pos1", "chrom2", "pos2", "sv_type", "read_support", "features", "orientation",
-                 "pos1_flanking_coordinate", "pos2_flanking_coordinate"]]
+                 "pos1_flanking_coordinate", "pos2_flanking_coordinate", "homology_length", "homology_sequence"]]
     bps = bpg_edges(graphf, add_chr_tag, lcD)
     for bp in bps:
         c1, c2 = bp.lchrom, bp.rchrom
@@ -14,6 +14,8 @@ def summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD):
             if p1 > p2:
                 p1, p2 = p2, p1
                 ldir, rdir = rdir, ldir
+                if bp.homlen != "None" and bp.homlen != "NA" and bp.homlen != "0":
+                    bp.homseq = bp.homseq.translate(lookup)[::-1]
 
         if ldir == "+":
             p1_1before = p1 - 1
@@ -60,7 +62,7 @@ def summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD):
             fl.append("None")
 
         fs = "|".join(fl)
-        linelist.append([c1, p1, c2, p2, etype, bp.support, fs, ldir+rdir, p1_1before, p2_1before])
+        linelist.append([c1, p1, c2, p2, etype, bp.support, fs, ldir+rdir, p1_1before, p2_1before, bp.homlen, bp.homseq])
 
     return linelist
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "0.5.4"
+__version__ = "1.0.0"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
@@ -11,8 +11,9 @@ import re
 from subprocess import call
 import sys
 
-from ac_io import *
-from radar_plotting import *
+import ampclasslib
+from ampclasslib.ac_io import *
+from ampclasslib.radar_plotting import *
 
 tot_min_del = 5000  # minimum size of deletion before non-trivial
 minCycleSize = 5000
@@ -1023,11 +1024,14 @@ if __name__ == "__main__":
 
     # make input if an AA directory is given
     if args.AA_results:
-        src_dir = os.path.dirname(os.path.realpath(os.path.abspath(sys.argv[0])))
+        src_dir = os.path.dirname(ampclasslib.__file__)
         cmd = src_dir + "/make_input.sh " + args.AA_results + " " + args.AA_results + "/AC"
         print("Generating .input file...")
         print(cmd)
-        call(cmd, shell=True)
+        rc = call(cmd, shell=True)
+        if rc != 0:
+            print("Failed to make input file! Please ensure each graph and cycles file are present.\n")
+            sys.exit(1)
         args.input = args.AA_results + "/AC.input"
         summary_map = args.AA_results + "/AC_summary_map.txt"
 

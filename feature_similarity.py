@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
-from amplicon_similarity import *
+
+from ampclasslib.amplicon_similarity import *
+
 cn_cut = 4.5
 
 
@@ -46,7 +48,6 @@ if __name__ == "__main__":
         sys.stderr.write("$AC_SRC not found. Please first set AC_SRC bash variable using AC installation instructions "
                          "in Readme.\n")
         sys.exit(1)
-
 
     if args.ref == "hg38": args.ref = "GRCh38"
     elif args.ref == "GRCm38": args.ref = "mm10"
