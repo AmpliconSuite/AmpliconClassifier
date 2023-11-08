@@ -229,7 +229,7 @@ def filter_cycles_with_edges(cycles, filtered_sequences):
             filtered_cycles.append(cycle)
     return filtered_cycles
  
-def fbCount(filtered_edges, fb_cutoff = 30000):
+def fbCount(filtered_edges, fb_cutoff = 50000):
     # count the number of foldback edges
     fb_count = 0
     for edge in filtered_edges:
@@ -244,7 +244,7 @@ def fbCount(filtered_edges, fb_cutoff = 30000):
                 fb_count += 1
     return fb_count
 
-def detectTwoFB(filtered_sequences, filtered_edges, fb_cutoff = 30000):
+def detectTwoFB(filtered_sequences, filtered_edges, fb_cutoff = 50000):
     amp_start_chr, amp_start_pos = filtered_sequences[0]['start_chr'], filtered_sequences[0]['start']
     amp_start_end = filtered_sequences[0]['end']
     amp_end_chr, amp_end_pos = filtered_sequences[-1]['end_chr'], filtered_sequences[-1]['end']
@@ -461,13 +461,13 @@ def ecDNAContext(metrics, t_n_cutoff = 4, cycle_cutoff = 0.15):
     cycle_frac = metrics['cycle_frac']
     small_contrib = metrics['small_contrib']
 
-    if (metrics['fb_count'] >= 4 and (metrics['fb_count']/metrics['total_edges'] >= 0.2)) and n_cn > 2 and n_chrs == 1:
+    if (metrics['fb_count'] >= 4 and (metrics['fb_count']/metrics['total_edges'] >= 0.1)) and n_cn > 2 and n_chrs == 1:
         return "BFB-like"
     
     elif ((t_n_ratio < t_n_cutoff) or n_cross_edges < 4) and metrics['two_fb'] and n_cn <= 6:
         return "Two-foldback"
 
-    elif (t_n_ratio >= t_n_cutoff or n_cross_edges >= 4) and n_cn > 1:
+    elif ((t_n_ratio >= t_n_cutoff or n_cross_edges >= 4) and n_cn > 1) or (n_cn > 6):
         if n_chrs > 1 and not small_contrib:
             return "Heavily rearranged, multi-chromosomal"
         else:
