@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import os
 from  collections  import  defaultdict
-from convert_cycles_file import make_new_cycle
+from ampclasslib.convert_cycles_file import make_new_cycle
 import argparse
+
+#Author: Bhargavi Dameracharla, modified by Jens Luebeck
 
 def read_bed_file(bed_file_path):
     bed_regions = []
@@ -469,31 +469,51 @@ def ecDNAContext(metrics, t_n_cutoff = 4, cycle_cutoff = 0.15):
 
     elif ((t_n_ratio >= t_n_cutoff or n_cross_edges >= 4) and n_cn > 1) or (n_cn > 6):
         if n_chrs > 1 and not small_contrib:
-            return "Heavily rearranged, multi-chromosomal"
+            return "Heavily rearranged multichromosomal"
         else:
-            return "Heavily rearranged"
+            return "Heavily rearranged unichromosomal"
     
     elif cycle_frac >= cycle_cutoff and ((t_n_ratio < t_n_cutoff) or n_cross_edges < 4) and n_cn <= 6 and (n_chrs == 1 or small_contrib):
         if metrics['t_n_ratio_amplicon'] >= t_n_cutoff or metrics['cross_edges_amplicon'] >= 4 or metrics['n_cn_amplicon'] > 6:
-            return "Simple circular, complex background"
-        return "Simple circular"
+            return "Simple circular complex background"
+        return "Simple circular simple background"
     
     elif metrics['overlap_frac'] >= 0.3:
         if metrics['t_n_ratio_amplicon'] >= t_n_cutoff or metrics['cross_edges_amplicon'] >= 4 or metrics['n_cn_amplicon'] > 6:
-            return "Simple circular, complex background"
-        return "Simple circular"
+            return "Simple circular complex background"
+        return "Simple circular simple background"
     else:
         return "Unknown"
     
+
+def fetch_context(graph_file, cycles_file, FUSE_CUTOFF=5000, TN_RATIO_CUTOFF=4, CYCLE_FRAC_CUTOFF=0.15, bed_file=None, verbose=False):
+    bed_regions = read_bed_file(bed_file)
+    multiple_large = regions_apart(bed_regions)
+    filtered_sequences, filtered_edges, sequences, edges = filter_graph_with_bed(graph_file, bed_regions)
+    _, converted_cycles = make_new_cycle(graph_file, cycles_file)
+    filtered_cycles = filter_cycles_with_edges(converted_cycles, filtered_sequences)
+
+    metrics = ecDNAMetrics(filtered_cycles, filtered_sequences, filtered_edges, sequences, edges, multiple_large,
+                           FUSE_CUTOFF)
+    context = ecDNAContext(metrics, cycle_cutoff=CYCLE_FRAC_CUTOFF, t_n_cutoff=TN_RATIO_CUTOFF)
+
+    # output all the information
+    if verbose:
+        print("Metrics: " + str(metrics))  # changed from print(f "") to give backwards compatibility with older python versions
+        print("Context: " + str(context))
+
+    return context
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Get the context behind ecDNA formation")
     parser.add_argument("-g", "--graph", help="Path to amplicon graph file", required=True)
     parser.add_argument("-c", "--cycles", help="Path to cycles file", required=True)
-    parser.add_argument("-f", "--fuse", help="Fuse cutoff for deletions", default=5000)
-    parser.add_argument("-t", "--t_n", help="Transition to CN ratio cutoff", default=4)
-    parser.add_argument("-y", "--cycle_cutoff", help="Cycle fraction cutoff", default=0.15)
+    parser.add_argument("-f", "--fuse", help="Fuse cutoff for deletions", type=float, default=5000)
+    parser.add_argument("-t", "--t_n", help="Transition to CN ratio cutoff", type=float, default=4)
+    parser.add_argument("-y", "--cycle_cutoff", help="Cycle fraction cutoff", type=float, default=0.15)
     parser.add_argument("-b", "--bed", help="Bed file of ecDNA regions", required=False)
+    parser.add_argument("--verbose", help="Report verbose scores for the individual metrics", action='store_true')
 
     args = parser.parse_args()
     graph_file = args.graph
@@ -502,17 +522,6 @@ if __name__ == "__main__":
     TN_RATIO_CUTOFF = args.t_n
     CYCLE_FRAC_CUTOFF = args.cycle_cutoff
     bed_file = args.bed
+    verbose = args.verbose
 
-    bed_regions = read_bed_file(bed_file)
-    multiple_large = regions_apart(bed_regions)
-    filtered_sequences, filtered_edges, sequences, edges = filter_graph_with_bed(graph_file, bed_regions)
-    _, converted_cycles = make_new_cycle(graph_file, cycles_file)
-    filtered_cycles = filter_cycles_with_edges(converted_cycles, filtered_sequences)
-
-    metrics= ecDNAMetrics(filtered_cycles, filtered_sequences, filtered_edges, sequences, edges, multiple_large, FUSE_CUTOFF)
-    context = ecDNAContext(metrics, cycle_cutoff=CYCLE_FRAC_CUTOFF, t_n_cutoff=TN_RATIO_CUTOFF)
-
-    # output all the information
-    print(f"Metrics: {metrics}")
-    print(f"Context: {context}")
-
+    fetch_context(graph_file, cycles_file, FUSE_CUTOFF, TN_RATIO_CUTOFF, CYCLE_FRAC_CUTOFF, bed_file, verbose)

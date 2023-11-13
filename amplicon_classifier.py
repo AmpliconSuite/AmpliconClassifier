@@ -1004,6 +1004,8 @@ if __name__ == "__main__":
                         action='store_true')
     parser.add_argument("--report_complexity", help="[Deprecated - on by default] Compute a measure of amplicon entropy"
                         " for each amplicon.", action='store_true', default=True)
+    parser.add_argument("--report_context", help="Report genomic context (origin) of ecDNAs identified by AC.",
+                        action='store_true')
     parser.add_argument("--verbose_classification", help="Generate verbose output with raw classification scores.",
                         action='store_true')
     parser.add_argument("--no_LC_filter", help="Do not filter low-complexity cycles. Not recommended to set this flag.",

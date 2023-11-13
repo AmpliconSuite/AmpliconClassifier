@@ -1,5 +1,5 @@
 from ampclasslib.ac_annotation import *
-
+from ampclasslib.ecDNA_context import *
 
 # getting genes
 def parse_genes(gene_file):
@@ -106,6 +106,27 @@ def write_interval_beds(prefix, sname, ampN, feature_dict, samp_amp_to_graph, f2
                     outfile.write("\t".join(l) + "\n")
 
 
+def create_context_table(prefix, sname, ampN, feature_dict, samp_amp_to_graph):
+    curr_contexts = []
+    bedfile_dir = prefix + "_classification_bed_files/"
+    cycles_dir = prefix + "_annotated_cycles_files/"
+    trim_sname = sname.rsplit("/")[-1].rsplit("_amplicon")[0]
+    for feat_name, curr_fd in feature_dict.items():
+        intervals_fname = bedfile_dir + trim_sname + "_" + ampN + "_" + feat_name + "_intervals.bed"
+        if feat_name.startswith("ecDNA"):
+            if not curr_fd:
+                context = "Unknown"
+
+            else:
+                gfile = samp_amp_to_graph[sname + "_" + ampN]
+                cfile = cycles_dir + trim_sname + "_" + ampN + "_annotated_cycles.txt"
+                context = fetch_context(gfile, cfile, bed_file=intervals_fname)
+
+            curr_contexts.append((trim_sname + "_" + ampN + "_" + feat_name, context))
+
+    return curr_contexts
+
+
 # write a cycles file with the cycles -> some corrected
 def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters,
                                           invalidInds, rearrCycleInds):
@@ -204,6 +225,19 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
         write_basic_properties(feat_basic_propf, sname, ampN, prop_dict)
 
     f2gf.close()
+
+    if args.report_context:
+        # report ecDNA context
+        context_filename = args.o + "_ecDNA_context_calls.tsv"
+        contexts = []
+        for ind, (sname, feature_dict) in enumerate(zip(sampNames, fd_list)):
+            ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
+            curr_contexts = create_context_table(args.o, sname, ampN, feature_dict, samp_amp_to_graph)
+            contexts.extend(curr_contexts)
+
+        with open(context_filename, 'w') as context_outfile:
+            for x in contexts:
+                context_outfile.write("\t".join(x) + "\n")
 
     # Edge profiles
     if args.verbose_classification:
