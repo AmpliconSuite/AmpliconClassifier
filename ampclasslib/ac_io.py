@@ -226,18 +226,17 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
 
     f2gf.close()
 
-    if args.report_context:
-        # report ecDNA context
-        context_filename = args.o + "_ecDNA_context_calls.tsv"
-        contexts = []
-        for ind, (sname, feature_dict) in enumerate(zip(sampNames, fd_list)):
-            ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
-            curr_contexts = create_context_table(args.o, sname, ampN, feature_dict, samp_amp_to_graph)
-            contexts.extend(curr_contexts)
+    # report ecDNA context
+    context_filename = args.o + "_ecDNA_context_calls.tsv"
+    contexts = []
+    for ind, (sname, feature_dict) in enumerate(zip(sampNames, fd_list)):
+        ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
+        curr_contexts = create_context_table(args.o, sname, ampN, feature_dict, samp_amp_to_graph)
+        contexts.extend(curr_contexts)
 
-        with open(context_filename, 'w') as context_outfile:
-            for x in contexts:
-                context_outfile.write("\t".join(x) + "\n")
+    with open(context_filename, 'w') as context_outfile:
+        for x in contexts:
+            context_outfile.write("\t".join(x) + "\n")
 
     # Edge profiles
     if args.verbose_classification:
