@@ -121,7 +121,7 @@ Reports amplicon complexity scores as measured by the number of genomic segments
 #### ****`[output_prefix]_ecDNA_counts.tsv`****
 This two-column file reports the `sample_name` and the number of ecDNA identified in the sample across all amplicons from the sample.
 
-#### ****`[output_prefix]_ecDNA_context.tsv`****
+#### ****`[output_prefix]_ecDNA_context_calls.tsv`****
 This two column file reports the ecDNA feature name (sample_amplicon_ecDNA_number), and a classification of the ecDNA focal amplification genome context.
 The possibilities for ecDNA context classification are
 - Simple circular simple background: A simple cycle with minimal rearrangements in the surrounding genome. Likely not derived from chromothripsis.
