@@ -108,18 +108,29 @@ Reports a table of basic properties such as size of captured regions, median and
 #### ****`[prefix]_feature_entropy.tsv`****
 Reports amplicon complexity scores as measured by the number of genomic segments and the diversity of copy number among all the amplicon decompositions performed by AA. For more information please see the Supplementary Information file of [this study](https://www.nature.com/articles/s41586-023-05937-5).
 
- | Column name                    | Contents   |
-|--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `sample_name`                  | Sample name prefix |
-| `amplicon_number`              | AA amplicon index, e.g. `amplicon2` |
-| `feature` | Which feature inside the amplicon the gene is present on. May be `unknown` if cannot be confidently assigned to a feature. |
-| `total_feature_entropy`                       | This is the amplicon complexity score. |
-| `decomp_entropy`                         | Amount of entropy or diversity captured in the AA decompositions overlapping this feature. |
+ | Column name                     | Contents   |
+|---------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `sample_name`                   | Sample name prefix |
+| `amplicon_number`               | AA amplicon index, e.g. `amplicon2` |
+| `feature`                       | Which feature inside the amplicon the gene is present on. May be `unknown` if cannot be confidently assigned to a feature. |
+| `total_feature_entropy`         | This is the amplicon complexity score. |
+| `decomp_entropy`                | Amount of entropy or diversity captured in the AA decompositions overlapping this feature. |
 | `Amp_nseg_entropy`              | Amount of entropy or diversity captured by the number of genomic segments overlapping this feature. |
 
 
 #### ****`[output_prefix]_ecDNA_counts.tsv`****
 This two-column file reports the `sample_name` and the number of ecDNA identified in the sample across all amplicons from the sample.
+
+#### ****`[output_prefix]_ecDNA_context.tsv`****
+This two column file reports the ecDNA feature name (sample_amplicon_ecDNA_number), and a classification of the ecDNA focal amplification genome context.
+The possibilities for ecDNA context classification are
+- Simple circular simple background: A simple cycle with minimal rearrangements in the surrounding genome. Likely not derived from chromothripsis.
+- Simple circular complex background: A simple cycle however there are genomic rearrangements in the vicinity outside the ecDNA region.
+- BFB-like: possibly derived from a BFB.
+- Two-foldback: being flanked by two foldback-like SVs. Likely not derived from chromothripsis.
+- Heavily rearranged unichromosomal: from a heavily rearranged genome on one chromosome. Possibly due to chromothripsis.
+- Heavily rearranged multichromosomal: from a heavily rearranged genome involving multiple chromosomes. Possibly due to chromothripsis and chromoplexy.
+- Unknown: Does not match any of the classes above.
 
 #### Amplicon bed files, annotated cycles, and SV summaries
 Additionally, there are three directories  created by `amplicon_classifier.py`. They are
@@ -157,7 +168,7 @@ Else if running on multiple amplicons, use argument
 | `--exclude_bed`                                 | Provide a bed file of regions to ignore during classification. Useful for separating linked amplicons or augmenting existing low-complexity annotations.                                                             |
 | `--no_LC_filter`                                | Set this to turn off filtering low-complexity & poor mappability genome region paths & cycles based on the regions in the AA data repo.                                                                              |
 | `--filter_similar`                              | Permits filtering of false-positive amps arising in multiple independent samples based on similarity calculation. Only use if all samples are of independent origins (not replicates and not multi-region biopsies). |
-| `-i/--input`                                    | If you have already run `make_input.sh`, you can give the resulting .input file instead of setting `--AA_results`                                                                                                     | 
+| `-i/--input`                                    | If you have already run `make_input.sh`, you can give the resulting .input file instead of setting `--AA_results`                                                                                                    | 
 
 ### 5. Other utilities:
 
