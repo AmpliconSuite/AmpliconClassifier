@@ -1,8 +1,15 @@
+#!/usr/bin/env python3
+
+import argparse
+from  collections  import  defaultdict
+
 import numpy as np
 import pandas as pd
-from  collections  import  defaultdict
-from ampclasslib.convert_cycles_file import make_new_cycle
-import argparse
+
+try:
+    from ampclasslib.convert_cycles_file import make_new_cycle
+except ModuleNotFoundError:
+    from convert_cycles_file import make_new_cycle
 
 #Author: Bhargavi Dameracharla, modified by Jens Luebeck
 
@@ -524,4 +531,6 @@ if __name__ == "__main__":
     bed_file = args.bed
     verbose = args.verbose
 
-    fetch_context(graph_file, cycles_file, FUSE_CUTOFF, TN_RATIO_CUTOFF, CYCLE_FRAC_CUTOFF, bed_file, verbose)
+    context = fetch_context(graph_file, cycles_file, FUSE_CUTOFF, TN_RATIO_CUTOFF, CYCLE_FRAC_CUTOFF, bed_file, verbose)
+    if not verbose:
+        print("Context: " + str(context))
