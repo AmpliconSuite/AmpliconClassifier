@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
@@ -202,7 +202,7 @@ def compute_f_from_AA_graph(graphf, add_chr_tag):
     h = "SequenceEdge: StartPosition, EndPosition, PredictedCopyCount, AverageCoverage, Size, NumberReadsMapped".rsplit()
     h = [x.rstrip(',') for x in h]
     with open(graphf) as infile:
-        fbCount, nonFbCount, fbEdges, maxCN, tot_over_min_cn = 0, 0, 0, 0, 0
+        fb_readcount, nonFbCount, fbEdges, maxCN, tot_over_min_cn = 0, 0, 0, 0, 0
         for line in infile:
             fields = line.rstrip().rsplit()
             if line.startswith("SequenceEdge:"):
@@ -228,7 +228,7 @@ def compute_f_from_AA_graph(graphf, add_chr_tag):
                 rSupp = int(fields[3])
                 if ldir == rdir:
                     if lchrom == rchrom and abs(rpos - lpos) < fb_dist_cut:
-                        fbCount += rSupp
+                        fb_readcount += rSupp
                         fbEdges += 1
 
                     else:
@@ -253,7 +253,7 @@ def compute_f_from_AA_graph(graphf, add_chr_tag):
     if fbEdges < 2:
         return 0, 0, maxCN, tot_over_min_cn
 
-    return fbCount, fbCount / max(1.0, float(fbCount + nonFbCount)), maxCN, tot_over_min_cn
+    return fbEdges, fb_readcount, fb_readcount / max(1.0, float(fb_readcount + nonFbCount)), maxCN, tot_over_min_cn
 
 
 def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs):
@@ -794,7 +794,7 @@ def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn):
 def run_classification(segSeqD, cycleList, cycleCNs):
     graph_cns = get_graph_cns(graphFile, args.add_chr_tag)
     # first compute some properties about the foldbacks and copy numbers
-    fb_count, fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
+    fb_edges, fb_readcount, fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
     rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
 
     totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights, rearrCycleInds = get_raw_cycle_props(
@@ -817,9 +817,9 @@ def run_classification(segSeqD, cycleList, cycleCNs):
     AMP_dvaluesDict["BFB_cwp"] = bfb_cwp
     bfbClass = classifyBFB(fb_prop, fb_bwp, nfb_bwp, bfb_cwp, maxCN, tot_over_min_cn)
 
-    non_fb_rearr_e = rearr_e - fb_count
+    non_fb_rearr_e = rearr_e - fb_edges
     # heuristics to catch sequencing artifact samples
-    if fb_count > 15 and fb_prop > 0.8:
+    if fb_edges > 15 and fb_prop > 0.8:
         bfbClass = False
         if non_fb_rearr_e >= 4 and tot_over_min_cn > compCycContCut and maxCN > 10:
             ampClass = "Complex-non-cyclic"
