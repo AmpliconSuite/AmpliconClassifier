@@ -251,7 +251,7 @@ def compute_f_from_AA_graph(graphf, add_chr_tag):
 
     # just return 0 if there isn't enough support
     if fbEdges < 2:
-        return 0, 0, maxCN, tot_over_min_cn
+        return 0, 0, 0, maxCN, tot_over_min_cn
 
     return fbEdges, fb_readcount, fb_readcount / max(1.0, float(fb_readcount + nonFbCount)), maxCN, tot_over_min_cn
 
@@ -1137,7 +1137,7 @@ if __name__ == "__main__":
                 if args.ref == "hg19" and not any([x.startswith("chr") for x in chroms]):
                     print("chrom names: " + str(chroms))
                     print("Warning! --ref hg19 was set, but chromosome names are not consistent with hg19 ('chr1', 'chr2', etc.)\n")
-                elif args.ref == "GRCh37" and any([x.startswith("chr") for x in chroms]):
+                elif args.ref == "GRCh37" and any([x.startswith("chr") for x in chroms]) and not args.add_chr_tag:
                     print("chrom names: " + str(chroms))
                     print("Warning! --ref GRCh37 was set, but chromosome names are not consistent with GRCh37 ('1', '2', etc.)\n")
 

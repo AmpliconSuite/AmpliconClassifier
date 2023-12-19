@@ -247,11 +247,11 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
 def bpg_edges(bpgf, add_chr_tag, lcD):
     bps = []
     with open(bpgf) as infile:
+        hom_len_index = None
+        hom_seq_index = None
         for line in infile:
             if line.startswith("BreakpointEdge:"):
                 fields = line.rstrip().rsplit()
-                hom_len_index = None
-                hom_seq_index = None
                 for ind, x in enumerate(fields):
                     if x.startswith("HomologySizeIfAvailable"):
                         hom_len_index = ind
@@ -274,13 +274,16 @@ def bpg_edges(bpgf, add_chr_tag, lcD):
                     continue
 
                 support = int(fields[3])
-                if not any([x is None for x in [hom_seq_index and hom_len_index]]):
+                if not any([x is None for x in [hom_seq_index, hom_len_index]]):
                     homlen = fields[hom_len_index]
                     if homlen == "0":
                         homlen = "None"
                         homseq = "None"
                     else:
                         homseq = fields[hom_seq_index]
+                else:
+                    homlen = "None"
+                    homseq = "None"
 
                 currBP = breakpoint(lchrom, lpos, rchrom, rpos, support, ldir, rdir, homlen=homlen, homseq=homseq)
                 bps.append(currBP)

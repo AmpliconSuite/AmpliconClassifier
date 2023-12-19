@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 import argparse
-from  collections  import  defaultdict
+from collections import defaultdict
+import os
 
 import numpy as np
 import pandas as pd
@@ -494,6 +495,10 @@ def ecDNAContext(metrics, t_n_cutoff = 4, cycle_cutoff = 0.15):
     
 
 def fetch_context(graph_file, cycles_file, FUSE_CUTOFF=5000, TN_RATIO_CUTOFF=4, CYCLE_FRAC_CUTOFF=0.15, bed_file=None, verbose=False):
+    if not os.path.exists(graph_file) or not os.path.exists(cycles_file):
+        print("ecDNA context function could not find graph or cycles file: ", graph_file, cycles_file)
+        return "Unknown"
+
     bed_regions = read_bed_file(bed_file)
     multiple_large = regions_apart(bed_regions)
     filtered_sequences, filtered_edges, sequences, edges = filter_graph_with_bed(graph_file, bed_regions)
