@@ -121,13 +121,16 @@ This two-column file reports the `sample_name` and the number of ecDNA identifie
 #### ****`[output_prefix]_ecDNA_context_calls.tsv`****
 This two column file reports the ecDNA feature name (sample_amplicon_ecDNA_number), and a classification of the ecDNA focal amplification genome context.
 The possibilities for ecDNA context classification are
-- Simple circular simple background: A simple cycle with minimal rearrangements in the surrounding genome. Likely not derived from chromothripsis.
-- Simple circular complex background: A simple cycle however there are genomic rearrangements in the vicinity outside the ecDNA region.
-- BFB-like: possibly derived from a BFB.
-- Two-foldback: being flanked by two foldback-like SVs. Likely not derived from chromothripsis.
-- Heavily rearranged unichromosomal: from a heavily rearranged genome on one chromosome. Possibly due to chromothripsis.
-- Heavily rearranged multichromosomal: from a heavily rearranged genome involving multiple chromosomes. Possibly due to chromothripsis and chromoplexy.
-- Unknown: Does not match any of the classes above.
+
+| Column name                         | Contents                                                                                                                                                                                         |
+|-------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Simple circular simple background   | A simple ecDNA cycle with minimal rearrangements in the surrounding genome. Likely not derived from chromothripsis.                                                                              |
+| Simple circular complex background  | A simple ecDNA cycle however there are genomic rearrangements in the vicinity outside the ecDNA region.                                                                                          |
+| BFB-like | ecDNA possibly derived from a BFB.                                                                                                                                                               |
+| Two-foldback | ecDNA being flanked by two foldback-like SVs. Likely not derived from chromothripsis, but possibly from [ODIRA](https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1002016). |
+| Heavily rearranged unichromosomal | ecDNA from a heavily rearranged genome on one chromosome. Possibly due to chromothripsis. |
+| Heavily rearranged multichromosomal | ecDNA from a heavily rearranged genome involving multiple chromosomes. Possibly due to chromothripsis and chromoplexy. |
+| Unknown | Does not match any of the classes above. |
 
 #### Amplicon bed files, annotated cycles, and SV summaries
 Additionally, there are three directories  created by `amplicon_classifier.py`. They are
