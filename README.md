@@ -122,7 +122,7 @@ This two-column file reports the `sample_name` and the number of ecDNA identifie
 This two column file reports the ecDNA feature name (sample_amplicon_ecDNA_number), and a classification of the ecDNA focal amplification genome context.
 The possibilities for ecDNA context classification are
 
-| Column name                         | Contents                                                                                                                                                                                         |
+| ecDNA context class                         | Description                                                                                                                                                                                         |
 |-------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Simple circular simple background   | A simple ecDNA cycle with minimal rearrangements in the surrounding genome. Likely not derived from chromothripsis.                                                                              |
 | Simple circular complex background  | A simple ecDNA cycle however there are genomic rearrangements in the vicinity outside the ecDNA region.                                                                                          |
