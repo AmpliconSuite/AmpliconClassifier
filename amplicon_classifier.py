@@ -136,10 +136,12 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
 
                 segs += 1
                 totalGraphWeight += (size * cn)
+                # print(fields[1], size * cn, "individual weight")
 
             elif line.startswith("BreakpointEdge"):
                 break
 
+    # print(totalGraphWeight, "total graphweight")
     cycleWeights = []
     new_feat_inds = set()
     for ind, cycle in enumerate(cycleList):
@@ -167,6 +169,7 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
     if totalGraphWeight > 0:
         while cf < hf_cut and cInd < len(cycleWeights):
             if cInd in new_feat_inds:
+                # print(cInd, cycleWeights[cInd], "cInd, weight")
                 added_cf = cycleWeights[cInd] / float(totalGraphWeight)
                 cf += added_cf
                 # print(cInd, "<-cInd, weight->", added_cf, cf)
@@ -176,6 +179,7 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
             cInd += 1
 
         cf = round(cf, 5)
+        # print(cf, "CF")
         rf = (1 - cf)
         if rf > 0:
             fu_ent = -1 * rf * log(rf)
@@ -507,13 +511,15 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, graph_cns, excludableCycleIndi
             continue
 
         cIndsToMerge = set()
-        s_set = set([segSeqD[abs(s_num)] for s_num in cycle])
-        s_set -= seenSegs
+        cycle_segs = set([segSeqD[abs(s_num)] for s_num in cycle])
+        # s_set = set([segSeqD[abs(s_num)] for s_num in cycle])
+        s_set = cycle_segs.difference(seenSegs)
+        # s_set -= seenSegs
         if not s_set:
             continue
 
         for c_ind, clust_dict in enumerate(clusters):
-            for s in s_set:
+            for s in cycle_segs:
                 if clust_dict[s[0]][s[1] - padding:s[2] + padding]:
                     cIndsToMerge.add(c_ind)
                     break
