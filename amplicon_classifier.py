@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "1.1.2"
+__version__ = "1.1.3"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
@@ -974,6 +974,10 @@ mixLookups = {
     frozenset(["Complex-non-cyclic"]): "Non-cyclic",
     frozenset(["Complex-non-cyclic", "Complex-cyclic"]): "Hybrid",
     frozenset(["Complex-cyclic"]): "Cyclic",
+    frozenset(["Virus", "Linear"]): "Hybrid",
+    frozenset(["Complex-non-cyclic", "Virus"]): "Hybrid",
+    frozenset(["Trivial cycle", "Virus"]): "Cyclic",
+    frozenset(["Complex-cyclic", "Virus"]): "Cyclic",
     frozenset(["Virus"]): "Virus",
 }
 
