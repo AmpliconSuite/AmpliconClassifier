@@ -376,13 +376,13 @@ def set_lcd(AA_DATA_REPO, no_LC_filter):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compute similarity between overlapping AA amplicons")
     parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38",
-                        choices=["hg19", "GRCh37", "hg38", "GRCh38", "mm10", "GRCm38"], required=True)
+                        choices=["hg19", "GRCh37", "hg38", "GRCh38", "mm10", "GRCm38", "GRCh38_viral"], required=True)
     # parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon",
     #                     default=5000)
     parser.add_argument("-i", "--input", help="Path to list of files to use. Each line formatted as: \
     samplename /path/to/sample_amplicon1_cycles.txt /path/to/sample_amplicon1_graph.txt", required=True)
     parser.add_argument("-o", help="Output filename prefix")
-    parser.add_argument("--min_cn", type=float, help="Minimum CN to consider as amplification (default 4.5",
+    parser.add_argument("--min_cn", type=float, help="Minimum CN to consider as amplification (default 4.5)",
                         default=4.5)
     # parser.add_argument("-p","--pairs", help="Amplicons to compute similarity for. Each line formatted as: \
     # samplename_amplicon1 samplename_amplicon2 ...", required=True)
@@ -427,8 +427,9 @@ if __name__ == "__main__":
     else:
         required_classes = set()
 
-    print("Required classifications set to")
-    print(required_classes)
+    if args.required_classifications:
+        print("Required classifications set to")
+        print(required_classes)
 
     if args.ref == "hg38": args.ref = "GRCh38"
     elif args.ref == "GRCm38": args.ref = "mm10"

@@ -651,7 +651,7 @@ def filter_similar_amplicons(n_files):
 
     # now do the filtering
     '''
-    The following may be affected
+    The following are updated during similarity filtering
     ftgd_list = []  # store list of feature gene classifications   -- removes from dictionary
     ftci_list = []  # store list of cycles file info               -- adds invalid tag to relevant cycles
     bpgi_list = []  # store list of bpg                            -- set feature of edge to "None"
@@ -802,7 +802,6 @@ def run_classification(segSeqD, cycleList, cycleCNs):
     # first compute some properties about the foldbacks and copy numbers
     fb_edges, fb_readcount, fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
     rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
-
     totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights, rearrCycleInds = get_raw_cycle_props(
         cycleList, maxCN, rearr_e, tot_over_min_cn)
 
@@ -981,7 +980,6 @@ mixLookups = {
     frozenset(["Virus"]): "Virus",
 }
 
-# (circular,complex)
 categories = ["No amp/Invalid", "Linear", "Trivial cycle", "Complex-non-cyclic", "Complex-cyclic", "Virus",
               "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp", "Amp_entropy", "Amp_decomp_entropy",
               "Amp_nseg_entropy"]

@@ -21,7 +21,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compute similarity between overlapping amplicon features, e.g. "
                                                  "ecDNAs, BFBs, etc.")
     parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38",
-                        choices=["hg19", "GRCh37", "hg38", "GRCh38", "mm10", "GRCm38"], required=True)
+                        choices=["hg19", "GRCh37", "hg38", "GRCh38", "mm10", "GRCm38", "GRCh38_viral"], required=True)
     parser.add_argument("-f", "--feature_input", help="Path to list of AC feature bed files and corresponding graphs. "
                         "Input file for -f generated automatically by AC, '[sample]_features_to_graph.txt'.",
                         required=True)
@@ -94,6 +94,8 @@ if __name__ == "__main__":
     with open(args.feature_input) as infile:
         for line in infile:
             fields = line.rstrip().rsplit("\t")
+            if not fields:
+                continue
             f, graphfile = fields[0], fields[1]
             featbasename = os.path.basename(f)
             featfields = featbasename.rsplit("_")
