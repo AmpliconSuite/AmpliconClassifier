@@ -190,6 +190,8 @@ def buildLCDatabase(mappabilityFile):
     with open(mappabilityFile) as infile:
         for line in infile:
             fields = line.rstrip().rsplit()
+            if not fields:
+                continue
             chrom, s, e = fields[0], int(fields[1]), int(fields[2])
             if e - s > 7500:
                 lcD[chrom].addi(s, e)
@@ -328,6 +330,8 @@ def bed_to_interval_dict(bedf, add_chr_tag):
     with open(bedf) as infile:
         for line in infile:
             fields = line.rstrip().rsplit()
+            if not fields:
+                continue
             if add_chr_tag and not fields[0].startswith('chr'):
                 fields[0] = 'chr' + fields[0]
 
