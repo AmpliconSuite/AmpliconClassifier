@@ -202,6 +202,8 @@ def build_CG5_database(cg5_file):
     with open(cg5_file) as infile:
         for line in infile:
             fields = line.rstrip().rsplit()
+            if not fields:
+                continue
             chrom, s, e = fields[0], int(fields[1]), int(fields[2])
             cg5D[chrom].addi(s, e)
 
