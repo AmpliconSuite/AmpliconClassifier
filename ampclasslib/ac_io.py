@@ -130,6 +130,8 @@ def create_context_table(prefix, sname, ampN, feature_dict, samp_amp_to_graph):
 # write a cycles file with the cycles -> some corrected
 def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters,
                                           invalidInds, rearrCycleInds):
+    offset_d = defaultdict(lambda: 1)
+    offset_d[0] = 0
     outdir = prefix + "_annotated_cycles_files/"
     if not os.path.exists(outdir):
         os.makedirs(outdir)
@@ -145,7 +147,7 @@ def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, 
 
         for ind, cyc in enumerate(cycleList):
             ccn = cycleCNs[ind]
-            clen = sum([segSeqD[abs(x)][2] - segSeqD[abs(x)][1] for x in cyc])
+            clen = sum([segSeqD[abs(x)][2] - segSeqD[abs(x)][1] + offset_d[x] for x in cyc])
             cl = ",".join([str(abs(x)) + "-" if x < 0 else str(abs(x)) + "+" for x in cyc])
             acclass = ""
             isCyclic = cyc[0] != 0
