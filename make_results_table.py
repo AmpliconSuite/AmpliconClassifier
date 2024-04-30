@@ -144,6 +144,7 @@ if __name__ == "__main__":
 
     if not args.run_metadata_file and not args.run_metadata_list and not args.ref:
         sys.stderr.write("One of the following must be provided: --ref | --run_metadata_list | --run_metadata_file\n")
+        sys.exit(1)
 
     output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Oncogenes",
                    "All genes", "Complexity score", "Captured interval length", "Feature median copy number",
@@ -189,7 +190,7 @@ if __name__ == "__main__":
     if args.sample_cnv_bed_list:
         with open(args.sample_cnv_bed_list) as infile:
             for line in infile:
-                fields = line.rstrip().rsplit("\t")
+                fields = line.rstrip().rsplit()
                 sample_cnv_calls_path[fields[0]] = fields[1]
 
     output_table_lines = [output_head, ]
