@@ -41,14 +41,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    try:
-        AC_SRC = os.environ["AC_SRC"]
-
-    except KeyError:
-        sys.stderr.write("$AC_SRC not found. Please first set AC_SRC bash variable using AC installation instructions "
-                         "in Readme.\n")
-        sys.exit(1)
-
     if args.ref == "hg38": args.ref = "GRCh38"
     elif args.ref == "GRCm38": args.ref = "mm10"
 
