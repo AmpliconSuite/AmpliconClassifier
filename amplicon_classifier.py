@@ -1054,6 +1054,10 @@ if __name__ == "__main__":
         print("--decomposition_strictness must be a value between 0 and 1")
         sys.exit(1)
 
+    if args.ref == "GRCh38_viral" and args.filter_similar:
+        print('--filter_similar cannot be used with --ref GRCh38_viral. disabling --filter_similar')
+        args.filter_similar = False
+
     # check if aa data repo set, construct low-complexity (LC) datatabase
     try:
         AA_DATA_REPO = os.environ["AA_DATA_REPO"] + "/" + args.ref + "/"
