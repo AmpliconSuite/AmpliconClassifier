@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-__version__ = "1.1.4"
+__version__ = "1.2.0"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
@@ -292,6 +292,13 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, add
         if cycle[0] != 0:
             cycle.append(cycle[0])
 
+        removed_zero_one_len_cycle = []
+        for x in cycle:
+            if segSeqD[abs(x)][2] -  segSeqD[abs(x)][1] > 1:
+                removed_zero_one_len_cycle.append(x)
+
+        cycle = removed_zero_one_len_cycle
+
         hit = False
         isBFBelem = False
         illegalBFB = False
@@ -445,6 +452,7 @@ def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCyclicCont, totCyclic
 
 
 def classifyBFB(fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN, tot_over_min_cn):
+    # print((fb,             cyc_sig,            nonbfb_sig,          bfb_cyc_ratio,      maxCN,            tot_over_min_cn))
     if fb < min_score_for_bfb or cyc_sig < 0.295 or maxCN < 4:
         return None
 
@@ -1173,6 +1181,6 @@ if __name__ == "__main__":
     # OUTPUT FILE WRITING
     write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count, fd_list,
-                  samp_amp_to_graph, prop_list)
+                  samp_amp_to_graph, prop_list, add_chr_tag=args.add_chr_tag)
 
     print("done")

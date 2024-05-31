@@ -106,7 +106,7 @@ def write_interval_beds(prefix, sname, ampN, feature_dict, samp_amp_to_graph, f2
                     outfile.write("\t".join(l) + "\n")
 
 
-def create_context_table(prefix, sname, ampN, feature_dict, samp_amp_to_graph):
+def create_context_table(prefix, sname, ampN, feature_dict, samp_amp_to_graph, add_chr_tag=False):
     curr_contexts = []
     bedfile_dir = prefix + "_classification_bed_files/"
     cycles_dir = prefix + "_annotated_cycles_files/"
@@ -120,7 +120,7 @@ def create_context_table(prefix, sname, ampN, feature_dict, samp_amp_to_graph):
             else:
                 gfile = samp_amp_to_graph[sname + "_" + ampN]
                 cfile = cycles_dir + trim_sname + "_" + ampN + "_annotated_cycles.txt"
-                context = fetch_context(gfile, cfile, bed_file=intervals_fname)
+                context = fetch_context(gfile, cfile, bed_file=intervals_fname, add_chr_tag=add_chr_tag)
 
             curr_contexts.append((trim_sname + "_" + ampN + "_" + feat_name, context))
 
@@ -175,7 +175,7 @@ def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, 
 
 def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count, fd_list,
-                  samp_amp_to_graph, prop_list):
+                  samp_amp_to_graph, prop_list, add_chr_tag=False):
     # Genes
     gene_extraction_outname = args.o + "_gene_list.tsv"
     write_gene_results(gene_extraction_outname, ftgd_list)
@@ -233,7 +233,7 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
     contexts = []
     for ind, (sname, feature_dict) in enumerate(zip(sampNames, fd_list)):
         ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
-        curr_contexts = create_context_table(args.o, sname, ampN, feature_dict, samp_amp_to_graph)
+        curr_contexts = create_context_table(args.o, sname, ampN, feature_dict, samp_amp_to_graph, add_chr_tag=add_chr_tag)
         contexts.extend(curr_contexts)
 
     with open(context_filename, 'w') as context_outfile:

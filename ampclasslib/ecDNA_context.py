@@ -14,12 +14,16 @@ except ModuleNotFoundError:
 
 #Author: Bhargavi Dameracharla, modified by Jens Luebeck
 
-def read_bed_file(bed_file_path):
+def read_bed_file(bed_file_path, add_chr_tag):
     bed_regions = []
     with open(bed_file_path, 'r') as rf:
         for line in rf:
             chrom, start, end = line.strip().split()[:3]
+            if add_chr_tag and not chrom.startswith('chr'):
+                chrom = 'chr' + chrom
+
             bed_regions.append((chrom, int(start)-10000, int(end)+10000))
+
     return bed_regions
 
 def regions_apart(bed_regions):
@@ -30,7 +34,7 @@ def regions_apart(bed_regions):
                 return True
     return False
 
-def filter_graph_with_bed(graph_file_path, bed_regions):
+def filter_graph_with_bed(graph_file_path, bed_regions, add_chr_tag):
     filtered_sequences = []
     filtered_edges = []
     sequence_endpoints = set()
@@ -48,6 +52,11 @@ def filter_graph_with_bed(graph_file_path, bed_regions):
                 _, start, end, cn, *_ = line.split("\t")
                 start_chr, start_pos = start.split(":")[0], int(start.split(":")[1].split("-")[0])
                 end_chr, end_pos = end.split(":")[0], int(end.split(":")[1].split("+")[0])
+                if add_chr_tag:
+                    if not start_chr.startswith("chr"):
+                        start_chr = "chr" + start_chr
+                    if not end_chr.startswith("chr"):
+                        end_chr = "chr" + end_chr
 
                 all_sequences.append({"ID": seq_count,"start_chr": start_chr, "end_chr": end_chr, "start": start_pos, "end": end_pos, "cn": float(cn)})
 
@@ -70,6 +79,9 @@ def filter_graph_with_bed(graph_file_path, bed_regions):
                 all_edges.append({"type": type, "start_chr": start_chr, "end_chr": end_chr, "start": start_pos, "end": end_pos, "cn": float(cn)})
                 if (start_chr, start_pos_int) in sequence_endpoints and (end_chr, end_pos_int) in sequence_endpoints:
                     filtered_edges.append({"type": type, "start_chr": start_chr, "end_chr": end_chr, "start": start_pos, "end": end_pos, "cn": float(cn)})
+
+    if not filtered_sequences:
+        print("Warning: Filtering " + graph_file_path + " using bed regions resulting in no filtered sequences!")
 
     return filtered_sequences, filtered_edges, all_sequences, all_edges
 
@@ -137,12 +149,15 @@ def cycleFractionTable(filtered_cycles, filtered_sequences):
 def deduce_states(all_cns):
     #all_round = sorted(list(map(lambda x: round(x), all_cns)))
     all_round = sorted(all_cns)
+    count_dict = {}
+    if not all_round:
+        return count_dict
+
     gaps = [all_round[i+1] - all_round[i] for i in range(len(all_round)-1)]
     if not gaps:
         return {all_round[0]: 1}
     threshold = 2
     cur_cns = []
-    count_dict = {}
     for i in range(len(all_round)):
         if len(cur_cns) > 0:
             if abs(np.mean(cur_cns) - all_round[i]) >= threshold:
@@ -253,12 +268,16 @@ def fbCount(filtered_edges, fb_cutoff = 50000):
     return fb_count
 
 def detectTwoFB(filtered_sequences, filtered_edges, fb_cutoff = 50000):
+    start_found = False
+    end_found = False
+    if not filtered_sequences:
+        return start_found and end_found
+
     amp_start_chr, amp_start_pos = filtered_sequences[0]['start_chr'], filtered_sequences[0]['start']
     amp_start_end = filtered_sequences[0]['end']
     amp_end_chr, amp_end_pos = filtered_sequences[-1]['end_chr'], filtered_sequences[-1]['end']
     amp_end_start = filtered_sequences[-1]['start']
-    start_found = False
-    end_found = False
+
     if amp_start_chr == amp_end_chr:
         # look for foldback edges closer to these end points
         for edge in filtered_edges:
@@ -370,8 +389,8 @@ def ecDNAMetrics(filtered_cycles, filtered_sequences, filtered_edges, sequences,
     if not use_everted_metrics:
         n_trans, all_cns = count_transitions_del(filtered_sequences, filtered_edges, fuse_cutoff=fuse_cutoff)
         n_cn_states = len(deduce_states(all_cns))
-        
-        t_n_ratio = n_trans/n_cn_states
+
+        t_n_ratio = n_trans/n_cn_states if n_cn_states > 0 else 0
         
         cns_dict = deduce_states(all_cns)
         fb_count = fbCount(filtered_edges)
@@ -494,14 +513,14 @@ def ecDNAContext(metrics, t_n_cutoff = 4, cycle_cutoff = 0.15):
         return "Unknown"
     
 
-def fetch_context(graph_file, cycles_file, FUSE_CUTOFF=5000, TN_RATIO_CUTOFF=4, CYCLE_FRAC_CUTOFF=0.15, bed_file=None, verbose=False):
+def fetch_context(graph_file, cycles_file, FUSE_CUTOFF=5000, TN_RATIO_CUTOFF=4, CYCLE_FRAC_CUTOFF=0.15, bed_file=None, verbose=False, add_chr_tag=False):
     if not os.path.exists(graph_file) or not os.path.exists(cycles_file):
         print("ecDNA context function could not find graph or cycles file: ", graph_file, cycles_file)
         return "Unknown"
 
-    bed_regions = read_bed_file(bed_file)
+    bed_regions = read_bed_file(bed_file, add_chr_tag)
     multiple_large = regions_apart(bed_regions)
-    filtered_sequences, filtered_edges, sequences, edges = filter_graph_with_bed(graph_file, bed_regions)
+    filtered_sequences, filtered_edges, sequences, edges = filter_graph_with_bed(graph_file, bed_regions, add_chr_tag)
     _, converted_cycles = make_new_cycle(graph_file, cycles_file)
     filtered_cycles = filter_cycles_with_edges(converted_cycles, filtered_sequences)
 
@@ -525,6 +544,8 @@ if __name__ == "__main__":
     parser.add_argument("-t", "--t_n", help="Transition to CN ratio cutoff", type=float, default=4)
     parser.add_argument("-y", "--cycle_cutoff", help="Cycle fraction cutoff", type=float, default=0.15)
     parser.add_argument("-b", "--bed", help="Bed file of ecDNA regions", required=False)
+    parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files.",
+                        action='store_true')
     parser.add_argument("--verbose", help="Report verbose scores for the individual metrics", action='store_true')
 
     args = parser.parse_args()
@@ -535,7 +556,8 @@ if __name__ == "__main__":
     CYCLE_FRAC_CUTOFF = args.cycle_cutoff
     bed_file = args.bed
     verbose = args.verbose
+    add_chr_tag = args.add_chr_tag
 
-    context = fetch_context(graph_file, cycles_file, FUSE_CUTOFF, TN_RATIO_CUTOFF, CYCLE_FRAC_CUTOFF, bed_file, verbose)
+    context = fetch_context(graph_file, cycles_file, FUSE_CUTOFF, TN_RATIO_CUTOFF, CYCLE_FRAC_CUTOFF, bed_file, verbose, add_chr_tag)
     if not verbose:
         print("Context: " + str(context))
