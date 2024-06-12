@@ -294,8 +294,11 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, add
 
         removed_zero_one_len_cycle = []
         for x in cycle:
-            if segSeqD[abs(x)][2] -  segSeqD[abs(x)][1] > 1:
+            if segSeqD[abs(x)][2] - segSeqD[abs(x)][1] > 1:
                 removed_zero_one_len_cycle.append(x)
+
+        if not removed_zero_one_len_cycle:
+            continue
 
         cycle = removed_zero_one_len_cycle
 
