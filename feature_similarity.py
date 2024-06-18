@@ -65,8 +65,7 @@ if __name__ == "__main__":
         required_classes.remove("Linear")
         required_classes.add("Linear")
 
-    print("Required classifications set to")
-    print(required_classes)
+    print("Required classifications set to: " + str(required_classes))
 
     add_chr_tag = args.add_chr_tag
     cn_cut = args.min_cn
