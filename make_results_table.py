@@ -88,6 +88,23 @@ def cycles_graph_amp_lookup(input_lines):
     return lookup
 
 
+def get_version_info(run_meta_dict):
+    asp, aa, ac = "NA", "NA", "NA"
+    if "AC_version" in run_meta_dict and run_meta_dict["AC_version"]:
+        ac = run_meta_dict["AC_version"]
+
+    if "PAA_version" in run_meta_dict and run_meta_dict["PAA_version"]:
+        asp = run_meta_dict["PAA_version"]
+
+    if "AmpliconSuite-pipeline_version" in run_meta_dict and run_meta_dict["AmpliconSuite-pipeline_version"]:
+        asp = run_meta_dict["AmpliconSuite-pipeline_version"]
+
+    if "AA_version" in run_meta_dict and run_meta_dict["AA_version"]:
+        aa = run_meta_dict["AA_version"].rsplit()[-1]
+
+    return asp, aa, ac
+
+
 def copy_AA_files(ll, ldir):
     for i in range(-5, 0):
         s = ll[i]
@@ -164,8 +181,8 @@ if __name__ == "__main__":
     output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Oncogenes",
                    "All genes", "Complexity score", "ecDNA context", "Captured interval length", "Feature median copy number",
                    "Feature maximum copy number", "Filter flag", "Reference version", "Tissue of origin",
-                   "Sample type", "Feature BED file", "CNV BED file", "AA PNG file", "AA PDF file", "AA summary file",
-                   "Run metadata JSON", "Sample metadata JSON"]
+                   "Sample type", "Feature BED file", "CNV BED file", "AA PNG file", "AA PDF file",
+                   "AS-p version", "AA version" , "AC version", "AA summary file", "Run metadata JSON", "Sample metadata JSON"]
 
     sumf_used = set()
     sumf_dict = read_summary_list(args.summary_map)
@@ -377,14 +394,19 @@ if __name__ == "__main__":
             if curr_run_metadata['ref_genome'] == "NA" and args.ref:
                 curr_run_metadata["ref_genome"] = args.ref
 
+            asp_version, aa_version, ac_version = get_version_info(curr_run_metadata)
+
             fdl = [featureID, feature, intervals, oncogenes, all_genes, complexity, context] + basic_stats + \
                   [curr_run_metadata["ref_genome"], curr_sample_metadata["tissue_of_origin"],
                    curr_sample_metadata["sample_type"], os.path.abspath(featureBed), cnv_bed_path]
 
             image_locs = ["NA", "NA"]
+
+            sum_dl = [asp_version, aa_version, ac_version, sumf, run_metadata_path[sample_name], sample_metadata_path[sample_name]]
+
             output_table_lines.append(
                 [sample_name, AA_amplicon_number] + fdl + image_locs +
-                [sumf, run_metadata_path[sample_name], sample_metadata_path[sample_name], ])
+                sum_dl)
 
 
     tsv_ofname = classBase + "_result_table.tsv"
