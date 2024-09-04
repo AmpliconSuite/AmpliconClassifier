@@ -37,11 +37,15 @@ def read_complexity_scores(entropy_file):
 
 def read_context(context_file):
     amplicon_context_dict = defaultdict(lambda: "NA")
-    with open(context_file) as infile:
-        for line in infile:
-            fields = line.rstrip().rsplit("\t")
-            featureID = fields[0]
-            amplicon_context_dict[featureID] = fields[1]
+    if not os.path.exists(context_file):
+        sys.stderr.write("Could not locate ecDNA context calls file. Classification results may be outdated.")
+
+    else:
+        with open(context_file) as infile:
+            for line in infile:
+                fields = line.rstrip().rsplit("\t")
+                featureID = fields[0]
+                amplicon_context_dict[featureID] = fields[1]
 
     return amplicon_context_dict
 
