@@ -89,15 +89,13 @@ def get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d):
             fields = line.rstrip().rsplit()
             ongene_set.add(fields[0])
 
-    feat_to_gene_trunc = defaultdict(lambda: defaultdict(set))
-    feat_to_gene_cn = defaultdict(lambda: defaultdict(float))
-    feat_to_ongene = defaultdict(lambda: defaultdict(bool))
+    feat_to_amped_gene = defaultdict(dict)
     for feat_name, curr_fd in feature_dict.items():
         for chrom, intlist in curr_fd.items():
             for a, b in intlist:
                 ogenes_ints = gene_lookup[chrom][a:b]
                 for gp in ogenes_ints:
-                    gname, strand = gp.data
+                    gname, strand, ncbi_id = gp.data
                     has5p, has3p = get_gene_ends(gp.begin, gp.end, strand, a, b)
                     gsegs_hit = gseg_cn_d[chrom][gp.begin:gp.end]
                     gene_valid_cns = [x.data for x in gsegs_hit if x.end - x.begin > 1000]
@@ -105,16 +103,17 @@ def get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d):
                         gene_cn = max(gene_valid_cns)
                     else:
                         gene_cn = "unknown"
-                    feat_to_gene_cn[feat_name][gname] = gene_cn
-                    if has5p:
-                        feat_to_gene_trunc[feat_name][gname].add("5p")
-                    if has3p:
-                        feat_to_gene_trunc[feat_name][gname].add("3p")
 
-                    if gname in ongene_set:
-                        feat_to_ongene[feat_name][gname] = True
+                    is_oncogene = gname in ongene_set
+                    if gname not in feat_to_amped_gene[feat_name]:
+                        ag_obj = amped_gene(gname, ncbi_id, has5p, has3p, gene_cn, is_oncogene)
+                        feat_to_amped_gene[feat_name][gname] = ag_obj
 
-    return feat_to_gene_trunc, feat_to_gene_cn, feat_to_ongene
+                    else:
+                        feat_to_amped_gene[feat_name][gname].has5p_end |= has5p
+                        feat_to_amped_gene[feat_name][gname].has3p_end |= has3p
+
+    return feat_to_amped_gene
 
 
 def get_gseg_cns(graphf, add_chr_tag):

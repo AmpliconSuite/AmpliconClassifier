@@ -89,15 +89,16 @@ Because an ecDNA may overlap with a BFB, they are reported separately.
 #### ****`[prefix]_gene_list.tsv`****
 Reports the genes present on amplicons with each classification, and which genomic feature (e.g. ecDNA_1, BFB_1, etc), it is located on, along with the copy number and which end(s) of the gene have been lost ("truncated"), will be one of `None`, `5p` (5-prime end), `3p` (3-prime end) or `5p_3p` if both. Genes are sourced from RefGene and most lncRNAs and micro-RNAs are excluded from the report.
 
- | Column name                    | Contents                                                                                                                                                                                                                                                                   |
-|--------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `sample_name`                  | Sample name prefix                                                                                                                                                                                                                                                         |
-| `amplicon_number`              | AA amplicon index, e.g. `amplicon2`                                                                                                                                                                                                                                        |
-| `feature` | Which feature inside the amplicon the gene is present on. May be `unknown` if cannot be confidently assigned to a feature.                                                                                                                                                 |
-| `gene`                       | Gene name (RefGene)                                                                                                                                                                                                                                                        |
-| `gene_cn`                         | Maximum copy number of genomic segments (larger than 1kbp) overlapping the gene, as reported by AA                                                                                                                                                                         |
-| `truncated`              | Which end(s) of the gene have been lost ("truncated"), will be one of `None`, `5p` (5-prime end), `3p` (3-prime end) or `5p_3p` if both                                                                                                                                    |
-| `is_canonical_oncogene` | Reports if gene is present in [COSMIC](https://cancer.sanger.ac.uk/cosmic/curation), [ONGene](https://ongene.bioinfo-minzhao.org/). |
+ | Column name             | Contents                                                                                                                                 |
+|-------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| `sample_name`           | Sample name prefix                                                                                                                       |
+| `amplicon_number`       | AA amplicon index, e.g. `amplicon2`                                                                                                      |
+| `feature`               | Which feature inside the amplicon the gene is present on. May be `unknown` if cannot be confidently assigned to a feature.               |
+| `gene`                  | Gene name (RefGene)                                                                                                                      |
+| `gene_cn`               | Maximum copy number of genomic segments (larger than 1kbp) overlapping the gene, as reported by AA                                       |
+| `truncated`             | Which end(s) of the gene have been lost ("truncated"), will be one of `None`, `5p` (5-prime end), `3p` (3-prime end) or `5p_3p` if both  |
+| `is_canonical_oncogene` | Reports if gene is present in [COSMIC](https://cancer.sanger.ac.uk/cosmic/curation), [ONGene](https://ongene.bioinfo-minzhao.org/).      |
+| `ncbi_id`               | Reports the [NCBI Accession ID](https://www.ncbi.nlm.nih.gov/books/NBK470040/) of the gene                                               |
 
 #### ****`[prefix]_feature_basic_properties.tsv`****
 Reports a table of basic properties such as size of captured regions, median and max CN, and a flag field to report if the call is "borderline" (ecDNA with CN < 8, other classes with CN < 5).
@@ -116,7 +117,7 @@ Reports amplicon complexity scores as measured by the number of genomic segments
 
 
 #### ****`[output_prefix]_ecDNA_counts.tsv`****
-This two-column file reports the `sample_name` and the number of ecDNA identified in the sample across all amplicons from the sample.
+This two-column file reports the `sample_name` and the number of ecDNA identified in the samples.
 
 #### ****`[output_prefix]_ecDNA_context_calls.tsv`****
 This two column file reports the ecDNA feature name (sample_amplicon_ecDNA_number), and a classification of the ecDNA focal amplification genome context.

@@ -1,7 +1,7 @@
 from ampclasslib.ac_annotation import *
 from ampclasslib.ecDNA_context import *
 
-# getting genes
+# getting genes from the genes .gff file
 def parse_genes(gene_file):
     print("reading " + gene_file)
     t = defaultdict(IntervalTree)
@@ -22,36 +22,52 @@ def parse_genes(gene_file):
                 gname = propFields["Name"]
             except KeyError:
                 gname = propFields["gene_name"]
+
+            try:
+                ncbi_id = propFields["Accession"]
+            except KeyError:
+                ncbi_id = propFields["ID"]
+
             is_other_feature = (gname.startswith("LOC") or gname.startswith("LINC") or gname.startswith("MIR"))
             if gname not in seenNames and not is_other_feature:
                 seenNames.add(gname)
-                t[chrom][s:e] = (gname, strand)
+                t[chrom][s:e] = (gname, strand, ncbi_id)
 
     print("read " + str(len(seenNames)) + " genes\n")
     return t
 
 
 # write the number of ecDNA per sample
-def write_ec_per_sample(outname, samp_to_ec_count):
+def write_ec_per_sample(outname, samp_to_ec_count, summary_map):
+    # read the summary map and figure out what the sample names are
+    all_samps = set()
+    with open(summary_map) as infile:
+        for line in infile:
+            all_samps.add(line.rsplit()[0])
+
+    seen_samps = set()
     with open(outname, 'w') as outfile:
         outfile.write("#sample\tecDNA_count\n")
         for s, c in samp_to_ec_count.items():
             outfile.write("\t".join([s, str(c)]) + "\n")
+            seen_samps.add(s)
+
+        unseen_samps = all_samps - seen_samps
+        for s in sorted(unseen_samps):
+            outfile.write("\t".join([s, "0"]) + "\n")
 
 
 # take a list of 'feat_to_genes' dicts
 def write_gene_results(outname, ftg_list):
     with open(outname, 'w') as outfile:
-        head = ["sample_name", "amplicon_number", "feature", "gene", "gene_cn", "truncated", "is_canonical_oncogene"]
+        head = ["sample_name", "amplicon_number", "feature", "gene", "gene_cn", "truncated", "is_canonical_oncogene", "ncbi_id"]
         outfile.write("\t".join(head) + "\n")
-        for sname, anum, truncd, cnd, ogd in ftg_list:
-            for feat_name in sorted(truncd.keys()):
-                for gname in sorted(truncd[feat_name].keys()):
-                    truncs = [x for x in ["5p", "3p"] if x not in truncd[feat_name][gname]]
-                    gene_cn = str(cnd[feat_name][gname])
-                    inongene = str(ogd[feat_name][gname])
-                    ts = "_".join(truncs) if truncs else "None"
-                    outfile.write("\t".join([sname, anum, feat_name, gname, gene_cn, ts, inongene]) + "\n")
+        for sname, anum, ampg_d in ftg_list:
+            for feat_name in sorted(ampg_d.keys()):
+                for curr_ag in sorted(ampg_d[feat_name].values(), key=lambda x: x.name):
+                    trunc_string = curr_ag.get_truncation_status()
+                    outfile.write("\t".join([sname, anum, feat_name, curr_ag.name, str(curr_ag.gene_cn), trunc_string,
+                                             str(curr_ag.is_oncogene), curr_ag.ncbi_id]) + "\n")
 
 
 def write_basic_properties(feat_basic_propf, sname, ampN, prop_dict):
@@ -175,12 +191,12 @@ def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, 
 
 def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count, fd_list,
-                  samp_amp_to_graph, prop_list, add_chr_tag=False):
+                  samp_amp_to_graph, prop_list, summary_map):
     # Genes
     gene_extraction_outname = args.o + "_gene_list.tsv"
     write_gene_results(gene_extraction_outname, ftgd_list)
     ecDNA_count_outname = args.o + "_ecDNA_counts.tsv"
-    write_ec_per_sample(ecDNA_count_outname, samp_to_ec_count)
+    write_ec_per_sample(ecDNA_count_outname, samp_to_ec_count, summary_map)
 
     # Feature entropy
     if args.report_complexity:
@@ -233,7 +249,7 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
     contexts = []
     for ind, (sname, feature_dict) in enumerate(zip(sampNames, fd_list)):
         ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
-        curr_contexts = create_context_table(args.o, sname, ampN, feature_dict, samp_amp_to_graph, add_chr_tag=add_chr_tag)
+        curr_contexts = create_context_table(args.o, sname, ampN, feature_dict, samp_amp_to_graph, add_chr_tag=args.add_chr_tag)
         contexts.extend(curr_contexts)
 
     with open(context_filename, 'w') as context_outfile:

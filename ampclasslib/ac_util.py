@@ -24,6 +24,31 @@ class breakpoint(object):
 # ------------------------------------------------------------
 
 
+class amped_gene(object):
+    def __init__(self, name, ncbi_id, has5p_end, has3p_end, gene_cn, is_oncogene):
+        self.name = name
+        self.ncbi_id = ncbi_id
+        self.has5p_end = has5p_end
+        self.has3p_end = has3p_end
+        self.gene_cn = gene_cn
+        self.is_oncogene = is_oncogene
+        self.trunc_set = set()
+
+    def get_truncation_status(self):
+        tset = []
+        if not self.has5p_end:
+            tset.append("5p")
+        if not self.has3p_end:
+            tset.append("3p")
+
+        if tset:
+            tstring = "_".join(tset)
+        else:
+            tstring = "None"
+
+        return tstring
+
+
 def merge_intervals(feature_dict, tol=1):
     for item, usort_intd in feature_dict.items():
         for chrom, usort_ints in usort_intd.items():

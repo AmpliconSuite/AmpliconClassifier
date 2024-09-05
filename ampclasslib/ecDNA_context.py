@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+__ecDNA_context_version__ = "1.0.0"
+#Author: Bhargavi Dameracharla, modified by Jens Luebeck
+
 import argparse
 from collections import defaultdict
 import os
@@ -12,7 +15,6 @@ try:
 except ModuleNotFoundError:
     from convert_cycles_file import make_new_cycle
 
-#Author: Bhargavi Dameracharla, modified by Jens Luebeck
 
 def read_bed_file(bed_file_path, add_chr_tag):
     bed_regions = []

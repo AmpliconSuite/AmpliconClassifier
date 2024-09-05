@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-__version__ = "1.2.0"
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
@@ -14,6 +13,7 @@ import sys
 import ampclasslib
 from ampclasslib.ac_io import *
 from ampclasslib.radar_plotting import *
+from ampclasslib._version import __ampliconclassifier_version__
 
 tot_min_del = 5000  # minimum size of deletion before non-trivial
 minCycleSize = 5000
@@ -675,12 +675,12 @@ def filter_similar_amplicons(n_files):
 
     # map amplicon to the false regions
 
-    for sname, anum, truncd, _, _ in ftgd_list:
+    for sname, anum, ag_dict in ftgd_list:
         if sname + "_" + anum in samp_amp_filt_set:
-            for feat_name in sorted(truncd.keys()):
+            for feat_name in sorted(ag_dict.keys()):
                 fname, fnum = feat_name.rsplit("_")
                 if (sname, anum, fname, fnum) in feats_to_filter:
-                    truncd[feat_name].clear()
+                    ag_dict[feat_name].clear()
 
     for ind, x in enumerate(ftci_list):
         # annotated_cycle_outname = os.path.basename(cyclesFile).rsplit("_cycles")[0] + "_annotated_cycles.txt"
@@ -914,8 +914,8 @@ def run_classification(segSeqD, cycleList, cycleCNs):
         featEntropyD[(sName, ampN, ampClass + "_1")] = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
             other_class_c_inds, set(), args.add_chr_tag)
 
-    feat_gene_truncs, feat_gene_cns, feat_to_ongene = get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d)
-    ftgd_list.append([sName, ampN, feat_gene_truncs, feat_gene_cns, feat_to_ongene])
+    feat_to_amped_genes = get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d)
+    ftgd_list.append([sName, ampN, feat_to_amped_genes])
 
     # store this additional information
     AMP_classifications.append((ampClass, ecStat, bfbStat, ecAmpliconCount))
@@ -1036,11 +1036,11 @@ if __name__ == "__main__":
     parser.add_argument("--filter_similar", help="Only use if all samples are of independent origins (not replicates "
                         "and not multi-region biopsies). Permits filtering of false-positive amps arising in multiple "
                         "independent samples based on similarity calculation", action='store_true')
-    parser.add_argument("-v", "--version", action='version', version=__version__)
+    parser.add_argument("-v", "--version", action='version', version=__ampliconclassifier_version__)
 
     args = parser.parse_args()
 
-    print("AmpliconClassifier " + __version__)
+    print("AmpliconClassifier " + __ampliconclassifier_version__)
     print(" ".join(sys.argv))
 
     # make input if an AA directory is given
@@ -1054,7 +1054,14 @@ if __name__ == "__main__":
             print("Failed to make input file! Please ensure each graph and cycles file are present.\n")
             sys.exit(1)
         args.input = args.AA_results + "/AC.input"
-        summary_map = args.AA_results + "/AC_summary_map.txt"
+
+    summary_map = os.path.splitext(args.input)[0] + "_summary_map.txt"
+    if not os.path.exists(summary_map):
+        sys.stderr.write("Summary map file not found with .input file. Please re-run make_input and"
+                         " ensure _summary_map.txt file co-located with .input file")
+        sys.exit(1)
+    else:
+        print("Found summary map file " + summary_map)
 
     if args.ref == "hg38": args.ref = "GRCh38"
     elif args.ref == "GRCm38": args.ref = "mm10"
@@ -1184,6 +1191,6 @@ if __name__ == "__main__":
     # OUTPUT FILE WRITING
     write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count, fd_list,
-                  samp_amp_to_graph, prop_list, add_chr_tag=args.add_chr_tag)
+                  samp_amp_to_graph, prop_list, summary_map)
 
     print("done")
