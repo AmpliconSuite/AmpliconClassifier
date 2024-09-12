@@ -181,8 +181,8 @@ if __name__ == "__main__":
     output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Oncogenes",
                    "All genes", "Complexity score", "ecDNA context", "Captured interval length", "Feature median copy number",
                    "Feature maximum copy number", "Filter flag", "Reference version", "Tissue of origin",
-                   "Sample type", "Feature BED file", "CNV BED file", "AS-p version", "AA version" , "AC version"
-                   "AA PNG file", "AA PDF file","AA summary file", "Run metadata JSON", "Sample metadata JSON"]
+                   "Sample type", "Feature BED file", "CNV BED file", "AS-p version", "AA version", "AC version",
+                   "AA PNG file", "AA PDF file", "AA summary file", "Run metadata JSON", "Sample metadata JSON"]
 
     sumf_used = set()
     sumf_dict = read_summary_list(args.summary_map)
