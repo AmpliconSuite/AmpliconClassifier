@@ -16,8 +16,12 @@ def read_amplicon_gene_list(gene_file):
             fields = line.rstrip().rsplit("\t")
             fd = dict(zip(h, fields))
             featureID = "_".join(fields[:3])
-            if "5p" not in fd["truncated"]:
-                amplicon_gene_dict[featureID].append((fd['gene'], fd['gene_cn'], eval(fd['is_canonical_oncogene'])))
+            if 'ncbi_id' in fd:
+                amplicon_gene_dict[featureID].append(
+                    (fd['gene'], fd['gene_cn'], eval(fd['is_canonical_oncogene']), fd['ncbi_id']))
+            else:
+                amplicon_gene_dict[featureID].append(
+                    (fd['gene'], fd['gene_cn'], eval(fd['is_canonical_oncogene']), "NA"))
 
     return amplicon_gene_dict
 
@@ -179,10 +183,10 @@ if __name__ == "__main__":
         sys.exit(1)
 
     output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Oncogenes",
-                   "All genes", "Complexity score", "ecDNA context", "Captured interval length", "Feature median copy number",
-                   "Feature maximum copy number", "Filter flag", "Reference version", "Tissue of origin",
-                   "Sample type", "Feature BED file", "CNV BED file", "AS-p version", "AA version", "AC version",
-                   "AA PNG file", "AA PDF file", "AA summary file", "Run metadata JSON", "Sample metadata JSON"]
+                   "All genes", "NCBI Gene IDs", "Complexity score", "ecDNA context", "Captured interval length",
+                   "Feature median copy number", "Feature maximum copy number", "Filter flag", "Reference version",
+                   "Tissue of origin", "Sample type", "Feature BED file", "CNV BED file", "AS-p version", "AA version",
+                   "AC version", "AA PNG file", "AA PDF file", "AA summary file", "Run metadata JSON", "Sample metadata JSON"]
 
     sumf_used = set()
     sumf_dict = read_summary_list(args.summary_map)
@@ -358,15 +362,17 @@ if __name__ == "__main__":
                         # intervals = "|".join(interval_list)
                         intervals = str(interval_list)
 
-                    raw_glist = amplicon_gene_dict[featureID]
+                    sorted_glist = sorted(amplicon_gene_dict[featureID])
                     # oncogenes = "|".join(sorted([g[0] for g in raw_glist if g[2]]))
-                    oncogenes = str(sorted([g[0] for g in raw_glist if g[2]]))
-                    all_genes = str(sorted([g[0] for g in raw_glist]))
+
+                    oncogenes = str([g[0] for g in sorted_glist if g[2]])
+                    all_genes = str([g[0] for g in sorted_glist])
+                    all_genes_ids = str([g[3] for g in sorted_glist])
                     complexity = amplicon_complexity_dict[featureID]
                     context = context_dict[featureID]
                     basic_stats = basic_stats_dict[featureID]
 
-                    featureData.append([featureID, feature, intervals, oncogenes, all_genes, complexity, context] + basic_stats +
+                    featureData.append([featureID, feature, intervals, oncogenes, all_genes, all_genes_ids, complexity, context] + basic_stats +
                                         [curr_run_metadata["ref_genome"], curr_sample_metadata["tissue_of_origin"], curr_sample_metadata["sample_type"],
                                          os.path.abspath(featureBed), cnv_bed_path])
 
@@ -388,6 +394,7 @@ if __name__ == "__main__":
             intervals = "[]"
             oncogenes = "[]"
             all_genes = "[]"
+            all_genes_ids = "[]"
             complexity = "NA"
             context = "NA"
             basic_stats = basic_stats_dict[featureID]
@@ -400,7 +407,7 @@ if __name__ == "__main__":
 
             asp_version, aa_version, ac_version = get_version_info(curr_run_metadata)
 
-            fdl = [featureID, feature, intervals, oncogenes, all_genes, complexity, context] + basic_stats + \
+            fdl = [featureID, feature, intervals, oncogenes, all_genes, all_genes_ids, complexity, context] + basic_stats + \
                   [curr_run_metadata["ref_genome"], curr_sample_metadata["tissue_of_origin"],
                    curr_sample_metadata["sample_type"], os.path.abspath(featureBed), cnv_bed_path]
 
