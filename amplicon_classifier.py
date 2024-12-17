@@ -11,6 +11,7 @@ from subprocess import call
 import sys
 
 import ampclasslib
+from ampclasslib.ac_annotation import *
 from ampclasslib.ac_io import *
 from ampclasslib.radar_plotting import *
 from ampclasslib._version import __ampliconclassifier_version__
@@ -596,9 +597,9 @@ def filter_similar_amplicons(n_files):
           " across independent samples...\n")
     print("adjusted p-value cutoff set to 0.05/{}={}".format(str(n_files), str(pval)))
     required_classes = {"ecDNA", "BFB", "Complex-non-cyclic", "Linear"}
-    cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
-    # cg5D = build_CG5_database(cg5Path)  # do not include the cg5D to enable filtering of regions inappropriately included in seeds (and thus amplicons) by the user
-    cg5D = defaultdict(IntervalTree)
+    # cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
+    # cg5D = build_CG5_database(cg5Path)
+    # cg5D = defaultdict(IntervalTree)
     add_chr_tag = args.add_chr_tag
     feat_to_ivald = {}
     for full_featname, curr_fd in full_featname_to_intervals.items():
@@ -616,8 +617,11 @@ def filter_similar_amplicons(n_files):
     fsim_data = []
     for x in pairs:
         s2a_graph = {}
-        graph0 = parseBPG(full_featname_to_graph[x[0]], feat_to_ivald[x[0]][1], cn_cut, add_chr_tag, lcD, cg5D, 0)
-        graph1 = parseBPG(full_featname_to_graph[x[1]], feat_to_ivald[x[1]][1], cn_cut, add_chr_tag, lcD, cg5D, 0)
+        graph0 = parse_bpg(full_featname_to_graph[x[0]], add_chr_tag, lcD, subset_ivald=feat_to_ivald[x[0]][1],
+                           cn_cut=cn_cut, cg5D=None, min_de=0)
+        graph1 = parse_bpg(full_featname_to_graph[x[1]], add_chr_tag, lcD, subset_ivald=feat_to_ivald[x[1]][1],
+                           cn_cut=cn_cut, cg5D=None, min_de=0)
+
         if not graph0[1] or not graph1[1] or full_featname_to_graph[x[0]] == full_featname_to_graph[x[1]]:
             continue
 
@@ -926,7 +930,7 @@ def run_classification(segSeqD, cycleList, cycleCNs):
     edgeTypeCountD = defaultdict(float)
     if graphFile:
         posCycleLookup = buildPosCycleLookup(cycleList, segSeqD)
-        bps = bpg_edges(graphFile, args.add_chr_tag, lcD)
+        bps, _ = parse_bpg(graphFile, args.add_chr_tag, lcD)
         for bp in bps:
             lCycles, rCycles = bpgEdgeToCycles(bp, posCycleLookup)
             # indices of left and right cycles on the discordant edges, and the index-ordered list of types

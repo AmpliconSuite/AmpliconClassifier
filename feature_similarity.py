@@ -119,8 +119,10 @@ if __name__ == "__main__":
             s2a_graph = {}
             # rel_regions = join_ivalds(feat_to_bed[x[0]][1], feat_to_bed[x[1]][1])
             # read the two graph files and classify.
-            graph0 = parseBPG(feat_to_graph[x[0]], feat_to_bed[x[0]][1], cn_cut, add_chr_tag, lcD, cg5D, args.min_de)
-            graph1 = parseBPG(feat_to_graph[x[1]], feat_to_bed[x[1]][1], cn_cut, add_chr_tag, lcD, cg5D, args.min_de)
+            graph0 = parse_bpg(feat_to_graph[x[0]], add_chr_tag, lcD, subset_ivald=feat_to_bed[x[0]][1], cn_cut=cn_cut,
+                               cg5D=cg5D, min_de=args.min_de, min_de_size=min_de_size)
+            graph1 = parse_bpg(feat_to_graph[x[1]], add_chr_tag, lcD, subset_ivald=feat_to_bed[x[1]][1], cn_cut=cn_cut,
+                               cg5D=cg5D, min_de=args.min_de, min_de_size=min_de_size)
             if feat_to_graph[x[0]] == feat_to_graph[x[1]]:
                 print("skipping", x)
                 continue

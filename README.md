@@ -19,8 +19,8 @@ AmpliconClassifier is included with [AmpliconSuite-pipeline](https://github.com/
 
 #### Requirements
 - Either python 2.7+ or python 3.0+
-- `intervaltree` and `scipy` python libraries:  
->`conda install intervaltree scipy`  # or `pip install intervaltree scipy`
+- `intervaltree`, `scipy`, `pandas`, `pysam` python libraries:  
+>`conda install intervaltree scipy pandas pysam`  # or `pip install intervaltree scipy pandas pysam`
 - `$AA_DATA_REPO` environment variable and data repo files. See instructions [here](https://github.com/AmpliconSuite/AmpliconArchitect#setting-up-the-aa-data-repo). 
 - (optional) `matplotlib`: `conda install matplotlib-base` or `pip install matplotlib`
 

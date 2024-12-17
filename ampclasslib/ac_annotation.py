@@ -1,21 +1,21 @@
 from ampclasslib.ac_util import *
+from ampclasslib.ac_io import parse_bpg
 
 
 # write a summary of the breakpoints
 def summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD):
     linelist = [["chrom1", "pos1", "chrom2", "pos2", "sv_type", "read_support", "features", "orientation",
                  "pos1_flanking_coordinate", "pos2_flanking_coordinate", "homology_length", "homology_sequence"]]
-    bps = bpg_edges(graphf, add_chr_tag, lcD)
+    bps, _ = parse_bpg(graphf, add_chr_tag, lcD)
     for bp in bps:
         c1, c2 = bp.lchrom, bp.rchrom
         p1, p2 = bp.lpos, bp.rpos
         ldir, rdir = bp.ldir, bp.rdir
-        if c1 == c2:
-            if p1 > p2:
-                p1, p2 = p2, p1
-                ldir, rdir = rdir, ldir
-                if bp.homlen != "None" and bp.homlen != "NA" and bp.homlen != "0":
-                    bp.homseq = bp.homseq.translate(lookup)[::-1]
+        if c1 == c2 and p1 > p2:
+            p1, p2 = p2, p1
+            ldir, rdir = rdir, ldir
+            if bp.homlen != "None" and bp.homlen != "NA" and bp.homlen != "0":
+                bp.homseq = bp.homseq.translate(lookup)[::-1]
 
         if ldir == "+":
             p1_1before = p1 - 1
