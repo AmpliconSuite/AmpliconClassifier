@@ -72,6 +72,8 @@ if __name__ == "__main__":
 
     if not args.o:
         args.o = os.path.basename(args.feature_input).rsplit(".")[0]
+        if args.o.endswith("features_to_graph"):
+            args.o = args.o.rsplit("_features_to_graph", 1)[0]
 
     odir = "/".join(args.o.rsplit("/")[:-1])
     if odir != "" and not os.path.exists(odir):
