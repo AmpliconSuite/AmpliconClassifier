@@ -73,7 +73,7 @@ class breakpoint(object):
         cn = str(self.cn) if self.cn is not None else "NA"
         support = str(self.support) if self.support is not None else "NA"
 
-        return "{}:{}{} | {}:{}{}\t{}\t{}".format(
+        return "{}:{}{} | {}:{}{} | {} | {}".format(
             self.lchrom, self.lpos, ldir, self.rchrom, self.rpos, rdir, cn, support)
 
     def d_similar(self, bp2, d):
