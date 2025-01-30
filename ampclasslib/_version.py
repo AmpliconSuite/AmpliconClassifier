@@ -1,1 +1,1 @@
-__ampliconclassifier_version__ = "1.2.2"
+__ampliconclassifier_version__ = "1.3.0"

@@ -11,6 +11,9 @@ import sys
 from intervaltree import IntervalTree
 from scipy.stats import beta
 
+from ampclasslib.ac_io import parse_bpg, bed_to_interval_dict
+from ampclasslib.ac_util import set_lcd
+
 add_chr_tag = False
 bpweight = 0.75
 d = 250
@@ -29,31 +32,6 @@ output:
 pair wise similarity between all amplicons on a single line, for all lines in the input file
 
 '''
-
-class breakpoint(object):
-    def __init__(self, lchrom, lpos, rchrom, rpos, cn):
-        self.lchrom = lchrom
-        self.lpos = lpos
-        self.rchrom = rchrom
-        self.rpos = rpos
-        self.cn = cn
-
-    def to_string(self):
-        return self.lchrom + ":" + str(self.lpos) + " | " + self.rchrom + ":" + str(self.rpos) + "\t" + str(self.cn)
-
-    def d_similar(self, bp2, d):
-        bp2_chrom_set = {bp2.lchrom, bp2.rchrom}
-        if self.lchrom not in bp2_chrom_set or self.rchrom not in bp2_chrom_set:
-            return False
-
-        sbp1 = sorted([(self.lchrom, self.lpos), (self.rchrom, self.rpos)])
-        sbp2 = sorted([(bp2.lchrom, bp2.lpos), (bp2.rchrom, bp2.rpos)])
-
-        if sbp1[0][0] == sbp2[0][0] and sbp1[1][0] == sbp2[1][0]:
-            if abs(sbp1[0][1] - sbp2[0][1]) + abs(sbp1[1][1] - sbp2[1][1]) < d:
-                return True
-
-        return False
 
 
 def amps_overlap(gdoi1, gdoi2):
@@ -185,96 +163,6 @@ def get_pairs(s2a_graph, required_amplicon_ID=None):
     return pairs
 
 
-def buildLCDatabase(mappabilityFile):
-    lcD = defaultdict(IntervalTree)
-    with open(mappabilityFile) as infile:
-        for line in infile:
-            fields = line.rstrip().rsplit()
-            if not fields:
-                continue
-            chrom, s, e = fields[0], int(fields[1]), int(fields[2])
-            if e - s > 7500:
-                lcD[chrom].addi(s, e)
-
-    return lcD
-
-
-def build_CG5_database(cg5_file):
-    cg5D = defaultdict(IntervalTree)
-    with open(cg5_file) as infile:
-        for line in infile:
-            fields = line.rstrip().rsplit()
-            if not fields:
-                continue
-            chrom, s, e = fields[0], int(fields[1]), int(fields[2])
-            cg5D[chrom].addi(s, e)
-
-    return cg5D
-
-
-def parseBPG(bpgf, subset_ivald, cn_cut, add_chr_tag, lcD, cg5D, min_de=1):
-    bps = []
-    no_subset = (len(subset_ivald) == 0)
-    cn_cut_0 = (cn_cut == 0 and no_subset)
-    keepAll = (no_subset or cn_cut_0)
-    segTree = defaultdict(IntervalTree)
-    with open(bpgf) as infile:
-        for line in infile:
-            # if line.startswith("discordant") or line.startswith("concordant"):
-            if line.startswith("discordant"):
-                fields = line.rstrip().rsplit()
-                l, r = fields[1].rsplit("->")
-                lchrom, lpos = l[:-1].rsplit(":")
-                rchrom, rpos = r[:-1].rsplit(":")
-                ldir, rdir = l[-1], r[-1]
-                if add_chr_tag and not lchrom.startswith('chr'):
-                    lchrom = "chr" + lchrom
-                    rchrom = "chr" + rchrom
-
-                lpos, rpos = int(lpos), int(rpos)
-                if lcD[lchrom][lpos] or lcD[rchrom][rpos]:
-                    continue
-
-                elif not keepAll and not (subset_ivald[lchrom].overlaps(lpos) and subset_ivald[rchrom].overlaps(rpos)):
-                    continue
-
-                elif keepAll and not (segTree[lchrom].overlaps(lpos) or segTree[rchrom].overlaps(rpos)):
-                    continue
-
-                elif lchrom == rchrom and abs(lpos - rpos) < min_de_size and ldir != rdir:
-                    continue
-
-                cn = float(fields[2])
-                currBP = breakpoint(lchrom, lpos, rchrom, rpos, cn)
-                bps.append(currBP)
-
-            elif line.startswith("sequence"):
-                fields = line.rstrip().rsplit()
-                lchrom, lpos = fields[1].rsplit(":")
-                lpos = int(lpos[:-1])
-                rchrom, rpos = fields[2].rsplit(":")
-                rpos = int(rpos[:-1])+1
-
-                if add_chr_tag and not lchrom.startswith('chr'):
-                    lchrom = 'chr' + lchrom
-                    rchrom = 'chr' + rchrom
-
-                if lcD[lchrom][lpos:rpos] or cg5D[lchrom][lpos:rpos]:
-                    continue
-
-                elif not keepAll and not subset_ivald[lchrom].overlaps(lpos, rpos):
-                    continue
-
-                cn = float(fields[3])
-                if cn > cn_cut:
-                    segTree[lchrom].addi(lpos, rpos, cn)
-
-    if not bps and min_de > 0:
-        return bps, defaultdict(IntervalTree)
-
-    return bps, segTree
-
-
 def readFlist(filelist, region_subset_ivald, lcD, cg5D, cn_cut=0, fullname=False, required_classes=None, a2class=None):
     if required_classes is None:
         required_classes = set()
@@ -296,8 +184,8 @@ def readFlist(filelist, region_subset_ivald, lcD, cg5D, cn_cut=0, fullname=False
                             sname = fields[0]
 
                     if not required_classes or (required_classes and a2class[sname].intersection(required_classes)):
-                        s_to_amp_graph_lookup[sname] = parseBPG(fields[2], region_subset_ivald, cn_cut, add_chr_tag,
-                                                                lcD, cg5D)
+                        s_to_amp_graph_lookup[sname] = parse_bpg(fields[2], add_chr_tag, lcD, subset_ivald=region_subset_ivald, cn_cut=cn_cut,
+                                                                 cg5D=cg5D, min_de=min_de, min_de_size=min_de_size)
 
     return s_to_amp_graph_lookup
 
@@ -325,21 +213,6 @@ def readBackgroundScores(bgsfile):
         return scores
 
 
-def bed_to_interval_dict(bedf, add_chr_tag):
-    ivald = defaultdict(IntervalTree)
-    with open(bedf) as infile:
-        for line in infile:
-            fields = line.rstrip().rsplit()
-            if not fields:
-                continue
-            if add_chr_tag and not fields[0].startswith('chr'):
-                fields[0] = 'chr' + fields[0]
-
-            ivald[fields[0]].addi(int(fields[1]), int(fields[2]))
-
-    return ivald
-
-
 def compute_similarity(s2a_graph, pairs, outdata):
     bgsfile = os.path.dirname(os.path.realpath(__file__)) + "/resources/sorted_background_scores.txt"
     background_scores = readBackgroundScores(bgsfile)
@@ -359,25 +232,6 @@ def compute_similarity(s2a_graph, pairs, outdata):
         #     print("removed", [a, b, s, pcent, pval])
         # outfile.write("\t".join([a, b, str(s), str(pcent), str(pval)] + [str(x) for x in featList]) + "\n")
 
-
-# check if aa data repo set, construct LC datatabase
-def set_lcd(AA_DATA_REPO, no_LC_filter):
-    fDict = {}
-    with open(AA_DATA_REPO + "file_list.txt") as infile:
-        for line in infile:
-            fields = line.strip().rsplit()
-            fDict[fields[0]] = fields[1]
-
-    lcPath = AA_DATA_REPO + fDict["mapability_exclude_filename"]
-    cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
-
-    lcD = defaultdict(IntervalTree)
-    cg5D = defaultdict(IntervalTree)
-    if not no_LC_filter:
-        lcD = buildLCDatabase(lcPath)
-        cg5D = build_CG5_database(cg5Path)
-
-    return lcD, cg5D
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compute similarity between overlapping AA amplicons")

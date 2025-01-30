@@ -26,7 +26,7 @@ rm -f ssf.txt
 for var in ${*%${!#}}
 do
   exppath=`realpath $var`
-  find $exppath -name "*_summary.txt" | grep -v _classification/files/ | sort >> ssf.txt
+  find $exppath -name "*_summary.txt" | grep -v "/\._" | grep -v _classification/files/ | sort >> ssf.txt
 done
 
 cat ssf.txt | rev | cut -f 1 -d '/' | cut -c13- | rev | sed 's/_summary.txt$//' > ssn.txt

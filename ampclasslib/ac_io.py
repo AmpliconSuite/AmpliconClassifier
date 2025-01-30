@@ -1,5 +1,8 @@
-from ampclasslib.ac_annotation import *
+from intervaltree import IntervalTree
+
+from ampclasslib.ac_util import *
 from ampclasslib.ecDNA_context import *
+
 
 # getting genes from the genes .gff file
 def parse_genes(gene_file):
@@ -35,6 +38,132 @@ def parse_genes(gene_file):
 
     print("read " + str(len(seenNames)) + " genes\n")
     return t
+
+
+def bed_to_interval_dict(bedf, add_chr_tag):
+    ivald = defaultdict(IntervalTree)
+    with open(bedf) as infile:
+        for line in infile:
+            fields = line.rstrip().rsplit()
+            if not fields:
+                continue
+            if add_chr_tag and not fields[0].startswith('chr'):
+                fields[0] = 'chr' + fields[0]
+
+            ivald[fields[0]].addi(int(fields[1]), int(fields[2]))
+
+    return ivald
+
+
+def parse_bpg(bpgf, add_chr_tag, lcD=None, subset_ivald=None, cn_cut=0, cg5D=None, min_de=0, min_de_size=0):
+    """
+    Parse breakpoint data from AA-formatted breakpoint graph files.
+
+    Args:
+        bpgf: Input breakpoint graph file path
+        add_chr_tag: Whether to add 'chr' prefix to chromosome names
+        lcD: Dictionary for chromosome positions of low-complexity elements
+        subset_ivald: Interval dictionary for subsetting (default: None)
+        cn_cut: Copy number cutoff (default: 0)
+        cg5D: Dictionary for chromosome positioons of conserved gain regions (default: None)
+        min_de: Minimum number of discordant edges in order to return parsed graph (default: 1)
+        min_de_size: Minimum size for deletion events (default: 2500)
+
+    Returns:
+        Tuple of (list of breakpoints, segment tree)
+    """
+
+    if lcD is None:
+        lcD = defaultdict(IntervalTree)
+
+    if cg5D is None:
+        cg5D = defaultdict(IntervalTree)
+
+    bps = []
+    segTree = defaultdict(IntervalTree)
+
+    # Setup subsetting logic
+    no_subset = subset_ivald is None or len(subset_ivald) == 0
+    cn_cut_0 = (cn_cut <= 0 and no_subset)
+    keepAll = (no_subset or cn_cut_0)
+
+    # Edge parsing setup
+    hom_len_index = None
+    hom_seq_index = None
+
+    with open(bpgf) as infile:
+        for line in infile:
+            if line.startswith("BreakpointEdge:"):
+                fields = line.rstrip().rsplit()
+                for ind, x in enumerate(fields):
+                    if x.startswith("HomologySizeIfAvailable"):
+                        hom_len_index = ind
+                    elif x.startswith("Homology/InsertionSequence"):
+                        hom_seq_index = ind
+
+            elif line.startswith("discordant"):
+                fields = line.rstrip().rsplit()
+                l, r = fields[1].rsplit("->")
+
+                lchrom, lpos = l.rsplit(":")
+                rchrom, rpos = r.rsplit(":")
+                lpos, ldir = lpos[:-1], lpos[-1]
+                rpos, rdir = rpos[:-1], rpos[-1]
+                lpos, rpos = int(lpos), int(rpos)
+
+                if add_chr_tag and not lchrom.startswith('chr'):
+                    lchrom = "chr" + lchrom
+                    rchrom = "chr" + rchrom
+
+                if lcD[lchrom][lpos] or lcD[rchrom][rpos]:
+                    continue
+
+                if not keepAll and not (subset_ivald[lchrom].overlaps(lpos) and subset_ivald[rchrom].overlaps(rpos)):
+                    continue
+                elif keepAll and not (segTree[lchrom].overlaps(lpos) or segTree[rchrom].overlaps(rpos)):
+                    continue
+                elif lchrom == rchrom and abs(lpos - rpos) < min_de_size and ldir != rdir:
+                    continue
+
+                cn = float(fields[2])
+                support = int(fields[3]) if len(fields) > 3 else None
+
+                # Get homology info if available
+                homlen = homseq = "None"
+                if not any([x is None for x in [hom_seq_index, hom_len_index]]):
+                    homlen = fields[hom_len_index]
+                    if homlen != "0":
+                        homseq = fields[hom_seq_index]
+
+                currBP = breakpoint(lchrom, lpos, rchrom, rpos, cn=cn, support=support,
+                                    ldir=ldir, rdir=rdir, homlen=homlen, homseq=homseq)
+                bps.append(currBP)
+
+            elif line.startswith("sequence"):
+                fields = line.rstrip().rsplit()
+                lchrom, lpos = fields[1].rsplit(":")
+                lpos = int(lpos[:-1])
+                rchrom, rpos = fields[2].rsplit(":")
+                rpos = int(rpos[:-1]) + 1
+
+                if add_chr_tag and not lchrom.startswith('chr'):
+                    lchrom = 'chr' + lchrom
+                    rchrom = 'chr' + rchrom
+
+                if lcD[lchrom][lpos:rpos] or cg5D[lchrom][lpos:rpos]:
+                    continue
+
+                if not keepAll and not subset_ivald[lchrom].overlaps(lpos, rpos):
+                    continue
+
+                cn = float(fields[3])
+                if cn > cn_cut:
+                    segTree[lchrom].addi(lpos, rpos, cn)
+
+    if not bps and min_de > 0:
+        return bps, defaultdict(IntervalTree)
+
+    return bps, segTree
 
 
 # write the number of ecDNA per sample

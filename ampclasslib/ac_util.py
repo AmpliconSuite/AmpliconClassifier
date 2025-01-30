@@ -1,25 +1,94 @@
 from collections import defaultdict
 import os
+import warnings
 
 from intervaltree import IntervalTree, Interval
 
 lookup = str.maketrans("ACGTRYKM", "TGCAYRMK")
 
+
 class breakpoint(object):
-    def __init__(self, lchrom, lpos, rchrom, rpos, supp, ldir, rdir, homlen="NA", homseq="NA"):
+    def __init__(self, lchrom, lpos, rchrom, rpos, cn=None, support=None, ldir=None, rdir=None, homlen="NA", homseq="NA"):
+        # Use __setattr__ before setting _hash to avoid warnings during initialization
+        object.__setattr__(self, '_hash', None)
         self.lchrom = lchrom
         self.lpos = lpos
         self.rchrom = rchrom
         self.rpos = rpos
-        self.support = supp
+        self.cn = cn
+        self.support = support
         self.ldir = ldir
         self.rdir = rdir
         self.homlen = homlen
         self.homseq = homseq
 
-    def to_string(self):
-        return self.lchrom + ":" + str(self.lpos) + str(self.ldir) + " | " + self.rchrom + ":" + str(self.rpos) + \
-               str(self.rdir) + "\t" + str(self.support)
+    def __setattr__(self, name, value):
+        if name != '_hash' and hasattr(self, '_hash') and self._hash is not None:
+            warnings.warn(
+                "Modifying attribute '{}' after object has been hashed. "
+                "This may cause unexpected behavior if the object is being used in "
+                "sets or as a dictionary key.".format(name),
+                RuntimeWarning,
+                stacklevel=2
+            )
+            # Clear the cached hash
+            object.__setattr__(self, '_hash', None)
+        object.__setattr__(self, name, value)
+
+    def __eq__(self, other):
+        if not isinstance(other, breakpoint):
+            return NotImplemented
+        return (
+            self.lchrom == other.lchrom and
+            self.lpos == other.lpos and
+            self.rchrom == other.rchrom and
+            self.rpos == other.rpos and
+            self.cn == other.cn and
+            self.support == other.support and
+            self.ldir == other.ldir and
+            self.rdir == other.rdir and
+            self.homlen == other.homlen and
+            self.homseq == other.homseq
+        )
+
+    def __hash__(self):
+        if self._hash is None:
+            self._hash = hash((
+                self.lchrom,
+                self.lpos,
+                self.rchrom,
+                self.rpos,
+                self.cn,
+                self.support,
+                self.ldir,
+                self.rdir,
+                self.homlen,
+                self.homseq
+            ))
+        return self._hash
+
+    def __str__(self):
+        ldir = self.ldir if self.ldir is not None else ""
+        rdir = self.rdir if self.rdir is not None else ""
+        cn = str(self.cn) if self.cn is not None else "NA"
+        support = str(self.support) if self.support is not None else "NA"
+
+        return "{}:{}{} | {}:{}{} | {} | {}".format(
+            self.lchrom, self.lpos, ldir, self.rchrom, self.rpos, rdir, cn, support)
+
+    def d_similar(self, bp2, d):
+        bp2_chrom_set = {bp2.lchrom, bp2.rchrom}
+        if self.lchrom not in bp2_chrom_set or self.rchrom not in bp2_chrom_set:
+            return False
+
+        sbp1 = sorted([(self.lchrom, self.lpos), (self.rchrom, self.rpos)])
+        sbp2 = sorted([(bp2.lchrom, bp2.lpos), (bp2.rchrom, bp2.rpos)])
+
+        if sbp1[0][0] == sbp2[0][0] and sbp1[1][0] == sbp2[1][0]:
+            if abs(sbp1[0][1] - sbp2[0][1]) + abs(sbp1[1][1] - sbp2[1][1]) < d:
+                return True
+
+        return False
 
 # ------------------------------------------------------------
 
@@ -75,6 +144,7 @@ def is_human_viral_hybrid(ref, cycle, segSeqD):
 def is_viral(ref, cycle, segSeqD):
     chromList = [segSeqD[abs(ind)][0] for ind in cycle if ind != 0]
     return ref == "GRCh38_viral" and any([not x.startswith("chr") for x in chromList])
+
 
 def get_amp_outside_bounds(graphf, add_chr_tag):
     # get the interval of the first amp (x)
@@ -269,53 +339,6 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
     return segSeqD, cycleList, cycleCNs
 
 
-def bpg_edges(bpgf, add_chr_tag, lcD):
-    bps = []
-    with open(bpgf) as infile:
-        hom_len_index = None
-        hom_seq_index = None
-        for line in infile:
-            if line.startswith("BreakpointEdge:"):
-                fields = line.rstrip().rsplit()
-                for ind, x in enumerate(fields):
-                    if x.startswith("HomologySizeIfAvailable"):
-                        hom_len_index = ind
-                    elif x.startswith("Homology/InsertionSequence"):
-                        hom_seq_index = ind
-
-            elif line.startswith("discordant"):
-                fields = line.rstrip().rsplit()
-                l, r = fields[1].rsplit("->")
-                lchrom, lpos = l.rsplit(":")
-                rchrom, rpos = r.rsplit(":")
-                lpos, ldir = lpos[:-1], lpos[-1]
-                rpos, rdir = rpos[:-1], rpos[-1]
-                lpos, rpos = int(lpos), int(rpos)
-                if add_chr_tag and not lchrom.startswith('chr'):
-                    lchrom = "chr" + lchrom
-                    rchrom = "chr" + rchrom
-
-                if lcD[lchrom][lpos] or lcD[rchrom][rpos]:
-                    continue
-
-                support = int(fields[3])
-                if not any([x is None for x in [hom_seq_index, hom_len_index]]):
-                    homlen = fields[hom_len_index]
-                    if homlen == "0":
-                        homlen = "None"
-                        homseq = "None"
-                    else:
-                        homseq = fields[hom_seq_index]
-                else:
-                    homlen = "None"
-                    homseq = "None"
-
-                currBP = breakpoint(lchrom, lpos, rchrom, rpos, support, ldir, rdir, homlen=homlen, homseq=homseq)
-                bps.append(currBP)
-
-    return bps
-
-
 def get_graph_cns(gfile, add_chr_tag):
     cns_dict = defaultdict(IntervalTree)
     with open(gfile) as infile:
@@ -358,6 +381,39 @@ def buildLCDatabase(mappabilityFile, filtsize=7500):
                     lcD[chrom].addi(s, e)
 
     return lcD
+
+
+def build_CG5_database(cg5_file):
+    cg5D = defaultdict(IntervalTree)
+    with open(cg5_file) as infile:
+        for line in infile:
+            fields = line.rstrip().rsplit()
+            if not fields:
+                continue
+            chrom, s, e = fields[0], int(fields[1]), int(fields[2])
+            cg5D[chrom].addi(s, e)
+
+    return cg5D
+
+
+# check if aa data repo set, construct LC datatabase
+def set_lcd(AA_DATA_REPO, no_LC_filter=False):
+    fDict = {}
+    with open(AA_DATA_REPO + "file_list.txt") as infile:
+        for line in infile:
+            fields = line.strip().rsplit()
+            fDict[fields[0]] = fields[1]
+
+    lcPath = AA_DATA_REPO + fDict["mapability_exclude_filename"]
+    cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
+
+    lcD = defaultdict(IntervalTree)
+    cg5D = defaultdict(IntervalTree)
+    if not no_LC_filter:
+        lcD = buildLCDatabase(lcPath)
+        cg5D = build_CG5_database(cg5Path)
+
+    return lcD, cg5D
 
 
 def readFlist(filelist):
