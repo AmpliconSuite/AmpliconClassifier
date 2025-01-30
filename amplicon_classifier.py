@@ -1055,13 +1055,19 @@ if __name__ == "__main__":
             sys.exit(1)
         args.input = args.AA_results + "/AC.input"
 
-    summary_map = os.path.splitext(args.input)[0] + "_summary_map.txt"
-    if not os.path.exists(summary_map):
-        sys.stderr.write("Summary map file not found with .input file. Please re-run make_input and"
-                         " ensure _summary_map.txt file co-located with .input file")
-        sys.exit(1)
-    else:
-        print("Found summary map file " + summary_map)
+    if args.input:
+        summary_map = os.path.splitext(args.input)[0] + "_summary_map.txt"
+        if not os.path.exists(summary_map):
+            sys.stderr.write("Summary map file not found with .input file. Please re-run make_input and"
+                             " ensure _summary_map.txt file co-located with .input file")
+            sys.exit(1)
+        else:
+            print("Found summary map file " + summary_map)
+
+    else:  # one cycle + graph provided only
+        bname = os.path.basename(args.cycles)
+        sname = re.split("_amplicon[0-9]*", bname)[0]
+        summary_map = {sname}
 
     if args.ref == "hg38": args.ref = "GRCh38"
     elif args.ref == "GRCm38": args.ref = "mm10"

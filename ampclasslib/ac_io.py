@@ -41,9 +41,12 @@ def parse_genes(gene_file):
 def write_ec_per_sample(outname, samp_to_ec_count, summary_map):
     # read the summary map and figure out what the sample names are
     all_samps = set()
-    with open(summary_map) as infile:
-        for line in infile:
-            all_samps.add(line.rsplit()[0])
+    if isinstance(summary_map, str):
+        with open(summary_map) as infile:
+            for line in infile:
+                all_samps.add(line.rsplit()[0])
+    elif isinstance(summary_map, set):
+        all_samps = summary_map  # assume it's a set
 
     seen_samps = set()
     with open(outname, 'w') as outfile:
