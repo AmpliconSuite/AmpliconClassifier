@@ -156,11 +156,10 @@ if __name__ == "__main__":
     # The input file must be the source of the classification file calls.
     parser = argparse.ArgumentParser(description="Organize AC results into a table")
     parser.add_argument("-i", "--input", help="Path to .input file produced by make_input.sh. Each line formatted as: "
-                        "sample_name cycles.txt graph.txt.", required=True)
-    parser.add_argument("--classification_file", help="Path of amplicon_classification_profiles.tsv file",
+                        "sample_name cycles.txt graph.txt (required)", required=True)
+    parser.add_argument("--classification_file", help="Path of amplicon_classification_profiles.tsv file (required)",
                         required=True)
-    parser.add_argument("--summary_map", help="Path to the _summary_map.txt file produced by make_input.sh",
-                        required=True)
+    parser.add_argument("--summary_map", help="Path to the _summary_map.txt file produced by make_input.sh")
     parser.add_argument("--sample_metadata_file", help="Path of sample metadata, [sample]_sample_metadata.json file"
                                                        " (for building table with a single sample).", default="")
     parser.add_argument("--run_metadata_file", help="Path of run metadata, [sample]_run_metadata.json file (for "
@@ -188,14 +187,16 @@ if __name__ == "__main__":
                    "Tissue of origin", "Sample type", "Feature BED file", "CNV BED file", "AS-p version", "AA version",
                    "AC version", "AA PNG file", "AA PDF file", "AA summary file", "Run metadata JSON", "Sample metadata JSON"]
 
-    sumf_used = set()
-    sumf_dict = read_summary_list(args.summary_map)
-
     classBase = args.classification_file.rsplit("_amplicon_classification_profiles.tsv")[0]
     ldir = os.path.dirname(classBase) + "/files/"
     if ldir == "/files/": ldir = "files/"
     if not os.path.exists(ldir): os.makedirs(ldir)
 
+    if not args.summary_map:
+        args.summary_map = args.input.rsplit(".input", 1)[0] + "_summary_map.txt"
+
+    sumf_used = set()
+    sumf_dict = read_summary_list(args.summary_map)
     sample_metadata_dict = defaultdict(lambda: defaultdict(lambda: "NA"))
     sample_metadata_path = defaultdict(lambda: "Not provided")
     if args.sample_metadata_list:

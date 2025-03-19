@@ -859,7 +859,7 @@ def refine_cluster_positions(cluster, cluster_distance):
     return pos1, pos2, filtered_cluster, outlier_stats
 
 
-def cluster_sv_evidence(sv_evidence, cluster_distance, mean_mapq_cutoff=10, verbose=False):
+def cluster_sv_evidence(sv_evidence, cluster_distance, mean_mapq_cutoff=5, verbose=False):
     """
     Improved clustering with position-based lookahead and outlier detection.
     Uses genomic distance to determine lookahead window and tracks consumed SVs.
@@ -1011,11 +1011,10 @@ def identify_connections(bam_path, feat_name, feat_ivald, lcD, aa_bp_ivald, segs
                     "sv_pos1",
                     "sv_chrom2",
                     "sv_pos2",
-                    "total_supporting_reads",
+                    "total_read_support",
                     "split_read_support",
                     "discordant_pair_support",
-                    "distance_between_breakpoints",
-                    "is_interchromosomal",
+                    "breakpoint_distance",
                     "orientation_string",
                     "unfiltered_cluster_size",
                     "mean_mapq",

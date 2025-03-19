@@ -1,4 +1,5 @@
 from collections import defaultdict
+import logging
 import os
 import warnings
 
@@ -121,6 +122,9 @@ class amped_gene(object):
 def merge_intervals(feature_dict, tol=1):
     for item, usort_intd in feature_dict.items():
         for chrom, usort_ints in usort_intd.items():
+            if not usort_ints:
+                continue
+
             # sort ints
             sort_ints = sorted(usort_ints)
             # merge sorted ints

@@ -220,25 +220,70 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
 
             feature_dict["ecDNA_" + str(amp_ind + 1)] = ec_interval_dict
 
-    if ampClass != "No amp/Invalid":
-        other_interval_dict = defaultdict(list)
         for o_ind in range(len(cycleList)):
             if o_ind not in all_used:
+                # print("unused", o_ind)
                 for c_id in cycleList[o_ind]:
-                    if abs(c_id) not in used_segs:
-                        chrom, l, r = segSeqD[abs(c_id)]
-                        # print("used: ", used_segs)
-                        if not used_segs[chrom][l:r] and not chrom is None:
-                            # used_segs[chrom].addi(l, r+1)
-                            other_class_c_inds.append(o_ind)
+                    chrom, l, r = segSeqD[abs(c_id)]
+                    if not chrom:
+                        continue
+
+                    # check if there's an ecDNA and this segment is fully contained
+                    ec_feat_names = [x for x in feature_dict.keys() if x.startswith("ecDNA_")]
+                    for ec_feat in ec_feat_names:
+                        ec_interval_dict = feature_dict[ec_feat]
+                        # segment touches the start and end
+                        l_hits = any([s <= l <= e for s, e in ec_interval_dict[chrom]])
+                        r_hits = any([s <= r <= e for s, e in ec_interval_dict[chrom]])
+                        if l_hits and r_hits:
                             # chop out low cn regions
                             seg_t = IntervalTree([Interval(l, r + 1)])
-                            olapping_low_cns = [x for x in graph_cns[chrom][l:r + 1] if x.data < 4 and ampClass != "Virus"]
+                            l_cn = min([x.data for x in graph_cns[chrom][l]])
+                            r_cn = min([x.data for x in graph_cns[chrom][r]])
+                            olapping_low_cns = [x for x in graph_cns[chrom][l:r + 1] if
+                                                x.data < max(4, 0.75*min(l_cn, r_cn))
+                                                and not is_human_viral_hybrid(ref, cycleList[o_ind],
+                                                                                         segSeqD)]
                             for x in olapping_low_cns:
                                 seg_t.chop(x.begin, x.end + 1)
 
                             for x in seg_t:
-                                other_interval_dict[chrom].append((x.begin, x.end))
+                                used_segs[chrom].addi(x.begin, x.end + 1)
+                                ec_interval_dict[chrom].append((x.begin, x.end))
+
+                            break
+
+
+    if ampClass != "No amp/Invalid":
+        other_interval_dict = defaultdict(list)
+        for o_ind in range(len(cycleList)):
+            if o_ind not in all_used:
+                # print("unused", o_ind)
+                for c_id in cycleList[o_ind]:
+                    chrom, l, r = segSeqD[abs(c_id)]
+                    if not chrom:
+                        continue
+
+                    # print("orig ", (chrom, l, r))
+                    ival_seg_t = IntervalTree([Interval(l, r + 1)])
+                    # print("touches " + str(used_segs[chrom][l:r]))
+
+                    for x in used_segs[chrom][l:r]:
+                        ival_seg_t.chop(x.begin, x.end + 1)
+
+                    if ival_seg_t:
+                        other_class_c_inds.append(o_ind)
+
+                    for sub_ival_seg in ival_seg_t:
+                        # chop out low cn regions
+                        l, r = sub_ival_seg.begin, sub_ival_seg.end
+                        seg_t = IntervalTree([Interval(l, r + 1)])
+                        olapping_low_cns = [x for x in graph_cns[chrom][l:r + 1] if x.data < 4.5 and ampClass != "Virus"]
+                        for x in olapping_low_cns:
+                            seg_t.chop(x.begin, x.end + 1)
+
+                        for x in seg_t:
+                            other_interval_dict[chrom].append((x.begin, x.end))
 
         if not ecStat and not bfbStat:
             feature_dict[ampClass + "_1"] = other_interval_dict

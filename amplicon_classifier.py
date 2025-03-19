@@ -24,6 +24,7 @@ ampLenOverMinCN = 5000
 cycCut = 0.12
 compCut = 0.3
 min_upper_cn = 4.5
+sig_amp = 7
 decomposition_strictness = 0.1
 
 # bfb thresholds
@@ -37,10 +38,15 @@ def get_size(cycle, segSeqD):
     return sum(segSeqD[abs(x)][2] - segSeqD[abs(x)][1] for x in cycle)
 
 
-def weightedCycleAmount(cycle, cn, segSeqD):
+def flowWeightedCycleAmount(cycle, cn, segSeqD):
     # get length of cycle
     sc_length = get_size(cycle, segSeqD) / 1000.
     return sc_length * cn
+
+
+def length_weighted_mean(values, weights):
+    """Helper function to calculate weighted mean"""
+    return sum(v * w for v, w in zip(values, weights)) / sum(weights)
 
 
 def get_diff(e1, e2, segSeqD):
@@ -156,7 +162,7 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
                         break
             if hits:
                 # print("DEBUG: cycle: ", cycle)
-                wca = weightedCycleAmount(cycle, cycleCNs[ind], segSeqD)
+                wca = flowWeightedCycleAmount(cycle, cycleCNs[ind], segSeqD)
                 if ind in feature_inds:
                     new_feat_inds.add(len(cycleWeights))
 
@@ -188,7 +194,7 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
             fu_ent = 0
 
     else:
-        print("Warning: total graph weight <= 0")
+        logger.warning("Warning: total graph weight <= 0")
         fu_ent = 0
         rf = 0
 
@@ -365,11 +371,174 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, add
     return 0, 0, 0, False, [], []
 
 
+def check_max_cn(ec_cycle_inds, cycleList, segSeqD, graph_cns):
+    for e_ind in ec_cycle_inds:
+        for c_id in cycleList[e_ind]:
+            chrom, l, r = segSeqD[abs(c_id)]
+            if r - l < 1000:
+                continue
+
+            for i in graph_cns[chrom][l:r]:
+                if i.data > min_upper_cn:
+                    return True
+
+    return False
+
+
+def get_amount_sigamp(ec_cycle_inds, cycleList, segSeqD, graph_cns):
+    used_content = defaultdict(set)
+    for e_ind in ec_cycle_inds:
+        for c_id in cycleList[e_ind]:
+            chrom, l, r = segSeqD[abs(c_id)]
+            if not chrom:
+                continue
+            seg_t = IntervalTree([Interval(l, r+1)])
+            olapping_low_cns = [x for x in graph_cns[chrom][l:r] if x.data < 4]
+            for x in olapping_low_cns:
+                seg_t.chop(x.begin, x.end)
+            for x in seg_t:
+                used_content[chrom] |= set(range(x.begin, x.end))
+
+    total_sigamp = 0
+    for chrom, useset in used_content.items():
+        total_sigamp += len(useset)
+
+    return total_sigamp
+
+
+def segdup_cycle(cycle, segSeqD, graph_cns, circCyc, compCyc):
+    # must be circular, simple cycle, and smallish, and not heavily rearranged
+    if not circCyc or get_size(cycle, segSeqD) > 1000000 or compCyc:
+        return False
+
+    # not excessively high CN and all CNs within 1
+    cycle_seg_cns = []
+    cycle_seg_lengths = []
+    chrom = None
+    for s in cycle:
+        chrom, start, end = segSeqD[abs(s)]
+        graph_segs = graph_cns[chrom][start:end]
+        cycle_seg_cns.extend([x.data for x in graph_segs])
+        cycle_seg_lengths.extend([x.end - x.begin for x in graph_segs])
+
+    if not chrom or not cycle_seg_cns:
+        sys.stderr.write("Warning: found unexpected empty cycle!\n")
+        return False
+
+    # Check if CNs are within 0.5 of each other
+    if max(cycle_seg_cns) - min(cycle_seg_cns) > 0.5:
+        return False
+
+    # Find the flanking bp coordinates
+    min_coord = float('inf')
+    max_coord = -1
+    for s in cycle:
+        _, start, end = segSeqD[abs(s)]
+        if start < min_coord:
+            min_coord = start
+        if end > max_coord:
+            max_coord = end
+
+    # Get border CNs (250bp on each side)
+    left_segs = graph_cns[chrom][min_coord-250:min_coord-1]
+    right_segs = graph_cns[chrom][max_coord+1:max_coord+250]
+
+    left_cns = [x.data for x in left_segs]
+    left_lengths = [x.end - x.begin for x in left_segs]
+
+    right_cns = [x.data for x in right_segs]
+    right_lengths = [x.end - x.begin for x in right_segs]
+
+    if not right_cns or not left_cns:
+        return False
+
+    if sum(left_lengths) < 100 or sum(right_lengths) < 100:
+        return False
+
+    # Check if border CNs are within 1 of each other
+    if abs(length_weighted_mean(left_cns, left_lengths) - length_weighted_mean(right_cns, right_lengths)) > 1:
+        return False
+
+    # Calculate weighted means
+    border_mean = length_weighted_mean(left_cns + right_cns, left_lengths + right_lengths)
+    if border_mean > 7:
+        return False
+
+    # Calculate cycle weighted mean
+    cycle_mean = length_weighted_mean(cycle_seg_cns, cycle_seg_lengths)
+
+    # Check if ratio is approximately 2 (within 0.2) and not super high amplification
+    ratio = cycle_mean / border_mean
+    return ratio - 2 <= 0.25 and cycle_mean < 12
+
+
+def clusterECCycles(cycleList, cycleCNs, segSeqD, graph_cns, excludableCycleIndices=None):
+    padding = 500000
+    indices = [x for x in range(len(cycleList)) if cycleList[x][0] != 0 and x not in excludableCycleIndices]
+    clusters = []
+    seenSegs = set()
+    total_EC_size = 0
+    for ind in indices:
+        cycle = cycleList[ind]
+        csize = get_size(cycle, segSeqD)
+        total_EC_size+=csize
+        if cycleCNs[ind] < args.min_flow and csize < minCycleSize and not is_human_viral_hybrid(args.ref, cycle, segSeqD):
+            continue
+
+        cIndsToMerge = set()
+        cycle_segs = set([segSeqD[abs(s_num)] for s_num in cycle])
+        # s_set = set([segSeqD[abs(s_num)] for s_num in cycle])
+        s_set = cycle_segs.difference(seenSegs)
+        # s_set -= seenSegs
+        if not s_set:
+            continue
+
+        for c_ind, clust_dict in enumerate(clusters):
+            for s in cycle_segs:
+                if clust_dict[s[0]][s[1] - padding:s[2] + padding]:
+                    cIndsToMerge.add(c_ind)
+                    break
+
+        newClusters = []
+        newClust = defaultdict(IntervalTree)
+        for s in s_set:
+            newClust[s[0]].addi(s[1], s[2] + 1, ind)
+
+        for c_ind, currClust in enumerate(clusters):
+            if c_ind in cIndsToMerge:
+                for k, v in currClust.items():
+                    for ival in v:
+                        newClust[k].addi(ival.begin, ival.end, ival.data)
+
+            else:
+                newClusters.append(currClust)
+
+        newClusters.append(newClust)
+        clusters = newClusters
+        seenSegs |= s_set
+
+    indexClusters = []
+    # extract only the cycle indices from each cluster and return
+    for clust in clusters:
+        currIndexSet = set()
+        for k, v in clust.items():
+            for ival in v:
+                currIndexSet.add(ival.data)
+
+        if get_amount_sigamp(currIndexSet, cycleList, segSeqD, graph_cns) > 10000:
+            indexClusters.append(currIndexSet)
+
+    # remove those where the max CN is below threshold
+    indexClusters = [x for x in indexClusters if check_max_cn(x, cycleList, segSeqD, graph_cns)]
+
+    return indexClusters
+
+
 # ------------------------------------------------------------
 # Classifications
 
 # returns True if the cycle is no-amp or invalid
-def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN):
+def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN, graph_cns):
     # check if contains viral sequence
     if is_viral(args.ref, cycle, segSeqD):
         return False
@@ -381,7 +550,7 @@ def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN):
 
     # do something slightly stricter for singleton cycles since they seem to be less reliably real
     # these are simple and semi-arbitrary rules based on analysis of many samples
-    elif maxCN > 7:
+    elif maxCN >= sig_amp:
         scale = min(3., maxCN / 8.)
     else:
         scale = 2.5
@@ -456,7 +625,7 @@ def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCyclicCont, totCyclic
 
 
 def classifyBFB(fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN, tot_over_min_cn):
-    # print((fb,             cyc_sig,            nonbfb_sig,          bfb_cyc_ratio,      maxCN,            tot_over_min_cn))
+    # print((fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN, tot_over_min_cn))
     if fb < min_score_for_bfb or cyc_sig < 0.295 or maxCN < 4:
         return None
 
@@ -470,106 +639,6 @@ def classifyBFB(fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN, tot_over_min_cn):
 
     return "BFB"
 
-
-# ------------------------------------------------------------
-# structure metanalysis
-
-def check_max_cn(ec_cycle_inds, cycleList, segSeqD, graph_cns):
-    for e_ind in ec_cycle_inds:
-        for c_id in cycleList[e_ind]:
-            chrom, l, r = segSeqD[abs(c_id)]
-            if r - l < 1000:
-                continue
-
-            for i in graph_cns[chrom][l:r]:
-                if i.data > min_upper_cn:
-                    return True
-
-    return False
-
-
-def get_amount_sigamp(ec_cycle_inds, cycleList, segSeqD, graph_cns):
-    used_content = defaultdict(set)
-    for e_ind in ec_cycle_inds:
-        for c_id in cycleList[e_ind]:
-            chrom, l, r = segSeqD[abs(c_id)]
-            if not chrom:
-                continue
-            seg_t = IntervalTree([Interval(l, r+1)])
-            olapping_low_cns = [x for x in graph_cns[chrom][l:r] if x.data < 4]
-            for x in olapping_low_cns:
-                seg_t.chop(x.begin, x.end)
-            for x in seg_t:
-                used_content[chrom] |= set(range(x.begin, x.end))
-
-    total_sigamp = 0
-    for chrom, useset in used_content.items():
-        total_sigamp += len(useset)
-
-    return total_sigamp
-
-
-def clusterECCycles(cycleList, cycleCNs, segSeqD, graph_cns, excludableCycleIndices=None):
-    padding = 500000
-    indices = [x for x in range(len(cycleList)) if cycleList[x][0] != 0 and x not in excludableCycleIndices]
-    clusters = []
-    seenSegs = set()
-    total_EC_size = 0
-    for ind in indices:
-        cycle = cycleList[ind]
-        csize = get_size(cycle, segSeqD)
-        total_EC_size+=csize
-        if cycleCNs[ind] < args.min_flow and csize < minCycleSize and not is_human_viral_hybrid(args.ref, cycle, segSeqD):
-            continue
-
-        cIndsToMerge = set()
-        cycle_segs = set([segSeqD[abs(s_num)] for s_num in cycle])
-        # s_set = set([segSeqD[abs(s_num)] for s_num in cycle])
-        s_set = cycle_segs.difference(seenSegs)
-        # s_set -= seenSegs
-        if not s_set:
-            continue
-
-        for c_ind, clust_dict in enumerate(clusters):
-            for s in cycle_segs:
-                if clust_dict[s[0]][s[1] - padding:s[2] + padding]:
-                    cIndsToMerge.add(c_ind)
-                    break
-
-        newClusters = []
-        newClust = defaultdict(IntervalTree)
-        for s in s_set:
-            newClust[s[0]].addi(s[1], s[2] + 1, ind)
-
-        for c_ind, currClust in enumerate(clusters):
-            if c_ind in cIndsToMerge:
-                for k, v in currClust.items():
-                    for ival in v:
-                        newClust[k].addi(ival.begin, ival.end, ival.data)
-
-            else:
-                newClusters.append(currClust)
-
-        newClusters.append(newClust)
-        clusters = newClusters
-        seenSegs |= s_set
-
-    indexClusters = []
-    # extract only the cycle indices from each cluster and return
-    for clust in clusters:
-        currIndexSet = set()
-        for k, v in clust.items():
-            for ival in v:
-                currIndexSet.add(ival.data)
-
-        if get_amount_sigamp(currIndexSet, cycleList, segSeqD, graph_cns) > 10000:
-            indexClusters.append(currIndexSet)
-
-    # remove those where the max CN is below threshold
-    indexClusters = [x for x in indexClusters if check_max_cn(x, cycleList, segSeqD, graph_cns)]
-
-    return indexClusters
-
 # ------------------------------------------------------------
 
 
@@ -577,14 +646,14 @@ def plotting():
     textCategories = ["No amp/Invalid", "Linear\namplification", "Trivial\ncycle", "Complex\nnon-cyclic",
                       "Complex\ncyclic", "BFB\nfoldback"]
     if args.plotstyle == "grouped":
-        print("plotting")
+        logger.info("plotting")
         make_classification_radar(textCategories, AMP_dvaluesList, args.o + "_amp_class", sampNames)
         make_classification_radar(mixing_cats, EDGE_dvaluesList, args.o + "_edge_class", sampNames)
 
     elif args.plotstyle == "individual":
-        print("plotting")
+        logger.info("plotting")
         for a, e, s in zip(AMP_dvaluesList, EDGE_dvaluesList, sampNames):
-            print(textCategories, a)
+            # print(textCategories, a)
             make_classification_radar(textCategories, [a[:len(textCategories)], ], args.o + "_" + s + "_amp_class",
                                       sampNames)
             make_classification_radar(mixing_cats, [e, ], args.o + "_" + s + "_edge_class", sampNames)
@@ -593,9 +662,9 @@ def plotting():
 def filter_similar_amplicons(n_files):
     # adjust the p value cutoff based on number of input amplicons
     pval = 0.05/(max(1, n_files-1))
-    print("\nSamples are assumed to be independent as --filter_similar was set.\nFiltering highly similar amplicons"
+    logger.info("\nSamples are assumed to be independent as --filter_similar was set.\nFiltering highly similar amplicons"
           " across independent samples...\n")
-    print("adjusted p-value cutoff set to 0.05/{}={}".format(str(n_files), str(pval)))
+    logger.info("adjusted p-value cutoff set to 0.05/{}={}".format(str(n_files), str(pval)))
     required_classes = {"ecDNA", "BFB", "Complex-non-cyclic", "Linear"}
     # cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
     # cg5D = build_CG5_database(cg5Path)
@@ -613,7 +682,7 @@ def filter_similar_amplicons(n_files):
             feat_to_ivald[full_featname] = (None, ivald)
 
     pairs = get_pairs(feat_to_ivald)
-    print("Total of " + str(len(pairs)) + " pairs of features to compare.")
+    logger.info("Total of " + str(len(pairs)) + " pairs of features to compare.")
     fsim_data = []
     for x in pairs:
         s2a_graph = {}
@@ -654,10 +723,10 @@ def filter_similar_amplicons(n_files):
     samp_filt_set = set()
     samp_amp_filt_set = set()
     samp_amp_to_feat = defaultdict(set)
-    print("The following " + str(len(feats_to_filter)) + " features will be removed:")
+    logger.info("The following " + str(len(feats_to_filter)) + " features will be removed:")
     for x in feats_to_filter:
         full_featname = "_".join(x)
-        print(full_featname)
+        logger.info(full_featname)
         samp_amp = x[0] + "_" + x[1]
         samp_filt_set.add(x[0])
         samp_amp_filt_set.add(samp_amp)
@@ -761,7 +830,7 @@ def filter_similar_amplicons(n_files):
             AMP_classifications[ind] = (ampClass, ecStat, bfbStat, ecAmpliconCount)
 
 
-def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn):
+def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn, graph_cns):
     cycleTypes = []
     cycleWeights = []
     rearrCycleInds = set()
@@ -777,7 +846,7 @@ def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn):
         hasNonCircLen1 = True if len(cycle) == 3 and cycle[0] == 0 else False
         oneCycle = (len(cycleList) == 1)
         isSingleton = hasNonCircLen1 or oneCycle
-        if cycleIsNoAmpInvalid(cycle, cycleCNs[ind], segSeqD, isSingleton, maxCN) and not args.force:
+        if cycleIsNoAmpInvalid(cycle, cycleCNs[ind], segSeqD, isSingleton, maxCN, graph_cns) and not args.force:
             invalidInds.append(ind)
             cycleTypes.append("No amp/Invalid")
 
@@ -788,17 +857,21 @@ def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn):
                 cycleTypes.append("Virus")
 
             else:
-                if compCyc:
-                    rearrCycleInds.add(ind)
+                if segdup_cycle(cycle, segSeqD, graph_cns, circCyc, compCyc):
+                    cycleTypes.append("No amp/Invalid")
+
+                else:
+                    if compCyc:
+                        rearrCycleInds.add(ind)
+                        if circCyc:
+                            totalCompCyclicCont += get_size(cycle, segSeqD)
+
                     if circCyc:
-                        totalCompCyclicCont += get_size(cycle, segSeqD)
+                        totCyclicCont += get_size(cycle, segSeqD)
 
-                if circCyc:
-                    totCyclicCont += get_size(cycle, segSeqD)
+                    cycleTypes.append(ampDefs[(circCyc, compCyc)])
 
-                cycleTypes.append(ampDefs[(circCyc, compCyc)])
-
-        currWt = weightedCycleAmount(cycle, cycleCNs[ind], segSeqD)
+        currWt = flowWeightedCycleAmount(cycle, cycleCNs[ind], segSeqD)
         cycleWeights.append(currWt)
 
     totalWeight = max(sum(cycleWeights), 1)
@@ -817,8 +890,8 @@ def run_classification(segSeqD, cycleList, cycleCNs):
     # first compute some properties about the foldbacks and copy numbers
     fb_edges, fb_readcount, fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
     rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
-    totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights, rearrCycleInds = get_raw_cycle_props(
-        cycleList, maxCN, rearr_e, tot_over_min_cn)
+    (totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights,
+     rearrCycleInds) = get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn, graph_cns)
 
     # decomposition/amplicon complexity
     totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD, range(len(cycleList)),
@@ -1013,11 +1086,11 @@ if __name__ == "__main__":
     parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38.",
                         choices=["hg19", "GRCh37", "hg38", "GRCh38", "GRCh38_viral", "mm10", "GRCm38"], required=True)
 
+    parser.add_argument("-o", help="Output filename prefix", required=True)
     parser.add_argument("--min_flow", type=float, help="Minimum flow to consider among decomposed paths (1.0).",
                         default=1.0)
     parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon "
                         "(5000).")
-    parser.add_argument("-o", help="Output filename prefix")
     parser.add_argument("--plotstyle", help="Type of visualizations to produce.",
                         choices=["grouped", "individual", "noplot"], default="noplot")
     parser.add_argument("--force", help="Disable No amp/Invalid class if possible", action='store_true')
@@ -1047,43 +1120,68 @@ if __name__ == "__main__":
     print("AmpliconClassifier " + __ampliconclassifier_version__)
     print(" ".join(sys.argv))
 
+    # Normalize and create output directory first
+    if args.o.endswith("/"):
+        if args.input:
+            args.o += os.path.basename(args.input).rsplit(".")[0]
+        else:
+            args.o += "AC"
+
+    if not args.o.startswith("/"):
+        args.o = os.path.abspath(args.o)
+
+    outdir_loc = os.path.dirname(args.o)
+    if outdir_loc and not os.path.exists(outdir_loc):
+        os.makedirs(outdir_loc)
+
+    # Setup logger
+    logger = setup_logger(args.o)
+
+    # Log version and command
+    logger.info("AmpliconClassifier " + __ampliconclassifier_version__)
+    logger.info("Command: %s", " ".join(sys.argv))
+
     # make input if an AA directory is given
     if args.AA_results:
         src_dir = os.path.dirname(ampclasslib.__file__)
-        cmd = src_dir + "/make_input.sh " + args.AA_results + " " + args.AA_results + "/AC"
-        print("Generating .input file...")
-        print(cmd)
+        input_file = os.path.join(outdir_loc, "AC.input")
+        cmd = "{}/make_input.sh {} {}".format(src_dir, args.AA_results, outdir_loc + "/AC")
+        logger.info("Generating .input file...")
+        logger.info(cmd)
         rc = call(cmd, shell=True)
         if rc != 0:
-            print("Failed to make input file! Please ensure each graph and cycles file are present.\n")
+            logger.error("Failed to make input file! Please ensure each graph and cycles file are present.")
             sys.exit(1)
-        args.input = args.AA_results + "/AC.input"
+        args.input = input_file
 
     if args.input:
         summary_map = os.path.splitext(args.input)[0] + "_summary_map.txt"
         if not os.path.exists(summary_map):
-            sys.stderr.write("Summary map file not found with .input file. Please re-run make_input and"
-                             " ensure _summary_map.txt file co-located with .input file")
+            logger.error("Summary map file not found with .input file. Please re-run make_input and"
+                         " ensure _summary_map.txt file co-located with .input file")
             sys.exit(1)
         else:
-            print("Found summary map file " + summary_map)
-
+            logger.info("Found summary map file %s", summary_map)
     else:  # one cycle + graph provided only
         bname = os.path.basename(args.cycles)
         sname = re.split("_amplicon[0-9]*", bname)[0]
         summary_map = {sname}
 
-    if args.ref == "hg38": args.ref = "GRCh38"
-    elif args.ref == "GRCm38": args.ref = "mm10"
+    if args.ref == "hg38":
+        args.ref = "GRCh38"
+    elif args.ref == "GRCm38":
+        args.ref = "mm10"
+
     patch_links = read_patch_regions(args.ref)
+
     if 0 <= args.decomposition_strictness <= 1:
-        decomposition_strictness= args.decomposition_strictness
+        decomposition_strictness = args.decomposition_strictness
     else:
-        print("--decomposition_strictness must be a value between 0 and 1")
+        logger.error("--decomposition_strictness must be a value between 0 and 1")
         sys.exit(1)
 
     if args.ref == "GRCh38_viral" and args.filter_similar:
-        print('--filter_similar cannot be used with --ref GRCh38_viral. disabling --filter_similar')
+        logger.warning('--filter_similar cannot be used with --ref GRCh38_viral. disabling --filter_similar')
         args.filter_similar = False
 
     # check if aa data repo set, construct low-complexity (LC) datatabase
@@ -1101,7 +1199,7 @@ if __name__ == "__main__":
             lcD = buildLCDatabase(lcPath)
 
     except KeyError:
-        sys.stderr.write("$AA_DATA_REPO not set. Please see AA installation instructions.\n")
+        logger.error("$AA_DATA_REPO not set. Please see AA installation instructions.")
         sys.exit(1)
 
     if args.exclude_bed:
@@ -1109,32 +1207,12 @@ if __name__ == "__main__":
         for k, t in addtnl_lcD.items():
             lcD[k].update(t)
 
+    # Handle file list creation
     if not args.input:
         tempName = args.cycles.rsplit("/")[-1].rsplit(".")[0]
         flist = [[tempName, args.cycles, args.graph]]
-        if not args.o:
-            args.o = os.getcwd() + "/" + os.path.basename(args.cycles).rsplit("_cycles.txt")[0] 
-
-        elif args.o.endswith("/"):
-            args.o += os.path.basename(args.cycles).rsplit("_cycles.txt")[0]
-
-        if not args.o.startswith("/"):
-            args.o = os.getcwd() + "/" + args.o
-
     else:
         flist = readFlist(args.input)
-        if not args.o:
-            args.o = os.getcwd() + "/" + os.path.basename(args.input).rsplit(".")[0]
-
-        elif args.o.endswith("/"):
-            args.o += os.path.basename(args.input).rsplit(".")[0]
-
-        if not args.o.startswith("/"):
-            args.o = os.getcwd() + "/" + args.o
-
-    outdir_loc = os.path.abspath(os.path.dirname(args.o + "_temp"))
-    if not os.path.exists(outdir_loc) and outdir_loc != "":
-        os.makedirs(outdir_loc)
 
     if args.min_size:
         minCycleSize = args.min_size
@@ -1170,37 +1248,37 @@ if __name__ == "__main__":
             cyclesFiles.append(cyclesFile)
             ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
             samp_amp_to_graph[sName + "_" + ampN] = graphFile
-            print(sName, ampN)
+            logger.info(sName + " " + ampN)
             segSeqD, cycleList, cycleCNs = parseCycle(cyclesFile, graphFile, args.add_chr_tag, lcD, patch_links)
             if args.ref == "hg19" or args.ref == "GRCh37":
                 chroms = set([x[0] for k,x in segSeqD.items() if k != 0])
                 if args.ref == "hg19" and not any([x.startswith("chr") for x in chroms]):
-                    print("chrom names: " + str(chroms))
-                    print("Warning! --ref hg19 was set, but chromosome names are not consistent with hg19 ('chr1', 'chr2', etc.)\n")
+                    logger.warning("chrom names: " + str(chroms))
+                    logger.warning("Warning! --ref hg19 was set, but chromosome names are not consistent with hg19 ('chr1', 'chr2', etc.)\n")
                 elif args.ref == "GRCh37" and any([x.startswith("chr") for x in chroms]) and not args.add_chr_tag:
-                    print("chrom names: " + str(chroms))
-                    print("Warning! --ref GRCh37 was set, but chromosome names are not consistent with GRCh37 ('1', '2', etc.)\n")
+                    logger.warning("chrom names: " + str(chroms))
+                    logger.warning("Warning! --ref GRCh37 was set, but chromosome names are not consistent with GRCh37 ('1', '2', etc.)\n")
 
         else:
-            print(fpair)
-            sys.stderr.write("File list not properly formatted\n")
+            logger.info(str(fpair))
+            logger.error("File list not properly formatted\n")
             sys.exit(1)
 
         run_classification(segSeqD, cycleList, cycleCNs)
 
-    print("Classification stage completed")
+    logger.info("Classification stage completed")
     if args.filter_similar:
-        print("Filtering similar amplicons...")
+        logger.info("Filtering similar amplicons...")
         from feature_similarity import *
         filter_similar_amplicons(len(flist))
 
     # make any requested visualizations
     plotting()
 
-    print("Writing outputs...")
+    logger.info("Writing outputs...")
     # OUTPUT FILE WRITING
     write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count, fd_list,
                   samp_amp_to_graph, prop_list, summary_map)
 
-    print("done")
+    logger.info("\nComplete")

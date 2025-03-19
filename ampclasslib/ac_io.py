@@ -1,12 +1,37 @@
+import logging
+
 from intervaltree import IntervalTree
 
 from ampclasslib.ac_util import *
 from ampclasslib.ecDNA_context import *
 
 
+def setup_logger(output_prefix):
+    """Set up logging configuration"""
+    log_file = "{}.log".format(output_prefix)
+
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
+    # Setup file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(formatter)
+
+    # Setup console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+
+    # Setup logger
+    logger = logging.getLogger('AmpliconClassifier')
+    logger.setLevel(logging.INFO)
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    return logger
+
+
 # getting genes from the genes .gff file
 def parse_genes(gene_file):
-    print("reading " + gene_file)
     t = defaultdict(IntervalTree)
     seenNames = set()
     with open(gene_file) as infile:
@@ -36,7 +61,6 @@ def parse_genes(gene_file):
                 seenNames.add(gname)
                 t[chrom][s:e] = (gname, strand, ncbi_id)
 
-    print("read " + str(len(seenNames)) + " genes\n")
     return t
 
 
@@ -267,7 +291,8 @@ def create_context_table(prefix, sname, ampN, feature_dict, samp_amp_to_graph, a
 
             else:
                 gfile = samp_amp_to_graph[sname + "_" + ampN]
-                cfile = cycles_dir + trim_sname + "_" + ampN + "_annotated_cycles.txt"
+                base_graph_name = os.path.basename(gfile).rsplit("_graph.txt", 1)[0]
+                cfile = cycles_dir + base_graph_name + "_annotated_cycles.txt"
                 context = fetch_context(gfile, cfile, bed_file=intervals_fname, add_chr_tag=add_chr_tag)
 
             curr_contexts.append((trim_sname + "_" + ampN + "_" + feat_name, context))
@@ -323,7 +348,9 @@ def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, 
 
 def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count, fd_list,
-                  samp_amp_to_graph, prop_list, summary_map):
+                  samp_amp_to_graph, prop_list, summary_map, logname="AmpliconClassifier"):
+
+    logger = logging.getLogger(logname)
     # Genes
     gene_extraction_outname = args.o + "_gene_list.tsv"
     write_gene_results(gene_extraction_outname, ftgd_list)
@@ -368,13 +395,33 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
     feat_basic_propf.write("\t".join(prop_head) + "\n")
     f2gf = open(args.o + "_features_to_graph.txt", 'w')
 
+    feat_type_counts = defaultdict(int)
+
     for ind, (sname, bpg_linelist, feature_dict, prop_dict) in enumerate(zip(sampNames, bpgi_list, fd_list, prop_list)):
         ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
         write_bpg_summary(args.o, sname, ampN, bpg_linelist)
         write_interval_beds(args.o, sname, ampN, feature_dict, samp_amp_to_graph, f2gf)
         write_basic_properties(feat_basic_propf, sname, ampN, prop_dict)
+        for feat_type_and_ind in feature_dict.keys():
+            feat_type = feat_type_and_ind.rsplit("_")[0]
+            feat_type_counts[feat_type] += 1
 
     f2gf.close()
+
+    # Get max length of feature type names for nice alignment
+    max_name_length = max(len(feat_type) for feat_type in feat_type_counts.keys())
+
+    # Log header
+    logger.info("\nFeature Type Counts:")
+    logger.info("-" * (max_name_length + 10))  # Line separator
+
+    # Log each count with aligned formatting
+    for feat_type, count in sorted(feat_type_counts.items()):
+        if feat_type == "unknown":
+            continue
+        logger.info("{:<{width}} : {:>5}".format(feat_type, count, width=max_name_length))
+
+    logger.info("-" * (max_name_length + 10))  # Line separator
 
     # report ecDNA context
     context_filename = args.o + "_ecDNA_context_calls.tsv"
