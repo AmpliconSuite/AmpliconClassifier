@@ -14,7 +14,8 @@ find . -type f -name "*_CNV_CALLS.bed" | while read -r filepath; do
     filename=$(basename "$filepath")
     
     # Extract the part of the filename before the _CNV_*CALLS.bed pattern
-    sample_name=$(echo "$filename" | sed -E 's/(.*)_CNV_CALLS\.bed/\1/')
+    # and remove the ".cs.rmdup" portion if present
+    sample_name=$(echo "$filename" | sed -E 's/(.*)_CNV_CALLS\.bed/\1/' | sed 's/\.cs\.rmdup//')
     
     # Get the absolute path
     abs_path=$(realpath "$filepath")

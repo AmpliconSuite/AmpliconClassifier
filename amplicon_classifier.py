@@ -1079,10 +1079,10 @@ ampDefs = {(False, False): "Linear", (False, True): "Complex-non-cyclic",
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Classify AA amplicon type")
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--AA_results", help="Path to location of unclassified AA results to take as input.")
+    group.add_argument("--AA_results", help="Path to location of AA output files. Can be multiple runs in a single parent directory.")
     group.add_argument("-i", "--input", help="Alternative to --AA_results if make_input.sh was already run to produce the .input file")
-    group.add_argument("-c", "--cycles", help="AA-formatted cycles file. Set if classifying only a single amplicon")
-    parser.add_argument("-g", "--graph", help="AA-formatted graph file (required if --cycles given)")
+    group.add_argument("-c", "--cycles", help="Alternative to --AA_results for classifying a single amplicon. Path to an AA-formatted cycles file.")
+    parser.add_argument("-g", "--graph", help="Path to AA-formatted graph file (required if --cycles given)")
     parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38.",
                         choices=["hg19", "GRCh37", "hg38", "GRCh38", "GRCh38_viral", "mm10", "GRCm38"], required=True)
 
@@ -1094,8 +1094,6 @@ if __name__ == "__main__":
     parser.add_argument("--plotstyle", help="Type of visualizations to produce.",
                         choices=["grouped", "individual", "noplot"], default="noplot")
     parser.add_argument("--force", help="Disable No amp/Invalid class if possible", action='store_true')
-    # parser.add_argument("--use_BFB_linked_cyclic_class", help="Include the \'BFB-linked cyclic\' class",
-    #                     action='store_true')
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files.",
                         action='store_true')
     parser.add_argument("--report_complexity", help="[Deprecated - on by default] Compute a measure of amplicon entropy"
