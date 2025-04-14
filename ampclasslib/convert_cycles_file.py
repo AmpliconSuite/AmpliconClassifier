@@ -8,7 +8,7 @@ import argparse
 #converts cycles file to be numbered by BPG segment.
 
 def extract_seg(path):
-    line_number = 0
+    curr_seg_number = 1
     seg_dict = {}
     name = ''
     segments_list = [{
@@ -22,13 +22,9 @@ def extract_seg(path):
     with open(path) as f:
         for line in f:
             line = line.strip()
-            if line_number == 0:
-                name = ''
-                # continue
-                # name = line.split(' ')[3]
-            elif line.startswith('sequence'):
+            if line.startswith('sequence'):
                 line = line.split()
-                segment_number = line_number
+                segment_number = curr_seg_number
                 line_s = line[1].split(':')
                 start_chr = line_s[0]
                 start_index = line_s[1][:-1]
@@ -50,7 +46,7 @@ def extract_seg(path):
                     'end_index': end_index,
                     'cn': cn
                 })
-            line_number += 1
+                curr_seg_number += 1
     return name, seg_dict, segments_list
 
 

@@ -71,16 +71,16 @@ def filter_graph_with_bed(graph_file_path, bed_regions, add_chr_tag):
 
                         
             elif line.startswith("source") or line.startswith("concordant") or line.startswith("discordant"):
-                type, edge_info, cn, *_ = line.split("\t")
+                etype, edge_info, cn, *_ = line.split("\t")
                 start_info, end_info = edge_info.split("->")
                 start_chr, start_pos = start_info.split(":")
                 start_pos_int = int(start_pos[:-1])
                 end_chr, end_pos = end_info.split(":")
                 end_pos_int = int(end_pos[:-1])
 
-                all_edges.append({"type": type, "start_chr": start_chr, "end_chr": end_chr, "start": start_pos, "end": end_pos, "cn": float(cn)})
+                all_edges.append({"type": etype, "start_chr": start_chr, "end_chr": end_chr, "start": start_pos, "end": end_pos, "cn": float(cn)})
                 if (start_chr, start_pos_int) in sequence_endpoints and (end_chr, end_pos_int) in sequence_endpoints:
-                    filtered_edges.append({"type": type, "start_chr": start_chr, "end_chr": end_chr, "start": start_pos, "end": end_pos, "cn": float(cn)})
+                    filtered_edges.append({"type": etype, "start_chr": start_chr, "end_chr": end_chr, "start": start_pos, "end": end_pos, "cn": float(cn)})
 
     if not filtered_sequences:
         print("Warning: Filtering " + graph_file_path + " using bed regions resulting in no filtered sequences!")
