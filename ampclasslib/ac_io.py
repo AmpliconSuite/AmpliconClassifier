@@ -409,7 +409,7 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
     f2gf.close()
 
     # Check if there are any feature types first
-    logger.info("\nFeature Type Counts:")
+    logger.info("Feature Type Counts:")
     if feat_type_counts:
         # Get max length of feature type names for nice alignment
         max_name_length = max(len(feat_type) for feat_type in feat_type_counts.keys())
