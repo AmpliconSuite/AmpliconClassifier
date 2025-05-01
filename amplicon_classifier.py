@@ -953,6 +953,7 @@ def run_classification(segSeqD, cycleList, cycleCNs):
             ampClass = remaining_classes[remaining_scores.index(max(remaining_scores))]
 
         ecStat = False
+        ecAmpliconCount = 0
 
     samp_to_ec_count[sName] += ecAmpliconCount
     # write entropy for each feature
