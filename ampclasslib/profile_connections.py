@@ -1015,6 +1015,7 @@ def identify_connections(bam_path, feat_name, feat_ivald, lcD, aa_bp_ivald, segs
                     "split_read_support",
                     "discordant_pair_support",
                     "breakpoint_distance",
+                    "is_interchromosomal",
                     "orientation_string",
                     "unfiltered_cluster_size",
                     "mean_mapq",

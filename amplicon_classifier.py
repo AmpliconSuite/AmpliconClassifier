@@ -13,24 +13,13 @@ import sys
 import ampclasslib
 from ampclasslib.ac_annotation import *
 from ampclasslib.ac_io import *
+from ampclasslib.ac_util import ConfigVars
+from ampclasslib.config_params import load_config
 from ampclasslib.radar_plotting import *
 from ampclasslib._version import __ampliconclassifier_version__
 
-tot_min_del = 5000  # minimum size of deletion before non-trivial
-minCycleSize = 5000
-compCycContCut = 50000
-anyCycContcut = 10000
-ampLenOverMinCN = 5000
-cycCut = 0.12
-compCut = 0.3
-min_upper_cn = 4.5
-sig_amp = 7
-decomposition_strictness = 0.1
 
-# bfb thresholds
-min_score_for_bfb = 0.25
-fb_dist_cut = 25000
-
+add_chr_tag = False
 
 # ------------------------------------------------------------
 # Methods to compute values used in classification
@@ -49,21 +38,6 @@ def length_weighted_mean(values, weights):
     return sum(v * w for v, w in zip(values, weights)) / sum(weights)
 
 
-def get_diff(e1, e2, segSeqD):
-    p1_abs = segSeqD[abs(e1)]
-    p2_abs = segSeqD[abs(e2)]
-    if e1 == 0 or e2 == 0:
-        return 1
-
-    p1_end = p1_abs[2] if e1 > 0 else p1_abs[1]
-    p2_start = p2_abs[1] if e2 > 0 else p2_abs[2]
-    return abs(p2_start - p1_end)
-
-
-def isCircular(cycle):
-    return cycle[0] != 0 or cycle[-1] != 0
-
-
 def isRearranged(cycle, segSeqD):
     # check if it contains regions from multiple chroms
     chromList = [segSeqD[abs(ind)][0] for ind in cycle if ind != 0]
@@ -74,19 +48,19 @@ def isRearranged(cycle, segSeqD):
     for i in range(0, len(cycle) - 1):
         if cycle[i] == 0 or cycle[i + 1] == 0:
             continue
-        if cycle[i] < 0 and cycle[i + 1] > 0 or cycle[i] > 0 and cycle[i + 1] < 0:
+        if cycle[i] < 0 < cycle[i + 1] or cycle[i] > 0 > cycle[i + 1]:
             return True
 
         dist_diff = get_diff(cycle[i], cycle[i + 1], segSeqD)
         max_del_size = max(dist_diff, max_del_size)
 
-    if max_del_size > tot_min_del:
+    if max_del_size > ConfigVars.tot_min_del:
         return True
 
     return False
 
 
-def tot_rearr_edges(graphf, add_chr_tag):
+def tot_rearr_edges(graphf):
     rearr_e = 0
     with open(graphf) as infile:
         for line in infile:
@@ -101,13 +75,13 @@ def tot_rearr_edges(graphf, add_chr_tag):
                 if ldir == rdir:
                     rearr_e += 1
 
-                elif abs(rpos - lpos) > fb_dist_cut:
+                elif abs(rpos - lpos) > ConfigVars.fb_dist_cut:
                     rearr_e += 1
 
     return rearr_e
 
 
-def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, exclude_inds, add_chr_tag):
+def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, exclude_inds):
     # construct intervaltree of valid regions
     hit_region_it = defaultdict(IntervalTree)
     for i in feature_inds:
@@ -209,7 +183,7 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
 
 
 # Compute f (foldback fraction) from the edges in the AA graph alone
-def compute_f_from_AA_graph(graphf, add_chr_tag):
+def compute_f_from_AA_graph(graphf):
     h = "SequenceEdge: StartPosition, EndPosition, PredictedCopyCount, AverageCoverage, Size, NumberReadsMapped".rsplit()
     h = [x.rstrip(',') for x in h]
     with open(graphf) as infile:
@@ -238,7 +212,7 @@ def compute_f_from_AA_graph(graphf, add_chr_tag):
 
                 rSupp = int(fields[3])
                 if ldir == rdir:
-                    if lchrom == rchrom and abs(rpos - lpos) < fb_dist_cut:
+                    if lchrom == rchrom and abs(rpos - lpos) < ConfigVars.fb_dist_cut:
                         fb_readcount += rSupp
                         fbEdges += 1
 
@@ -254,10 +228,10 @@ def compute_f_from_AA_graph(graphf, add_chr_tag):
                     ccn = float(fields[3])
                     fd = dict(zip(h, fields))
                     seglen = int(fd['Size'])
-                    if seglen > 1000:
+                    if seglen > 1500:
                         if ccn > maxCN:
                             maxCN = ccn
-                        if ccn > min_upper_cn:
+                        if ccn > ConfigVars.min_upper_cn:
                             tot_over_min_cn += seglen
 
     # just return 0 if there isn't enough support
@@ -267,13 +241,20 @@ def compute_f_from_AA_graph(graphf, add_chr_tag):
     return fbEdges, fb_readcount, fb_readcount / max(1.0, float(fb_readcount + nonFbCount)), maxCN, tot_over_min_cn
 
 
-def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs):
+def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs, graph_cns):
     for ind in non_bfb_cycle_inds:
         cycle = cycleList[ind]
         length = get_size(cycle, segSeqD)
 
         if length > 100000 and cycleCNs[ind] > 5:
-            return True
+            if isRearranged(cycle, segSeqD):
+                return True
+
+            else:
+                minSeg, maxSeg, (ca, pal), (cb, pbr) = min_max_cycle_posns(cycle, segSeqD)
+                change_al = pos_lies_on_cn_change(ca, pal, graph_cns)
+                change_br = pos_lies_on_cn_change(cb, pbr, graph_cns)
+                return change_al and change_br
 
         elif args.ref == "GRCh38_viral" and is_human_viral_hybrid(args.ref, cycle, segSeqD):
             return True
@@ -282,7 +263,7 @@ def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs):
 
 
 # proportion of cycles with foldbacks
-def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, add_chr_tag):
+def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, graph_cns):
     FB_breaks = 0.0
     distal_breaks = 0.0
     lin_breaks = 0.0
@@ -317,7 +298,7 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, add
             diff = get_diff(a, b, segSeqD)
             aSize = get_size([a, ], segSeqD)
             bSize = get_size([b, ], segSeqD)
-            if aSize < minCycleSize and bSize < minCycleSize:
+            if aSize < ConfigVars.minCycleSize and bSize < ConfigVars.minCycleSize:
                 continue
 
             # check if front and back are connected via everted edge
@@ -328,14 +309,14 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, add
             else:
                 if a * b < 0 and segSeqD[abs(a)][0] == segSeqD[abs(b)][0]:
                     hit = True
-                    if diff < 50000:
+                    if diff is not None and diff < 50000:
                         isBFBelem = True
                         FB_breaks += cycleCNs[ind]
 
                     else:
                         distal_breaks += cycleCNs[ind]
 
-                elif diff > tot_min_del:
+                elif diff is None or diff > ConfigVars.tot_min_del:
                     hit = True
                     distal_breaks += cycleCNs[ind]
 
@@ -357,7 +338,7 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, add
             non_bfb_cycle_weight += cycleCNs[ind]
             non_bfb_cycle_inds.append(ind)
 
-    hasEC = nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs)
+    hasEC = nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs, graph_cns)
     minBFBCyclesRequired = 2
 
     if set(bfb_cycle_inds).issubset(set(invalidInds)):
@@ -379,7 +360,7 @@ def check_max_cn(ec_cycle_inds, cycleList, segSeqD, graph_cns):
                 continue
 
             for i in graph_cns[chrom][l:r]:
-                if i.data > min_upper_cn:
+                if i.data > ConfigVars.min_upper_cn:
                     return True
 
     return False
@@ -461,7 +442,7 @@ def segdup_cycle(cycle, segSeqD, graph_cns, circCyc, compCyc):
 
     # Calculate weighted means
     border_mean = length_weighted_mean(left_cns + right_cns, left_lengths + right_lengths)
-    if border_mean > 7:
+    if border_mean > ConfigVars.sig_amp:
         return False
 
     # Calculate cycle weighted mean
@@ -482,7 +463,7 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, graph_cns, excludableCycleIndi
         cycle = cycleList[ind]
         csize = get_size(cycle, segSeqD)
         total_EC_size+=csize
-        if cycleCNs[ind] < args.min_flow and csize < minCycleSize and not is_human_viral_hybrid(args.ref, cycle, segSeqD):
+        if cycleCNs[ind] < ConfigVars.min_flow and csize < ConfigVars.minCycleSize and not is_human_viral_hybrid(args.ref, cycle, segSeqD):
             continue
 
         cIndsToMerge = set()
@@ -525,7 +506,7 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, graph_cns, excludableCycleIndi
             for ival in v:
                 currIndexSet.add(ival.data)
 
-        if get_amount_sigamp(currIndexSet, cycleList, segSeqD, graph_cns) > 10000:
+        if get_amount_sigamp(currIndexSet, cycleList, segSeqD, graph_cns) > ConfigVars.anyCycContcut:
             indexClusters.append(currIndexSet)
 
     # remove those where the max CN is below threshold
@@ -538,31 +519,42 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, graph_cns, excludableCycleIndi
 # Classifications
 
 # returns True if the cycle is no-amp or invalid
-def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, maxCN, graph_cns):
+def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, onlyCycle, maxCN, graph_cns):
     # check if contains viral sequence
     if is_viral(args.ref, cycle, segSeqD):
         return False
 
-    if not isSingleton:  # check if cycle contains more than one segment
-        # decomp strictness is 0.1 by default but can be changed by command-line arg
-        # args.min_flow is 1.0 by default
-        scale = min(args.min_flow, maxCN * decomposition_strictness)
+    if not isSingleton and not onlyCycle:  # check if cycle contains more than one segment
+        # check if it is a trivia cycle, and if so determine if the boundaries are on CN changes.
+        # print("sig_amp is " + str(ConfigVars.sig_amp))
+        if isCircular(cycle) and not isRearranged(cycle, segSeqD) and maxCN < ConfigVars.sig_amp:
+            _, _, (ca, pal), (cb, pbr) = min_max_cycle_posns(cycle, segSeqD)
+            change_al = pos_lies_on_cn_change(ca, pal, graph_cns)
+            change_br = pos_lies_on_cn_change(cb, pbr, graph_cns)
+            if not change_al and not change_br:
+                return True
 
-    # do something slightly stricter for singleton cycles since they seem to be less reliably real
+        # decomp strictness is 0.1 by default but can be changed by command-line arg
+        # min_flow is 1.0 by default
+        scale = min(ConfigVars.min_flow, maxCN * decomposition_strictness)
+
+    # do something slightly stricter for singleton or only cycles since they seem to be less reliably real
     # these are simple and semi-arbitrary rules based on analysis of many samples
-    elif maxCN >= sig_amp:
-        scale = min(3., maxCN / 8.)
+    elif maxCN >= ConfigVars.sig_amp:
+        scale = min(3., maxCN * (1.25 * decomposition_strictness))
     else:
+        # check if it shows any increase from background
         scale = 2.5
 
+
     # check if cycle flow is below threshold or max CN is below what is needed for a focal amp.
-    if (cn <= scale) or (maxCN < min_upper_cn):  # min_upper_cn is 4.5 by default but can be changed by command line arg
+    if (cn <= scale) or (maxCN < ConfigVars.min_upper_cn):  # min_upper_cn is 4.5 by default but can be changed by command line arg
         return True
 
     length = get_size(cycle, segSeqD)
 
     # anything that did not already fail the copy number checks is returns true if the size is too small
-    return length < minCycleSize  # 5kbp for minCycleSize by default
+    return length < ConfigVars.minCycleSize  # 5kbp for minCycleSize by default
 
 
 def classifyConnections(cycleSet1, cycleSet2, clfs):
@@ -591,14 +583,15 @@ def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCyclicCont, totCyclic
         return "Virus"
 
     cycSig = amp_profile["Trivial cycle"] + amp_profile["Complex-cyclic"]
-    if (cycSig > cycCut or totalCompCyclicCont > compCycContCut) and totCyclicCont > anyCycContcut and tot_over_min_cn > ampLenOverMinCN:
+    if ((cycSig > ConfigVars.cycCut or totalCompCyclicCont > ConfigVars.compCycContCut) and
+            totCyclicCont > ConfigVars.anyCycContcut and tot_over_min_cn > ConfigVars.ampLenOverMinCN):
         return "Cyclic"
 
-    elif has_hybrid and totCyclicCont > anyCycContcut:
+    elif has_hybrid and totCyclicCont > ConfigVars.anyCycContcut:
         return "Cyclic"
 
-    elif amp_profile["Complex-non-cyclic"] + cycSig > compCut:
-        if rearr_e > 1 and tot_over_min_cn > ampLenOverMinCN:
+    elif amp_profile["Complex-non-cyclic"] + cycSig > ConfigVars.compCut:
+        if rearr_e > 1 and tot_over_min_cn > ConfigVars.ampLenOverMinCN:
             return "Complex-non-cyclic"
 
         else:
@@ -626,7 +619,7 @@ def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCyclicCont, totCyclic
 
 def classifyBFB(fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN, tot_over_min_cn):
     # print((fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN, tot_over_min_cn))
-    if fb < min_score_for_bfb or cyc_sig < 0.295 or maxCN < 4:
+    if fb < ConfigVars.min_score_for_bfb or cyc_sig < 0.295 or maxCN < 4:
         return None
 
     # dominated by non-classical BFB cycles
@@ -648,15 +641,13 @@ def plotting():
     if args.plotstyle == "grouped":
         logger.info("plotting")
         make_classification_radar(textCategories, AMP_dvaluesList, args.o + "_amp_class", sampNames)
-        make_classification_radar(mixing_cats, EDGE_dvaluesList, args.o + "_edge_class", sampNames)
 
     elif args.plotstyle == "individual":
         logger.info("plotting")
-        for a, e, s in zip(AMP_dvaluesList, EDGE_dvaluesList, sampNames):
+        for a, s in zip(AMP_dvaluesList, sampNames):
             # print(textCategories, a)
             make_classification_radar(textCategories, [a[:len(textCategories)], ], args.o + "_" + s + "_amp_class",
                                       sampNames)
-            make_classification_radar(mixing_cats, [e, ], args.o + "_" + s + "_edge_class", sampNames)
 
 
 def filter_similar_amplicons(n_files):
@@ -669,7 +660,6 @@ def filter_similar_amplicons(n_files):
     # cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
     # cg5D = build_CG5_database(cg5Path)
     # cg5D = defaultdict(IntervalTree)
-    add_chr_tag = args.add_chr_tag
     feat_to_ivald = {}
     for full_featname, curr_fd in full_featname_to_intervals.items():
         curr_feat = full_featname.rsplit("_")[-2]
@@ -843,10 +833,9 @@ def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn, graph_cns):
     for ind, cycle in enumerate(cycleList):
         has_hybrid = has_hybrid or is_human_viral_hybrid(args.ref, cycle, segSeqD)
         chromSet |= set([segSeqD[abs(ind)][0] for ind in cycle if ind != 0])
-        hasNonCircLen1 = True if len(cycle) == 3 and cycle[0] == 0 else False
-        oneCycle = (len(cycleList) == 1)
-        isSingleton = hasNonCircLen1 or oneCycle
-        if cycleIsNoAmpInvalid(cycle, cycleCNs[ind], segSeqD, isSingleton, maxCN, graph_cns) and not args.force:
+        is_only_decomp = (len(cycleList) == 1)
+        isSingleton = True if len(cycle) == 3 and cycle[0] == 0 else False
+        if cycleIsNoAmpInvalid(cycle, cycleCNs[ind], segSeqD, isSingleton, is_only_decomp, maxCN, graph_cns) and not args.force:
             invalidInds.append(ind)
             cycleTypes.append("No amp/Invalid")
 
@@ -888,20 +877,20 @@ def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn, graph_cns):
 def run_classification(segSeqD, cycleList, cycleCNs):
     graph_cns = get_graph_cns(graphFile, args.add_chr_tag)
     # first compute some properties about the foldbacks and copy numbers
-    fb_edges, fb_readcount, fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, args.add_chr_tag)
-    rearr_e = tot_rearr_edges(graphFile, args.add_chr_tag)
+    fb_edges, fb_readcount, fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile)
+    rearr_e = tot_rearr_edges(graphFile)
     (totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights,
      rearrCycleInds) = get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn, graph_cns)
 
     # decomposition/amplicon complexity
     totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD, range(len(cycleList)),
-                                                        set(), args.add_chr_tag)
+                                                        set())
     AMP_dvaluesDict["Amp_entropy"] = totalEnt
     AMP_dvaluesDict["Amp_decomp_entropy"] = decompEnt
     AMP_dvaluesDict["Amp_nseg_entropy"] = nEnt
 
     fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC, non_bfb_cycle_inds, bfb_cycle_inds = cycles_file_bfb_props(cycleList, segSeqD,
-        cycleCNs, invalidInds, graphFile, args.add_chr_tag)
+        cycleCNs, invalidInds, graphFile, graph_cns)
 
     # "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp"
     AMP_dvaluesDict["foldback_read_prop"] = fb_prop
@@ -914,9 +903,9 @@ def run_classification(segSeqD, cycleList, cycleCNs):
     # heuristics to catch sequencing artifact samples
     if fb_edges > 15 and fb_prop > 0.8:
         bfbClass = False
-        if non_fb_rearr_e >= 4 and tot_over_min_cn > compCycContCut and maxCN > 10:
+        if non_fb_rearr_e >= 4 and tot_over_min_cn > ConfigVars.compCycContCut and maxCN > ConfigVars.sig_amp:
             ampClass = "Complex-non-cyclic"
-        elif tot_over_min_cn > compCycContCut and maxCN > 10:
+        elif tot_over_min_cn > ConfigVars.compCycContCut and maxCN > ConfigVars.sig_amp:
             ampClass = "Linear"
         else:
             ampClass = "No amp/Invalid"
@@ -963,8 +952,7 @@ def run_classification(segSeqD, cycleList, cycleCNs):
 
     for ecCycleList in ecIndexClusters:
         c_ex_I = bfb_cycle_inds if bfbStat else set()
-        totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD, ecCycleList,
-                                                            c_ex_I, args.add_chr_tag)
+        totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD, ecCycleList, c_ex_I)
         ecEntropies.append((totalEnt, decompEnt, nEnt))
 
     for ind, etup in enumerate(ecEntropies):
@@ -972,7 +960,7 @@ def run_classification(segSeqD, cycleList, cycleCNs):
 
     if bfbStat:
         bfb_totalEnt, bfb_decompEnt, bfb_nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
-                                                                        bfb_cycle_inds, set(), args.add_chr_tag)
+                                                                        bfb_cycle_inds, set())
         featEntropyD[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
 
     bpg_linelist, gseg_cn_d, other_class_c_inds, feature_dict, prop_dict = amplicon_annotation(cycleList, segSeqD,
@@ -990,7 +978,7 @@ def run_classification(segSeqD, cycleList, cycleCNs):
 
     if not bfbStat and not ecStat and not ampClass == "No amp/Invalid":
         featEntropyD[(sName, ampN, ampClass + "_1")] = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
-            other_class_c_inds, set(), args.add_chr_tag)
+            other_class_c_inds, set())
 
     feat_to_amped_genes = get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d)
     ftgd_list.append([sName, ampN, feat_to_amped_genes])
@@ -1000,26 +988,6 @@ def run_classification(segSeqD, cycleList, cycleCNs):
     dvalues = [AMP_dvaluesDict[x] for x in categories]
     AMP_dvaluesList.append(dvalues)
 
-    # edge classification
-    edgeTypeCountD = defaultdict(float)
-    if graphFile:
-        posCycleLookup = buildPosCycleLookup(cycleList, segSeqD)
-        bps, _ = parse_bpg(graphFile, args.add_chr_tag, lcD)
-        for bp in bps:
-            lCycles, rCycles = bpgEdgeToCycles(bp, posCycleLookup)
-            # indices of left and right cycles on the discordant edges, and the index-ordered list of types
-            resD = classifyConnections(lCycles, rCycles, cycleTypes)
-            for k, v in resD.items():
-                edgeTypeCountD[mixLookups[k]] += v
-
-        # norm the values
-        eTCDSum = float(sum(edgeTypeCountD.values()))
-        for k, v in edgeTypeCountD.items():
-            edgeTypeCountD[k] = v / eTCDSum
-
-    edvalues = [edgeTypeCountD[x] for x in mixing_cats]
-    EDGE_dvaluesList.append(edvalues)
-
     annotated_cycle_outname = os.path.basename(cyclesFile).rsplit("_cycles")[0] + "_annotated_cycles.txt"
     ftci_list.append([annotated_cycle_outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters,
                       invalidInds, rearrCycleInds])
@@ -1028,52 +996,19 @@ def run_classification(segSeqD, cycleList, cycleCNs):
 # ------------------------------------------------------------
 '''
 Amplicon Classes:
-#if not invalid
-
 1) No amp/Invalid
 2) Linear
 3) Complex-non-cyclic
 4) Virus (viral episome w/out human DNA attached in amplicon)
 5) BFB
-6) Cyclic (ecDNA)
-
-Graph edge classes:
-1) No amp/Invalid
-2) Non-cyclic
-3) Integration
-4) Hybrid - joins amplified cyclic and non cyclic
-5) Cyclic
-
+6) ecDNA
 '''
-
-mixLookups = {
-    frozenset(["No amp/Invalid", ]): "No amp/Invalid",
-    frozenset(["No amp/Invalid", "Linear"]): "Integration",
-    frozenset(["No amp/Invalid", "Trivial cycle"]): "Integration",
-    frozenset(["No amp/Invalid", "Complex-non-cyclic"]): "Integration",
-    frozenset(["No amp/Invalid", "Complex-cyclic"]): "Integration",
-    frozenset(["Linear"]): "Non-cyclic",
-    frozenset(["Linear", "Trivial cycle"]): "Integration",
-    frozenset(["Linear", "Complex-non-cyclic"]): "Non-cyclic",
-    frozenset(["Linear", "Complex-cyclic"]): "Integration",
-    frozenset(["Trivial cycle"]): "Cyclic",
-    frozenset(["Trivial cycle", "Complex-non-cyclic"]): "Hybrid",
-    frozenset(["Trivial cycle", "Complex-cyclic"]): "Cyclic",
-    frozenset(["Complex-non-cyclic"]): "Non-cyclic",
-    frozenset(["Complex-non-cyclic", "Complex-cyclic"]): "Hybrid",
-    frozenset(["Complex-cyclic"]): "Cyclic",
-    frozenset(["Virus", "Linear"]): "Hybrid",
-    frozenset(["Complex-non-cyclic", "Virus"]): "Hybrid",
-    frozenset(["Trivial cycle", "Virus"]): "Cyclic",
-    frozenset(["Complex-cyclic", "Virus"]): "Cyclic",
-    frozenset(["Virus"]): "Virus",
-}
 
 categories = ["No amp/Invalid", "Linear", "Trivial cycle", "Complex-non-cyclic", "Complex-cyclic", "Virus",
               "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp", "Amp_entropy", "Amp_decomp_entropy",
               "Amp_nseg_entropy"]
-mixing_cats = ["No amp/Invalid", "Non-cyclic", "Integration", "Hybrid", "Cyclic"]
 
+# ampDefs keys indicate (cyclic, complex)
 ampDefs = {(False, False): "Linear", (False, True): "Complex-non-cyclic",
            (True, False): "Trivial cycle", (True, True): "Complex-cyclic"}
 
@@ -1092,6 +1027,9 @@ if __name__ == "__main__":
                         default=1.0)
     parser.add_argument("--min_size", type=float, help="Minimum cycle size (in bp) to consider as valid amplicon "
                         "(5000).")
+    parser.add_argument("--decomposition_strictness", help="Value between 0 and 1 reflecting how strictly to filter "
+                        "low CN decompositions (default = 0.1). Higher values filter more of the low-weight "
+                        "decompositions.", type=float, default=0.1)
     parser.add_argument("--plotstyle", help="Type of visualizations to produce.",
                         choices=["grouped", "individual", "noplot"], default="noplot")
     parser.add_argument("--force", help="Disable No amp/Invalid class if possible", action='store_true')
@@ -1099,19 +1037,16 @@ if __name__ == "__main__":
                         action='store_true')
     parser.add_argument("--report_complexity", help="[Deprecated - on by default] Compute a measure of amplicon entropy"
                         " for each amplicon.", action='store_true', default=True)
-    # parser.add_argument("--report_context", help="Report genomic context (origin) of ecDNAs identified by AC.",
-    #                     action='store_true')  # on by default
     parser.add_argument("--verbose_classification", help="Generate verbose output with raw classification scores.",
                         action='store_true')
     parser.add_argument("--no_LC_filter", help="Do not filter low-complexity cycles. Not recommended to set this flag.",
                         action='store_true', default=False)
     parser.add_argument("--exclude_bed", help="List of regions in which to ignore classification.")
-    parser.add_argument("--decomposition_strictness", help="Value between 0 and 1 reflecting how strictly to filter "
-                        "low CN decompositions (default = 0.1). Higher values filter more of the low-weight "
-                        "decompositions.", type=float, default=0.1)
     parser.add_argument("--filter_similar", help="Only use if all samples are of independent origins (not replicates "
                         "and not multi-region biopsies). Permits filtering of false-positive amps arising in multiple "
                         "independent samples based on similarity calculation", action='store_true')
+    parser.add_argument("--config", help="Path to custom parameter configuration file. If not specified, "
+                                         "uses default config in ampclasslib directory.")
     parser.add_argument("-v", "--version", action='version', version=__ampliconclassifier_version__)
 
     args = parser.parse_args()
@@ -1139,6 +1074,24 @@ if __name__ == "__main__":
     # Log version and command
     logger.info("AmpliconClassifier " + __ampliconclassifier_version__)
     logger.info("Command: %s", " ".join(sys.argv))
+
+    # Load configuration
+    try:
+        config = load_config(args.config)
+        logger.info("Configuration loaded from: {}".format(args.config if args.config else 'default config'))
+    except Exception as e:
+        logger.error("Error loading configuration: {}".format(e))
+        sys.exit(1)
+
+    set_config_vars(config, args)
+
+    if args.add_chr_tag:
+        if args.ref == "GRCh38_viral":
+            logger.warning("Warning: \'--add_chr_tag\' is not supported for \'GRCh38_viral\' reference.")
+            args.add_chr_tag = False
+
+        else:
+            add_chr_tag = True
 
     # make input if an AA directory is given
     if args.AA_results:
@@ -1213,12 +1166,9 @@ if __name__ == "__main__":
     else:
         flist = readFlist(args.input)
 
-    if args.min_size:
-        minCycleSize = args.min_size
-
     # read the gene list
     refGeneFileLoc = AA_DATA_REPO + fDict["gene_filename"]
-    gene_lookup = parse_genes(refGeneFileLoc)
+    gene_lookup = parse_genes(refGeneFileLoc, add_chr_tag)
 
     # GLOBAL STORAGE VARIABLES
     ftgd_list = []  # store list of feature gene classifications
@@ -1227,7 +1177,7 @@ if __name__ == "__main__":
     fd_list = []  # store list of feature_dicts
     prop_list = [] # store list of basic amplicon properties
     AMP_dvaluesList = []
-    EDGE_dvaluesList = []
+    # EDGE_dvaluesList = []
     AMP_classifications = []
     sampNames = []
     cyclesFiles = []
@@ -1248,13 +1198,13 @@ if __name__ == "__main__":
             ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
             samp_amp_to_graph[sName + "_" + ampN] = graphFile
             logger.info(sName + " " + ampN)
-            segSeqD, cycleList, cycleCNs = parseCycle(cyclesFile, graphFile, args.add_chr_tag, lcD, patch_links)
+            segSeqD, cycleList, cycleCNs = parseCycle(cyclesFile, graphFile, add_chr_tag, lcD, patch_links)
             if args.ref == "hg19" or args.ref == "GRCh37":
                 chroms = set([x[0] for k,x in segSeqD.items() if k != 0])
                 if args.ref == "hg19" and not any([x.startswith("chr") for x in chroms]):
                     logger.warning("chrom names: " + str(chroms))
                     logger.warning("Warning! --ref hg19 was set, but chromosome names are not consistent with hg19 ('chr1', 'chr2', etc.)\n")
-                elif args.ref == "GRCh37" and any([x.startswith("chr") for x in chroms]) and not args.add_chr_tag:
+                elif args.ref == "GRCh37" and any([x.startswith("chr") for x in chroms]) and not add_chr_tag:
                     logger.warning("chrom names: " + str(chroms))
                     logger.warning("Warning! --ref GRCh37 was set, but chromosome names are not consistent with GRCh37 ('1', '2', etc.)\n")
 
@@ -1277,7 +1227,7 @@ if __name__ == "__main__":
     logger.info("Writing outputs...")
     # OUTPUT FILE WRITING
     write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
-                  AMP_classifications, AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count, fd_list,
-                  samp_amp_to_graph, prop_list, summary_map)
+                  AMP_classifications, AMP_dvaluesList, samp_to_ec_count, fd_list, samp_amp_to_graph, prop_list,
+                  summary_map)
 
     logger.info("\nComplete")

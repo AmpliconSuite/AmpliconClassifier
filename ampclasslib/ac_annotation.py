@@ -278,7 +278,8 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                         # chop out low cn regions
                         l, r = sub_ival_seg.begin, sub_ival_seg.end
                         seg_t = IntervalTree([Interval(l, r + 1)])
-                        olapping_low_cns = [x for x in graph_cns[chrom][l:r + 1] if x.data < 4.5 and ampClass != "Virus"]
+                        olapping_low_cns = [x for x in graph_cns[chrom][l:r + 1]
+                                            if x.data < ConfigVars.min_upper_cn and ampClass != "Virus"]
                         for x in olapping_low_cns:
                             seg_t.chop(x.begin, x.end + 1)
 

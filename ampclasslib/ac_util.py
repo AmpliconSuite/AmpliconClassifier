@@ -1,11 +1,26 @@
 from collections import defaultdict
-import logging
 import os
 import warnings
 
 from intervaltree import IntervalTree, Interval
 
+# Module-level globals
 lookup = str.maketrans("ACGTRYKM", "TGCAYRMK")
+
+class ConfigVars:
+    tot_min_del = 0
+    minCycleSize = 0
+    compCycContCut = 0
+    anyCycContcut = 0
+    ampLenOverMinCN = 0
+    cycCut = 0
+    compCut = 0
+    min_upper_cn = 0
+    sig_amp = 0
+    decomposition_strictness = 0
+    min_score_for_bfb = 0
+    fb_dist_cut = 0
+    min_flow = 0
 
 
 class breakpoint(object):
@@ -150,6 +165,10 @@ def is_viral(ref, cycle, segSeqD):
     return ref == "GRCh38_viral" and any([not x.startswith("chr") for x in chromList])
 
 
+def isCircular(cycle):
+    return cycle[0] != 0 or cycle[-1] != 0
+
+
 def get_amp_outside_bounds(graphf, add_chr_tag):
     # get the interval of the first amp (x)
     # get the interval of the last amp (y)
@@ -166,7 +185,7 @@ def get_amp_outside_bounds(graphf, add_chr_tag):
                 if add_chr_tag and not c.startswith('chr'):
                     c = "chr" + c
 
-                if cn > 7:
+                if cn > ConfigVars.sig_amp:
                     if not xc:
                         xc, xs = c, s
 
@@ -190,19 +209,48 @@ def get_amp_outside_bounds(graphf, add_chr_tag):
     return (xc, xs), (yc, ye), ee_spans
 
 
-# determine if a cyclic path front and back are connected by everted edge
-# return true if connected, false if not connected or not a cyclic path
-def amp_encompassed(cycle, segSeqD, graphf, add_chr_tag):
-    # min seg and max seg in cycle -
-    absSegs = set(abs(x) for x in cycle)
-    minSeg, maxSeg = min(absSegs), max(absSegs)
-    if minSeg == 0:
+def get_diff(e1, e2, segSeqD):
+    p1_abs = segSeqD[abs(e1)]
+    p2_abs = segSeqD[abs(e2)]
+    if e1 == 0 or e2 == 0:
+        return 1
+
+    if p1_abs[0] != p2_abs[0]:
+        return None
+
+    p1_end = p1_abs[2] if e1 > 0 else p1_abs[1]
+    p2_start = p2_abs[1] if e2 > 0 else p2_abs[2]
+    return abs(p2_start - p1_end)
+
+
+def pos_lies_on_cn_change(chrom, pos, graph_cns, min_delta=2, tol=150):
+    hits = graph_cns[chrom][pos-tol:pos+tol+1]
+    if not hits:
+        warnings.warn("Attempted to check boundary on CN change, but region not found in graph.")
         return False
 
-    # are they connected in same orientation?
+    cns = [hit.data for hit in hits if hit.end - hit.begin > tol]
+    return max(cns) - min(cns) >= min_delta
+
+
+def min_max_cycle_posns(cycle, segSeqD):
+    # min seg and max seg in cycle -
+    absSegs = set(abs(x) for x in cycle if x != 0)
+    minSeg, maxSeg = min(absSegs), max(absSegs)
+
     ca, pal = segSeqD[minSeg][0], segSeqD[minSeg][1]
     cb, pbr = segSeqD[maxSeg][0], segSeqD[maxSeg][2]
 
+    return minSeg, maxSeg, (ca, pal), (cb, pbr)
+
+
+# determine if a cyclic path front and back are connected by everted edge
+# return true if connected, false if not connected or not a cyclic path
+def amp_encompassed(cycle, segSeqD, graphf, add_chr_tag):
+    if not isCircular(cycle):
+        return False
+
+    minSeg, maxSeg, (ca, pal), (cb, pbr) = min_max_cycle_posns(cycle, segSeqD)
     # is there an everted edge joining them?
     with open(graphf) as infile:
         for line in infile:
@@ -228,6 +276,33 @@ def bpgEdgeToCycles(bp, posCycleLookup):
     lCycles = set([x.data for x in posCycleLookup[bp.lchrom][bp.lpos]])
     rCycles = set([x.data for x in posCycleLookup[bp.rchrom][bp.rpos]])
     return lCycles, rCycles
+
+
+def rotate_cycle_to_largest_jump(cycle, segSeqD):
+    if not isCircular(cycle) or len(cycle) == 1:
+        return cycle
+
+    diffs = [get_diff(cycle[-1], cycle[0], segSeqD)]
+    for ind, seg in enumerate(cycle[:-1]):
+        a_b_diff = get_diff(cycle[ind], cycle[ind + 1], segSeqD)
+        diffs.append(a_b_diff)
+
+    # Find best rotation index based on diffs
+    best_index = 0
+    best_score = float('-inf')
+
+    for i, diff in enumerate(diffs):
+        # Prioritize None over numbers, and then pick the largest number
+        if diff is None:
+            best_index = i
+            break
+        elif diff > best_score:
+            best_score = diff
+            best_index = i
+
+    # Rotate so that cycle[best_index] becomes the first element
+    rotated_cycle = cycle[best_index:] + cycle[:best_index]
+    return rotated_cycle
 
 
 # address formatting issues and known link misses
@@ -330,7 +405,8 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
                     for seg_ind in pop_inds[::-1]:
                         num_ss.pop(seg_ind)
 
-                currCycle = repair_cycle(num_ss, segSeqD, patch_links, xt, yt, ee_spans)
+                initCycle = repair_cycle(num_ss, segSeqD, patch_links, xt, yt, ee_spans)
+                currCycle = rotate_cycle_to_largest_jump(initCycle, segSeqD)
                 uid = ss + "," + cd["Copy_count"]
                 if uid in seenCycs:
                     print(cyclef + " duplicate cycle encountered")
@@ -447,3 +523,18 @@ def read_patch_regions(ref):
 
     return patch_links
 
+
+def set_config_vars(config, args):
+    for key in config:
+        if hasattr(ConfigVars, key):
+            setattr(ConfigVars, key, config[key])
+
+    # Optional overrides from command line args
+    if hasattr(args, 'decomposition_strictness') and args.decomposition_strictness is not None:
+        ConfigVars.decomposition_strictness = args.decomposition_strictness
+
+    if hasattr(args, 'min_size') and args.min_size is not None:
+        ConfigVars.minCycleSize = args.min_size
+
+    if hasattr(args, 'min_flow') and args.min_flow is not None:
+        ConfigVars.min_flow = args.min_flow

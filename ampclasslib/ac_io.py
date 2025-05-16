@@ -31,7 +31,7 @@ def setup_logger(output_prefix):
 
 
 # getting genes from the genes .gff file
-def parse_genes(gene_file):
+def parse_genes(gene_file, add_chr_tag):
     t = defaultdict(IntervalTree)
     seenNames = set()
     with open(gene_file) as infile:
@@ -44,6 +44,9 @@ def parse_genes(gene_file):
                 continue
 
             chrom, s, e, strand = fields[0], int(fields[3]), int(fields[4]), fields[6]
+            if add_chr_tag and not fields[0].startswith('chr'):
+                chrom = 'chr' + chrom
+
             # parse the line and get the name
             propFields = {x.split("=")[0]: x.split("=")[1] for x in fields[-1].rstrip(";").split(";")}
             try:
@@ -229,7 +232,7 @@ def write_gene_results(outname, ftg_list):
 def write_basic_properties(feat_basic_propf, sname, ampN, prop_dict):
     for feat_name, props in prop_dict.items():
         borderline_flag = ""
-        if (feat_name.startswith("ecDNA") or feat_name.startswith("BFB")) and props[-1] < 8:
+        if (feat_name.startswith("ecDNA") or feat_name.startswith("BFB")) and props[-1] < ConfigVars.sig_amp:
             borderline_flag+="LowCN"
         elif props[-1] < 5:
             borderline_flag+="LowCN"
@@ -347,7 +350,7 @@ def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, 
 
 
 def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
-                  AMP_classifications, AMP_dvaluesList, mixing_cats, EDGE_dvaluesList, samp_to_ec_count, fd_list,
+                  AMP_classifications, AMP_dvaluesList, samp_to_ec_count, fd_list,
                   samp_amp_to_graph, prop_list, summary_map, logname="AmpliconClassifier"):
 
     logger = logging.getLogger(logname)
@@ -443,10 +446,10 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
             context_outfile.write("\t".join(x) + "\n")
 
     # Edge profiles
-    if args.verbose_classification:
-        with open(args.o + "_edge_classification_profiles.tsv", 'w') as outfile:
-            outfile.write("\t".join(["sample_name", "amplicon_number"] + mixing_cats) + "\n")
-            for ind, sname in enumerate(sampNames):
-                ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
-                outfile.write(
-                    "\t".join([sname.rsplit("_amplicon")[0], ampN] + [str(x) for x in EDGE_dvaluesList[ind]]) + "\n")
+    # if args.verbose_classification:
+    #     with open(args.o + "_edge_classification_profiles.tsv", 'w') as outfile:
+    #         outfile.write("\t".join(["sample_name", "amplicon_number"] + mixing_cats) + "\n")
+    #         for ind, sname in enumerate(sampNames):
+    #             ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
+    #             outfile.write(
+    #                 "\t".join([sname.rsplit("_amplicon")[0], ampN] + [str(x) for x in EDGE_dvaluesList[ind]]) + "\n")
