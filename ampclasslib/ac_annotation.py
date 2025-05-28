@@ -253,7 +253,6 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
 
                             break
 
-
     if ampClass != "No amp/Invalid":
         other_interval_dict = defaultdict(list)
         for o_ind in range(len(cycleList)):
@@ -279,7 +278,7 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                         l, r = sub_ival_seg.begin, sub_ival_seg.end
                         seg_t = IntervalTree([Interval(l, r + 1)])
                         olapping_low_cns = [x for x in graph_cns[chrom][l:r + 1]
-                                            if x.data < ConfigVars.min_upper_cn and ampClass != "Virus"]
+                                            if x.data < ConfigVars.min_amp_cn and ampClass != "Virus"]
                         for x in olapping_low_cns:
                             seg_t.chop(x.begin, x.end + 1)
 

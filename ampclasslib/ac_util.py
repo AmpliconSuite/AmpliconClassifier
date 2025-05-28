@@ -7,20 +7,28 @@ from intervaltree import IntervalTree, Interval
 # Module-level globals
 lookup = str.maketrans("ACGTRYKM", "TGCAYRMK")
 
+
 class ConfigVars:
-    tot_min_del = 0
-    minCycleSize = 0
-    compCycContCut = 0
-    anyCycContcut = 0
-    ampLenOverMinCN = 0
-    cycCut = 0
-    compCut = 0
-    min_upper_cn = 0
-    sig_amp = 0
-    decomposition_strictness = 0
-    min_score_for_bfb = 0
-    fb_dist_cut = 0
-    min_flow = 0
+        tot_min_del = 5000
+        minCycleSize = 5000
+        compCycContCut = 50000
+        anyCycContcut = 10000
+        ampLenOverMinCN = 5000
+        cycCut = 0.12
+        compCut = 0.3
+        min_amp_cn = 4.5
+        sig_amp = 7
+        high_amp = 12
+        max_segdup_size = 1000000
+        segdup_max_extra_fraction = 0.25
+        decomposition_strictness = 0.1
+        # bfb-related items
+        min_fb_read_prop = 0.25
+        fb_break_weight_prop = 0.3
+        fb_dist_cut = 25000
+        min_flow = 1.0
+        max_nonbfb_break_weight = 0.5
+        min_bfb_cycle_weight_ratio = 0.6
 
 
 class breakpoint(object):

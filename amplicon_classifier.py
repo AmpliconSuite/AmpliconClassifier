@@ -231,7 +231,7 @@ def compute_f_from_AA_graph(graphf):
                     if seglen > 1500:
                         if ccn > maxCN:
                             maxCN = ccn
-                        if ccn > ConfigVars.min_upper_cn:
+                        if ccn > ConfigVars.min_amp_cn:
                             tot_over_min_cn += seglen
 
     # just return 0 if there isn't enough support
@@ -290,7 +290,7 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, gra
 
         cycle = removed_zero_one_len_cycle
 
-        hit = False
+        hit_inversion = False
         isBFBelem = False
         illegalBFB = False
         for a, b in zip(cycle[:-1], cycle[1:]):
@@ -308,7 +308,7 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, gra
 
             else:
                 if a * b < 0 and segSeqD[abs(a)][0] == segSeqD[abs(b)][0]:
-                    hit = True
+                    hit_inversion = True
                     if diff is not None and diff < 50000:
                         isBFBelem = True
                         FB_breaks += cycleCNs[ind]
@@ -317,7 +317,7 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, gra
                         distal_breaks += cycleCNs[ind]
 
                 elif diff is None or diff > ConfigVars.tot_min_del:
-                    hit = True
+                    hit_inversion = True
                     distal_breaks += cycleCNs[ind]
 
                 if segSeqD[abs(a)][0] != segSeqD[abs(b)][0] and not (a == 0 or b == 0):
@@ -326,7 +326,7 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, gra
         if illegalBFB:
             isBFBelem = False
 
-        if cycle[0] == 0 and not hit and get_size(cycle,segSeqD) > 10000:
+        if cycle[0] == 0 and not hit_inversion and get_size(cycle, segSeqD) > 10000:
             lin_breaks += cycleCNs[ind]
 
         if isBFBelem:
@@ -360,7 +360,7 @@ def check_max_cn(ec_cycle_inds, cycleList, segSeqD, graph_cns):
                 continue
 
             for i in graph_cns[chrom][l:r]:
-                if i.data > ConfigVars.min_upper_cn:
+                if i.data > ConfigVars.min_amp_cn:
                     return True
 
     return False
@@ -389,7 +389,7 @@ def get_amount_sigamp(ec_cycle_inds, cycleList, segSeqD, graph_cns):
 
 def segdup_cycle(cycle, segSeqD, graph_cns, circCyc, compCyc):
     # must be circular, simple cycle, and smallish, and not heavily rearranged
-    if not circCyc or get_size(cycle, segSeqD) > 1000000 or compCyc:
+    if not circCyc or get_size(cycle, segSeqD) > ConfigVars.max_segdup_size or compCyc:
         return False
 
     # not excessively high CN and all CNs within 1
@@ -450,7 +450,7 @@ def segdup_cycle(cycle, segSeqD, graph_cns, circCyc, compCyc):
 
     # Check if ratio is approximately 2 (within 0.2) and not super high amplification
     ratio = cycle_mean / border_mean
-    return ratio - 2 <= 0.25 and cycle_mean < 12
+    return ratio - 2 <= ConfigVars.segdup_max_extra_fraction and cycle_mean < ConfigVars.high_amp
 
 
 def clusterECCycles(cycleList, cycleCNs, segSeqD, graph_cns, excludableCycleIndices=None):
@@ -548,7 +548,7 @@ def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, onlyCycle, maxCN, graph
 
 
     # check if cycle flow is below threshold or max CN is below what is needed for a focal amp.
-    if (cn <= scale) or (maxCN < ConfigVars.min_upper_cn):  # min_upper_cn is 4.5 by default but can be changed by command line arg
+    if (cn <= scale) or (maxCN < ConfigVars.min_amp_cn):  # min_amp_cn is 4.5 by default but can be changed in config file
         return True
 
     length = get_size(cycle, segSeqD)
@@ -617,17 +617,18 @@ def classifyAmpliconProfile(amp_profile, rearr_e, totalCompCyclicCont, totCyclic
         return maxCat
 
 
-def classifyBFB(fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN, tot_over_min_cn):
+def classifyBFB(fb_read_prop, fb_bwp, nonbfb_sig, bfb_cyc_ratio, maxCN, tot_over_min_cn):
     # print((fb, cyc_sig, nonbfb_sig, bfb_cyc_ratio, maxCN, tot_over_min_cn))
-    if fb < ConfigVars.min_score_for_bfb or cyc_sig < 0.295 or maxCN < 4:
+    if (fb_read_prop < ConfigVars.min_fb_read_prop or fb_bwp < ConfigVars.fb_break_weight_prop or
+            maxCN < ConfigVars.min_amp_cn):
         return None
 
     # dominated by non-classical BFB cycles
-    elif nonbfb_sig > 0.5 and bfb_cyc_ratio < 0.6:
+    elif nonbfb_sig > ConfigVars.max_nonbfb_break_weight and bfb_cyc_ratio < ConfigVars.min_bfb_cycle_weight_ratio:
         return None
 
     # too small
-    elif tot_over_min_cn < 20000:
+    elif tot_over_min_cn < ConfigVars.fb_dist_cut:
         return None
 
     return "BFB"
@@ -877,7 +878,7 @@ def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn, graph_cns):
 def run_classification(segSeqD, cycleList, cycleCNs):
     graph_cns = get_graph_cns(graphFile, args.add_chr_tag)
     # first compute some properties about the foldbacks and copy numbers
-    fb_edges, fb_readcount, fb_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile)
+    fb_edges, fb_readcount, fb_read_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile)
     rearr_e = tot_rearr_edges(graphFile)
     (totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights,
      rearrCycleInds) = get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn, graph_cns)
@@ -893,15 +894,15 @@ def run_classification(segSeqD, cycleList, cycleCNs):
         cycleCNs, invalidInds, graphFile, graph_cns)
 
     # "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp"
-    AMP_dvaluesDict["foldback_read_prop"] = fb_prop
+    AMP_dvaluesDict["foldback_read_prop"] = fb_read_prop
     AMP_dvaluesDict["BFB_bwp"] = fb_bwp
     AMP_dvaluesDict["Distal_bwp"] = nfb_bwp
     AMP_dvaluesDict["BFB_cwp"] = bfb_cwp
-    bfbClass = classifyBFB(fb_prop, fb_bwp, nfb_bwp, bfb_cwp, maxCN, tot_over_min_cn)
+    bfbClass = classifyBFB(fb_read_prop, fb_bwp, nfb_bwp, bfb_cwp, maxCN, tot_over_min_cn)
 
     non_fb_rearr_e = rearr_e - fb_edges
     # heuristics to catch sequencing artifact samples
-    if fb_edges > 15 and fb_prop > 0.8:
+    if fb_edges > 15 and fb_read_prop > 0.8:
         bfbClass = False
         if non_fb_rearr_e >= 4 and tot_over_min_cn > ConfigVars.compCycContCut and maxCN > ConfigVars.sig_amp:
             ampClass = "Complex-non-cyclic"
