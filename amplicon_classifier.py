@@ -1052,8 +1052,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    print("AmpliconClassifier " + __ampliconclassifier_version__)
-    print(" ".join(sys.argv))
+    # print("AmpliconClassifier " + __ampliconclassifier_version__)
+    # print(" ".join(sys.argv))
 
     # Normalize and create output directory first
     if args.o.endswith("/"):
