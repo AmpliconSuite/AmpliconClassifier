@@ -9,7 +9,7 @@ classification changes, and structural rearrangements (splits/merges) of focal a
 import argparse
 import pandas as pd
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 import re
 from typing import List, Tuple, Dict, Set, Optional
 
@@ -121,7 +121,7 @@ def parse_gene_list(gene_str: str) -> List[str]:
 
 
 def get_representative_genes(oncogenes_lists: List[List[str]], all_genes_lists: List[List[str]], max_genes: int = 3) -> \
-List[str]:
+        List[str]:
     """
     Get representative genes that are common across overlapping features.
     Prioritize oncogenes, fall back to all genes if no oncogenes.
@@ -172,6 +172,89 @@ List[str]:
         return sorted(list(all_all_genes))[:max_genes]
     else:
         return ["No genes"]
+
+
+def calculate_jaccard_index(coords1: List[Tuple[str, int, int]], coords2: List[Tuple[str, int, int]]) -> float:
+    """
+    Calculate Jaccard index between two coordinate sets at base-pair level.
+    Returns intersection_bp / union_bp.
+    """
+    if not coords1 or not coords2:
+        return 0.0
+
+    # Convert coordinates to intervals per chromosome
+    chrom_intervals1 = defaultdict(list)
+    chrom_intervals2 = defaultdict(list)
+
+    for chrom, start, end in coords1:
+        chrom_intervals1[chrom].append((start, end))
+
+    for chrom, start, end in coords2:
+        chrom_intervals2[chrom].append((start, end))
+
+    total_intersection = 0
+    total_union = 0
+
+    # Process each chromosome
+    all_chroms = set(chrom_intervals1.keys()) | set(chrom_intervals2.keys())
+
+    for chrom in all_chroms:
+        intervals1 = chrom_intervals1.get(chrom, [])
+        intervals2 = chrom_intervals2.get(chrom, [])
+
+        # Merge overlapping intervals within each set
+        merged1 = merge_intervals(intervals1)
+        merged2 = merge_intervals(intervals2)
+
+        # Calculate intersection and union for this chromosome
+        intersection_bp = calculate_interval_intersection(merged1, merged2)
+        union_bp = calculate_interval_union(merged1, merged2)
+
+        total_intersection += intersection_bp
+        total_union += union_bp
+
+    return total_intersection / total_union if total_union > 0 else 0.0
+
+
+def merge_intervals(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
+    """Merge overlapping intervals."""
+    if not intervals:
+        return []
+
+    sorted_intervals = sorted(intervals)
+    merged = [sorted_intervals[0]]
+
+    for start, end in sorted_intervals[1:]:
+        last_start, last_end = merged[-1]
+        if start <= last_end:
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+
+    return merged
+
+
+def calculate_interval_intersection(intervals1: List[Tuple[int, int]], intervals2: List[Tuple[int, int]]) -> int:
+    """Calculate total base pairs of intersection between two interval sets."""
+    total_intersection = 0
+
+    for start1, end1 in intervals1:
+        for start2, end2 in intervals2:
+            overlap_start = max(start1, start2)
+            overlap_end = min(end1, end2)
+            if overlap_end > overlap_start:
+                total_intersection += overlap_end - overlap_start
+
+    return total_intersection
+
+
+def calculate_interval_union(intervals1: List[Tuple[int, int]], intervals2: List[Tuple[int, int]]) -> int:
+    """Calculate total base pairs of union between two interval sets."""
+    # Combine all intervals and merge
+    all_intervals = intervals1 + intervals2
+    merged = merge_intervals(all_intervals)
+
+    return sum(end - start for start, end in merged)
 
 
 def format_coordinates(coords: List[Tuple[str, int, int]]) -> str:
@@ -324,10 +407,6 @@ def analyze_component(sample: str, run1_features: List[str], run2_features: List
     else:
         event_type = "COMPLEX_MERGE_SPLIT"
 
-    # Skip stable events for now
-    if event_type == "STABLE":
-        return None
-
     # Collect gene information
     run1_oncogenes = []
     run1_all_genes = []
@@ -361,6 +440,11 @@ def analyze_component(sample: str, run1_features: List[str], run2_features: List
         run2_coords.extend(parse_coordinates(f.get('Location', '')))
 
     location = format_coordinates(run1_coords + run2_coords)
+
+    # Calculate Jaccard overlap for applicable event types
+    jaccard_overlap = None
+    if event_type in ["STABLE", "CLASS_CHANGE", "SPLIT", "MERGE", "COMPLEX_MERGE_SPLIT"]:
+        jaccard_overlap = calculate_jaccard_index(run1_coords, run2_coords)
 
     # Get copy numbers and classifications
     run1_cn = []
@@ -398,7 +482,8 @@ def analyze_component(sample: str, run1_features: List[str], run2_features: List
         'Run1_Copy_Numbers': run1_cn,
         'Run2_Copy_Numbers': run2_cn,
         'Location': location,
-        'Representative_Genes': representative_genes
+        'Representative_Genes': representative_genes,
+        'Jaccard_Overlap': jaccard_overlap
     }
 
 
@@ -457,8 +542,10 @@ def write_hierarchical_report(events: List[Dict], output_file: str):
                     old_cn = event['Run1_Copy_Numbers'][0]
                     new_cn = event['Run2_Copy_Numbers'][0]
                     genes = ", ".join(event['Representative_Genes'])
+                    jaccard_str = f", Jaccard={event['Jaccard_Overlap']:.3f}" if event[
+                                                                                     'Jaccard_Overlap'] is not None else ""
                     f.write(
-                        f"    - {event['Location']}: {old_class}→{new_class} (CN: {old_cn:.1f}→{new_cn:.1f}, {genes})\n")
+                        f"    - {event['Location']}: {old_class}→{new_class} (CN: {old_cn:.1f}→{new_cn:.1f}, {genes}{jaccard_str})\n")
                 f.write("\n")
 
             # Splits
@@ -468,7 +555,9 @@ def write_hierarchical_report(events: List[Dict], output_file: str):
                     old_class = event['Run1_Classifications'][0]
                     old_cn = event['Run1_Copy_Numbers'][0]
                     genes = ", ".join(event['Representative_Genes'])
-                    f.write(f"    - {old_class}: {event['Location']} (CN={old_cn:.1f}, {genes}) →\n")
+                    jaccard_str = f", Jaccard={event['Jaccard_Overlap']:.3f}" if event[
+                                                                                     'Jaccard_Overlap'] is not None else ""
+                    f.write(f"    - {old_class}: {event['Location']} (CN={old_cn:.1f}, {genes}{jaccard_str}) →\n")
                     for i, (new_class, new_cn) in enumerate(
                             zip(event['Run2_Classifications'], event['Run2_Copy_Numbers'])):
                         f.write(f"        {new_class} (CN={new_cn:.1f})\n")
@@ -481,9 +570,26 @@ def write_hierarchical_report(events: List[Dict], output_file: str):
                     new_class = event['Run2_Classifications'][0]
                     new_cn = event['Run2_Copy_Numbers'][0]
                     genes = ", ".join(event['Representative_Genes'])
-                    f.write(f"    - Multiple features → {new_class}: {event['Location']} (CN={new_cn:.1f}, {genes})\n")
+                    jaccard_str = f", Jaccard={event['Jaccard_Overlap']:.3f}" if event[
+                                                                                     'Jaccard_Overlap'] is not None else ""
+                    f.write(
+                        f"    - Multiple features → {new_class}: {event['Location']} (CN={new_cn:.1f}, {genes}{jaccard_str})\n")
                     for old_class, old_cn in zip(event['Run1_Classifications'], event['Run1_Copy_Numbers']):
                         f.write(f"        ← {old_class} (CN={old_cn:.1f})\n")
+                f.write("\n")
+
+            # Stable events
+            if 'STABLE' in events_for_sample:
+                f.write(f"  Stable ({len(events_for_sample['STABLE'])}):\n")
+                for event in events_for_sample['STABLE']:
+                    classes = event['Run1_Classifications'][0]  # Same for both runs
+                    old_cn = event['Run1_Copy_Numbers'][0]
+                    new_cn = event['Run2_Copy_Numbers'][0]
+                    genes = ", ".join(event['Representative_Genes'])
+                    jaccard_str = f", Jaccard={event['Jaccard_Overlap']:.3f}" if event[
+                                                                                     'Jaccard_Overlap'] is not None else ""
+                    f.write(
+                        f"    - {classes}: {event['Location']} (CN: {old_cn:.1f}→{new_cn:.1f}, {genes}{jaccard_str})\n")
                 f.write("\n")
 
             # Complex merge-splits
@@ -491,7 +597,9 @@ def write_hierarchical_report(events: List[Dict], output_file: str):
                 f.write(f"  Complex Merge-Splits ({len(events_for_sample['COMPLEX_MERGE_SPLIT'])}):\n")
                 for event in events_for_sample['COMPLEX_MERGE_SPLIT']:
                     genes = ", ".join(event['Representative_Genes'])
-                    f.write(f"    - Complex rearrangement: {event['Location']} ({genes})\n")
+                    jaccard_str = f", Jaccard={event['Jaccard_Overlap']:.3f}" if event[
+                                                                                     'Jaccard_Overlap'] is not None else ""
+                    f.write(f"    - Complex rearrangement: {event['Location']} ({genes}{jaccard_str})\n")
                     f.write(f"        Run1: {len(event['Run1_Classifications'])} features\n")
                     f.write(f"        Run2: {len(event['Run2_Classifications'])} features\n")
                 f.write("\n")
@@ -517,6 +625,9 @@ def write_detailed_table(events: List[Dict], output_file: str):
             'Run2_Copy_Numbers'] else "None"
         genes_str = "; ".join(event['Representative_Genes'])
 
+        # Format Jaccard overlap
+        jaccard_str = f"{event['Jaccard_Overlap']:.3f}" if event['Jaccard_Overlap'] is not None else "N/A"
+
         rows.append({
             'Sample': event['Sample'],
             'Event_Type': event['Event_Type'],
@@ -524,14 +635,61 @@ def write_detailed_table(events: List[Dict], output_file: str):
             'Run2_Features': run2_feat_str,
             'Run1_Classifications': run1_class_str,
             'Run2_Classifications': run2_class_str,
+            'Jaccard_Overlap': jaccard_str,
             'Run1_Copy_Numbers': run1_cn_str,
             'Run2_Copy_Numbers': run2_cn_str,
+            'Representative_Genes': genes_str,
             'Location': event['Location'],
-            'Representative_Genes': genes_str
         })
 
     df = pd.DataFrame(rows)
     df.to_csv(output_file, index=False)
+
+
+def generate_classification_summary(events: List[Dict]) -> Dict[str, Dict[str, int]]:
+    """
+    Generate summary of how each classification type changed between runs.
+    Returns nested dict: {classification: {event_type: count}}
+    """
+    summary = defaultdict(lambda: defaultdict(int))
+
+    for event in events:
+        event_type = event['Event_Type']
+
+        # For each run1 classification, count what happened to it
+        for run1_class in event['Run1_Classifications']:
+            if run1_class and run1_class != 'None':
+                summary[run1_class][event_type] += 1
+
+    return dict(summary)
+
+
+def write_classification_summary(events: List[Dict], output_file: str):
+    """
+    Write classification change summary to file.
+    """
+    summary = generate_classification_summary(events)
+
+    with open(output_file, 'w') as f:
+        f.write("Classification Change Summary\n")
+        f.write("=" * 40 + "\n\n")
+
+        if not summary:
+            f.write("No classification changes found.\n")
+            return
+
+        for classification in sorted(summary.keys()):
+            f.write(f"Run1 {classification}:\n")
+
+            events_for_class = summary[classification]
+            total = sum(events_for_class.values())
+
+            for event_type in ['STABLE', 'CLASS_CHANGE', 'SPLIT', 'MERGE', 'LOSS', 'COMPLEX_MERGE_SPLIT']:
+                count = events_for_class.get(event_type, 0)
+                if count > 0:
+                    f.write(f"  {count} {event_type.lower()}\n")
+
+            f.write(f"  Total: {total}\n\n")
 
 
 def main():
@@ -579,9 +737,29 @@ def main():
         print(f"Writing detailed table to {table_file}...")
         write_detailed_table(events, table_file)
 
+        classification_summary_file = f"{args.output_prefix}_classification_summary.txt"
+        print(f"Writing classification summary to {classification_summary_file}...")
+        write_classification_summary(events, classification_summary_file)
+
         # Print summary
-        samples_with_changes = len(set(event['Sample'] for event in events))
-        print(f"\nSummary: {len(events)} events across {samples_with_changes} samples")
+        event_counts = Counter(event['Event_Type'] for event in events)
+
+        change_types = ['GAIN', 'LOSS', 'CLASS_CHANGE', 'SPLIT', 'MERGE', 'COMPLEX_MERGE_SPLIT']
+        change_events = [e for e in events if e['Event_Type'] in change_types]
+        stable_count = event_counts.get('STABLE', 0)
+
+        samples_with_changes = len(set(event['Sample'] for event in change_events))
+        samples_with_stable = len(set(event['Sample'] for event in events if event['Event_Type'] == 'STABLE'))
+
+        print(f"\nSummary:")
+        if change_events:
+            print(f"  Changes: {len(change_events)} events across {samples_with_changes} samples")
+            for event_type in change_types:
+                count = event_counts.get(event_type, 0)
+                if count > 0:
+                    print(f"    {count} {event_type.lower()}")
+        if stable_count > 0:
+            print(f"  Stable: {stable_count} features across {samples_with_stable} samples")
 
         # Check for unmatched samples
         samples1 = set(df1['Sample name'].unique())
