@@ -7,8 +7,10 @@ import copy
 from math import log
 import operator
 import re
-from subprocess import call
+import subprocess
 import sys
+
+import intervaltree
 
 import ampclasslib
 from ampclasslib.ac_annotation import *
@@ -1101,10 +1103,25 @@ if __name__ == "__main__":
         cmd = "{}/make_input.sh {} {}".format(src_dir, args.AA_results, outdir_loc + "/AC")
         logger.info("Generating .input file...")
         logger.info(cmd)
-        rc = call(cmd, shell=True)
-        if rc != 0:
+
+        # Capture stdout and stderr
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
+        # Log stdout as info if there's any output
+        if result.stdout.strip():
+            for line in result.stdout.strip().split('\n'):
+                logger.info(line)
+
+        # Log stderr as error if there's any error output
+        if result.stderr.strip():
+            for line in result.stderr.strip().split('\n'):
+                logger.error(line)
+
+        # Check return code
+        if result.returncode != 0:
             logger.error("Failed to make input file! Please ensure each graph and cycles file are present.")
             sys.exit(1)
+
         args.input = input_file
 
     if args.input:
