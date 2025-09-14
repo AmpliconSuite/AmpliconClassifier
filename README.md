@@ -38,20 +38,20 @@ source ~/.bashrc
 ```
 
 
-
 ### 2. Usage
 
 `amplicon_classifier.py` takes a collection of (or single) AA graph files and corresponding AA cycles file as inputs.
-
-**To classify a single amplicon**:
-
->`python amplicon_classifier.py --ref GRCh38 --cycles sample_amplicon1_cycles.txt --graph sample_amplicon1_graph.txt > classifier_stdout.log`
 
 **Most common - classifying multiple amplicons:**
 You can provide the directory containing multiple AA amplicons or multiple uniquely named samples
 >`python amplicon_classifier.py --ref GRCh38 --AA_results /path/to/AA/output/directories/ > classifier_stdout.log`
 
 AC will crawl the given location and find all relevant AA files and perform classification on them.
+
+**To classify a single amplicon**:
+
+>`python amplicon_classifier.py --ref GRCh38 --cycles sample_amplicon1_cycles.txt --graph sample_amplicon1_graph.txt > classifier_stdout.log`
+
 
 **Less common - separate usage of `make_input.sh`:**
 
@@ -61,7 +61,7 @@ Alternatively, you can use the `make_input.sh` script to gather the necessary in
 
 >`make_input.sh /path/to/AA/output/directories/ example_collection` 
 
-This will create a file called `example_collection.input` which can be given as the `--input` argument for AC.
+This would create a file called `example_collection.input` which can be given as the `--input` argument for AC.
 
 
 #### Combining classification results from GRCh37 and hg19:
