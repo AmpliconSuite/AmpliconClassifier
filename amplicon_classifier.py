@@ -4,15 +4,15 @@ __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
 import copy
+import logging
 from math import log
 import operator
 import re
 import subprocess
 import sys
 
-import intervaltree
+from intervaltree import IntervalTree, Interval
 
-import ampclasslib
 from ampclasslib.ac_annotation import *
 from ampclasslib.ac_io import *
 from ampclasslib.ac_util import ConfigVars
@@ -1098,6 +1098,7 @@ if __name__ == "__main__":
 
     # make input if an AA directory is given
     if args.AA_results:
+        import ampclasslib
         src_dir = os.path.dirname(ampclasslib.__file__)
         input_file = os.path.join(outdir_loc, "AC.input")
         cmd = "{}/make_input.sh {} {}".format(src_dir, args.AA_results, outdir_loc + "/AC")
@@ -1248,4 +1249,5 @@ if __name__ == "__main__":
                   AMP_classifications, AMP_dvaluesList, samp_to_ec_count, fd_list, samp_amp_to_graph, prop_list,
                   summary_map)
 
-    logger.info("\nComplete")
+    logger.info("")
+    logger.info("Complete")

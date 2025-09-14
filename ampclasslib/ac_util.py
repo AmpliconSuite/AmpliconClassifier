@@ -1,4 +1,5 @@
 from collections import defaultdict
+import logging
 import os
 import warnings
 
@@ -342,7 +343,7 @@ def repair_cycle(cycle, segSeqD, patch_links, xt, yt, ee_spans):
             if x[0] == spair[0][0] and x[2] == spair[1][0]:
                 if x[1].overlaps(spair[0][1]) and x[3].overlaps(spair[1][1]):
                     repCyc = repCyc[1:-1]
-                    print("bridged a gap in cycle using known database: " + str(repCyc))
+                    logging.info("bridged a gap in cycle using known database: " + str(repCyc))
                     return repCyc
 
         # now check if amplicon entirely enclosed in everted edge with high CN (suggests missing interior edge).
@@ -354,7 +355,7 @@ def repair_cycle(cycle, segSeqD, patch_links, xt, yt, ee_spans):
                     chrj, posj = segSeqD[abs(j)][0], segSeqD[abs(j)][2]
                     if xt[0] == chri and abs(posi - xt[1]) < 1000 and yt[0] == chrj and abs(posj - yt[1]):
                         repCyc = repCyc[1:-1]
-                        print("bridged a gap in cycle: " + str(repCyc))
+                        logging.info("bridged a gap in cycle: " + str(repCyc))
                         return repCyc
 
                 elif i > 0 and j > 0:
@@ -362,7 +363,7 @@ def repair_cycle(cycle, segSeqD, patch_links, xt, yt, ee_spans):
                     chrj, posj = segSeqD[abs(j)][0], segSeqD[abs(j)][1]
                     if xt[0] == chrj and abs(posj - xt[1]) < 1000 and yt[0] == chri and abs(posi - yt[1]):
                         repCyc = repCyc[1:-1]
-                        print("bridged a gap in cycle: " + str(repCyc))
+                        logging.info("bridged a gap in cycle: " + str(repCyc))
                         return repCyc
 
     return repCyc
@@ -402,7 +403,7 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
                             continue
 
                         else:
-                            print("Cycle was LC", str(t[0]), str(t[1]), str(t[2]))
+                            logging.info("Cycle was LC", str(t[0]), str(t[1]), str(t[2]))
                             lcCycle = True
                             break
 
@@ -417,7 +418,7 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
                 currCycle = rotate_cycle_to_largest_jump(initCycle, segSeqD)
                 uid = ss + "," + cd["Copy_count"]
                 if uid in seenCycs:
-                    print(cyclef + " duplicate cycle encountered")
+                    logging.info(cyclef + " duplicate cycle encountered")
 
                 else:
                     cycleList.append(currCycle)
@@ -512,7 +513,7 @@ def readFlist(filelist):
             if line:
                 fields = line.rsplit("\t")
                 if len(fields) < 2:
-                    print("Bad formatting in: ", line)
+                    logging.warning("Bad formatting in: ", line)
                 else:
                     flist.append(fields)
 

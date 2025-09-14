@@ -7,28 +7,19 @@ from ampclasslib.ecDNA_context import *
 
 
 def setup_logger(output_prefix):
-    """Set up logging configuration"""
+    """Set up logging configuration for the root logger"""
     log_file = "{}.log".format(output_prefix)
 
-    # Create formatter
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ]
+    )
 
-    # Setup file handler
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setFormatter(formatter)
-
-    # Setup console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-
-    # Setup logger
-    logger = logging.getLogger('AmpliconClassifier')
-    logger.setLevel(logging.INFO)
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-
-    return logger
-
+    return logging.getLogger()  # Return root logger (optional)
 
 # getting genes from the genes .gff file
 def parse_genes(gene_file, add_chr_tag):
@@ -351,9 +342,8 @@ def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, 
 
 def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, samp_to_ec_count, fd_list,
-                  samp_amp_to_graph, prop_list, summary_map, logname="AmpliconClassifier"):
+                  samp_amp_to_graph, prop_list, summary_map):
 
-    logger = logging.getLogger(logname)
     # Genes
     gene_extraction_outname = args.o + "_gene_list.tsv"
     write_gene_results(gene_extraction_outname, ftgd_list)
@@ -412,26 +402,26 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
     f2gf.close()
 
     # Check if there are any feature types first
-    logger.info("Feature Type Counts:")
+    logging.info("Feature Type Counts:")
     if feat_type_counts:
         # Get max length of feature type names for nice alignment
         max_name_length = max(len(feat_type) for feat_type in feat_type_counts.keys())
 
         # Log header
-        logger.info("-" * (max_name_length + 10))  # Line separator
+        logging.info("-" * (max_name_length + 10))  # Line separator
 
         # Log each count with aligned formatting
         for feat_type, count in sorted(feat_type_counts.items()):
             if feat_type == "unknown":
                 continue
-            logger.info("{:<{width}} : {:>5}".format(feat_type, count, width=max_name_length))
+            logging.info("{:<{width}} : {:>5}".format(feat_type, count, width=max_name_length))
 
-        logger.info("-" * (max_name_length + 10))  # Line separator
+        logging.info("-" * (max_name_length + 10))  # Line separator
     else:
         # Handle empty feature case
-        logger.info("-" * 20)  # Default line separator
-        logger.info("No focal amp features identified")
-        logger.info("-" * 20)  # Default line separator
+        logging.info("-" * 20)  # Default line separator
+        logging.info("No focal amp features identified")
+        logging.info("-" * 20)  # Default line separator
 
     # report ecDNA context
     context_filename = args.o + "_ecDNA_context_calls.tsv"

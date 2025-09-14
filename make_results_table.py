@@ -329,7 +329,6 @@ if __name__ == "__main__":
             curr_run_metadata = run_metadata_dict[sample_name]
             if curr_run_metadata['ref_genome'] == "NA" and args.ref:
                 curr_run_metadata['ref_genome'] = args.ref
-            # print(curr_run_metadata)
             asp_version, aa_version, ac_version = get_version_info(curr_run_metadata)
 
             # Get the AC intervals, genes and complexity
