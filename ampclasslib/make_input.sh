@@ -5,8 +5,6 @@
 # arg 1-N: locations to search for AA files
 # arg N+1: output name prefix
 
-set -euo pipefail
-
 # Validate arguments
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <search_path1> [search_path2 ...] <output_name>" >&2
@@ -15,7 +13,11 @@ fi
 
 # Extract output prefix (last argument) and search paths (all but last)
 outpre="${@: -1}"
-search_paths=("${@:1:$(($#-1))}")
+# Use a more compatible way to get all but last argument
+search_paths=()
+for ((i=1; i<$#; i++)); do
+    search_paths+=("${!i}")
+done
 
 # Temporary files
 cycles_file="scf.txt"
@@ -39,18 +41,21 @@ trap cleanup_temp_files EXIT
 # Find all AA graph and cycles files from AA runs
 echo "Searching for AA cycles and graph files..."
 for search_path in "${search_paths[@]}"; do
-    exppath=$(realpath "$search_path")
-
+    if ! exppath=$(realpath "$search_path" 2>/dev/null); then
+        echo "Warning: Cannot resolve path $search_path, skipping..." >&2
+        continue
+    fi
+    
     # Find cycles files with exclusions
-    find "$exppath" -name "*_cycles.txt" \
+    find "$exppath" -name "*_cycles.txt" 2>/dev/null \
         | grep -v "annotated_cycles" \
         | grep -v "/\._" \
         | grep -v "BPG_converted" \
         | grep -v "_classification/files/" \
         | sort >> "$cycles_file"
-
-    # Find graph files with exclusions
-    find "$exppath" -name "*_graph.txt" \
+    
+    # Find graph files with exclusions  
+    find "$exppath" -name "*_graph.txt" 2>/dev/null \
         | grep -v "features_to_graph" \
         | grep -v "/\._" \
         | grep -v "feature_to_graph" \
@@ -59,8 +64,8 @@ for search_path in "${search_paths[@]}"; do
 done
 
 # Verify equal numbers of cycles and graph files
-cycles_count=$(wc -l < "$cycles_file")
-graph_count=$(wc -l < "$graph_file")
+cycles_count=$(wc -l < "$cycles_file" 2>/dev/null || echo 0)
+graph_count=$(wc -l < "$graph_file" 2>/dev/null || echo 0)
 
 if [ "$cycles_count" -ne "$graph_count" ]; then
     echo "ERROR: Unequal numbers of cycles and graph files found! AA may not have completed correctly." >&2
@@ -68,42 +73,56 @@ if [ "$cycles_count" -ne "$graph_count" ]; then
     exit 1
 fi
 
-echo "Found $cycles_count matching cycles/graph file pairs"
-
-# Extract sample names and create main input file
-rev "$cycles_file" \
-    | cut -f 1 -d '/' \
-    | cut -c12- \
-    | rev \
-    | sed 's/_amplicon[0-9]*$//' > "$sample_names"
-
-paste "$sample_names" "$cycles_file" "$graph_file" > "${outpre}.input"
+if [ "$cycles_count" -eq 0 ]; then
+    echo "No cycles/graph files found - creating empty input file"
+    # Create empty input file
+    : > "${outpre}.input"
+else
+    echo "Found $cycles_count matching cycles/graph file pairs"
+    
+    # Extract sample names and create main input file
+    rev "$cycles_file" \
+        | cut -f 1 -d '/' \
+        | cut -c12- \
+        | rev \
+        | sed 's/_amplicon[0-9]*$//' > "$sample_names"
+    
+    paste "$sample_names" "$cycles_file" "$graph_file" > "${outpre}.input"
+fi
 
 # Find summary files for samples that may not have corresponding AA outputs
 echo "Searching for summary files..."
 : > "$summary_file"
 
 for search_path in "${search_paths[@]}"; do
-    exppath=$(realpath "$search_path")
-
-    find "$exppath" -name "*_summary.txt" \
+    if ! exppath=$(realpath "$search_path" 2>/dev/null); then
+        echo "Warning: Cannot resolve path $search_path, skipping..." >&2
+        continue
+    fi
+    
+    find "$exppath" -name "*_summary.txt" 2>/dev/null \
         | grep -v "/\._" \
         | grep -v "_classification/files/" \
         | sort >> "$summary_file"
 done
 
-summary_count=$(wc -l < "$summary_file")
+summary_count=$(wc -l < "$summary_file" 2>/dev/null || echo 0)
 echo "Found $summary_count summary files"
 
-# Extract sample names from summary files and create summary map
-rev "$summary_file" \
-    | cut -f 1 -d '/' \
-    | cut -c13- \
-    | rev \
-    | sed 's/_summary\.txt$//' > "$summary_names"
-
-paste "$summary_names" "$summary_file" > "${outpre}_summary_map.txt"
+if [ "$summary_count" -eq 0 ]; then
+    echo "No summary files found - creating empty summary map"
+    # Create empty summary map file
+    : > "${outpre}_summary_map.txt"
+else
+    # Extract sample names from summary files and create summary map
+    rev "$summary_file" \
+        | cut -f 1 -d '/' \
+        | cut -c13- \
+        | rev \
+        | sed 's/_summary\.txt$//' > "$summary_names"
+    
+    paste "$summary_names" "$summary_file" > "${outpre}_summary_map.txt"
+fi
 
 echo "Created ${outpre}.input with $cycles_count entries"
 echo "Created ${outpre}_summary_map.txt with $summary_count entries"
-
