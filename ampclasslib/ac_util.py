@@ -403,7 +403,7 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
                             continue
 
                         else:
-                            logging.info("Cycle was LC", str(t[0]), str(t[1]), str(t[2]))
+                            logging.info("Cycle was LC {} {} {}".format(str(t[0]), str(t[1]), str(t[2])))
                             lcCycle = True
                             break
 
