@@ -653,12 +653,17 @@ def plotting():
                                       sampNames)
 
 
-def filter_similar_amplicons(n_files):
+def filter_similar_amplicons(n_files, pval):
     # adjust the p value cutoff based on number of input amplicons
-    pval = 0.05/(max(1, n_files-1))
+    if pval is None:
+        pval = 0.05/(max(1, n_files-1))
+        logger.info("adjusted p-value cutoff set to 0.05/{}={}".format(str(n_files), str(pval)))
+
+    else:
+        logger.info("p-value cutoff set to {}".format(str(pval)))
+
     logger.info("\nSamples are assumed to be independent as --filter_similar was set.\nFiltering highly similar amplicons"
           " across independent samples...\n")
-    logger.info("adjusted p-value cutoff set to 0.05/{}={}".format(str(n_files), str(pval)))
     required_classes = {"ecDNA", "BFB", "Complex-non-cyclic", "Linear"}
     # cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
     # cg5D = build_CG5_database(cg5Path)
@@ -696,18 +701,26 @@ def filter_similar_amplicons(n_files):
 
     feats_to_filter = set()
     for fields in fsim_data:
-        if float(fields[4]) > pval:
+        splitname1 = fields[0].rsplit("_")
+        amp1, feat1, fnum1 = splitname1[-3:]
+        sampname1 = "_".join(splitname1[:-3])
+
+        splitname2 = fields[1].rsplit("_")
+        amp2, feat2, fnum2 = splitname2[-3:]
+        sampname2 = "_".join(splitname2[:-3])
+
+        # filter linear amp pairs >0.9 in each asymmetric score
+        if feat1.startswith("Linear") and feat2.startswith("Linear"):
+            if float(fields[5]) > 0.9 and float(fields[6]) > 0.9:
+                feats_to_filter.add((sampname1, amp1, feat1, fnum1))
+                feats_to_filter.add((sampname2, amp2, feat2, fnum2))
+
+        elif float(fields[4]) <= pval:  # at least one is not a linear, apply the p-value threshold
+            feats_to_filter.add((sampname1, amp1, feat1, fnum1))
+            feats_to_filter.add((sampname2, amp2, feat2, fnum2))
+
+        else:
             break
-
-        splitname = fields[0].rsplit("_")
-        amp, feat, fnum = splitname[-3:]
-        sampname = "_".join(splitname[:-3])
-        feats_to_filter.add((sampname, amp, feat, fnum))
-
-        splitname = fields[1].rsplit("_")
-        amp, feat, fnum = splitname[-3:]
-        sampname = "_".join(splitname[:-3])
-        feats_to_filter.add((sampname, amp, feat, fnum))
 
     if not feats_to_filter:
         return
@@ -741,12 +754,17 @@ def filter_similar_amplicons(n_files):
 
     # map amplicon to the false regions
 
-    for sname, anum, ag_dict in ftgd_list:
+    for sname, anum, ag_dict, nc_dict in ftgd_list:
         if sname + "_" + anum in samp_amp_filt_set:
             for feat_name in sorted(ag_dict.keys()):
                 fname, fnum = feat_name.rsplit("_")
                 if (sname, anum, fname, fnum) in feats_to_filter:
                     ag_dict[feat_name].clear()
+
+            for feat_name in sorted(nc_dict.keys()):
+                fname, fnum = feat_name.rsplit("_")
+                if (sname, anum, fname, fnum) in feats_to_filter:
+                    nc_dict[feat_name].clear()
 
     for ind, x in enumerate(ftci_list):
         # annotated_cycle_outname = os.path.basename(cyclesFile).rsplit("_cycles")[0] + "_annotated_cycles.txt"
@@ -984,7 +1002,8 @@ def run_classification(segSeqD, cycleList, cycleCNs):
             other_class_c_inds, set())
 
     feat_to_amped_genes = get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d)
-    ftgd_list.append([sName, ampN, feat_to_amped_genes])
+    feat_to_amped_ncrna = get_genes_from_intervals(ncRNA_lookup, feature_dict, gseg_cn_d)
+    ftgd_list.append([sName, ampN, feat_to_amped_genes, feat_to_amped_ncrna])
 
     # store this additional information
     AMP_classifications.append((ampClass, ecStat, bfbStat, ecAmpliconCount))
@@ -1048,6 +1067,8 @@ if __name__ == "__main__":
     parser.add_argument("--filter_similar", help="Only use if all samples are of independent origins (not replicates "
                         "and not multi-region biopsies). Permits filtering of false-positive amps arising in multiple "
                         "independent samples based on similarity calculation", action='store_true')
+    parser.add_argument("--filter_pval", help="P value cutoff to use when --filter_similar is set. Default is 0.05/(n_amps-1)",
+                        type=float)
     parser.add_argument("--config", help="Path to custom parameter configuration file. If not specified, "
                                          "uses default config in ampclasslib directory.")
     parser.add_argument("-v", "--version", action='version', version=__ampliconclassifier_version__)
@@ -1144,6 +1165,7 @@ if __name__ == "__main__":
         args.ref = "mm10"
 
     patch_links = read_patch_regions(args.ref)
+    ncRNAFileLoc = get_ncrna_file_loc(args.ref)
 
     if 0 <= args.decomposition_strictness <= 1:
         decomposition_strictness = args.decomposition_strictness
@@ -1187,7 +1209,8 @@ if __name__ == "__main__":
 
     # read the gene list
     refGeneFileLoc = AA_DATA_REPO + fDict["gene_filename"]
-    gene_lookup = parse_genes(refGeneFileLoc, add_chr_tag)
+    gene_lookup = parse_genes(refGeneFileLoc, add_chr_tag=add_chr_tag)
+    ncRNA_lookup = parse_genes(ncRNAFileLoc, add_chr_tag=add_chr_tag, strip_chr_tag=(args.ref == "GRCh37"), keep_all=True)
 
     # GLOBAL STORAGE VARIABLES
     ftgd_list = []  # store list of feature gene classifications
@@ -1222,10 +1245,10 @@ if __name__ == "__main__":
                 chroms = set([x[0] for k,x in segSeqD.items() if k != 0])
                 if args.ref == "hg19" and not any([x.startswith("chr") for x in chroms]):
                     logger.warning("chrom names: " + str(chroms))
-                    logger.warning("Warning! --ref hg19 was set, but chromosome names are not consistent with hg19 ('chr1', 'chr2', etc.)\n")
+                    logger.warning("Warning! --ref hg19 was set, but chromosome naming is not consistent with hg19 ('chr1', 'chr2', etc.)\n")
                 elif args.ref == "GRCh37" and any([x.startswith("chr") for x in chroms]) and not add_chr_tag:
                     logger.warning("chrom names: " + str(chroms))
-                    logger.warning("Warning! --ref GRCh37 was set, but chromosome names are not consistent with GRCh37 ('1', '2', etc.)\n")
+                    logger.warning("Warning! --ref GRCh37 was set, but chromosome naming is not consistent with GRCh37 ('1', '2', etc.)\n")
 
         else:
             logger.info(str(fpair))
@@ -1238,7 +1261,7 @@ if __name__ == "__main__":
     if args.filter_similar:
         logger.info("Filtering similar amplicons...")
         from feature_similarity import *
-        filter_similar_amplicons(len(flist))
+        filter_similar_amplicons(len(flist), args.filter_pval)
 
     # make any requested visualizations
     plotting()

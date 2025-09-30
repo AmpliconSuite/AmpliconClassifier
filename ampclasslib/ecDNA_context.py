@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
-__ecDNA_context_version__ = "1.0.0"
+__ecDNA_context_version__ = "1.0.1"
 #Author: Bhargavi Dameracharla, modified by Jens Luebeck
 
 import argparse
 from collections import defaultdict
+import logging
 import os
 
 import numpy as np
@@ -83,7 +84,7 @@ def filter_graph_with_bed(graph_file_path, bed_regions, add_chr_tag):
                     filtered_edges.append({"type": etype, "start_chr": start_chr, "end_chr": end_chr, "start": start_pos, "end": end_pos, "cn": float(cn)})
 
     if not filtered_sequences:
-        print("Warning: Filtering " + graph_file_path + " using bed regions resulting in no filtered sequences!")
+        logging.warning("Filtering " + graph_file_path + " using bed regions resulting in no filtered sequences!")
 
     return filtered_sequences, filtered_edges, all_sequences, all_edges
 
@@ -380,7 +381,11 @@ def ecDNAMetrics(filtered_cycles, filtered_sequences, filtered_edges, sequences,
         if everted and not multiple_large:
             n_trans, all_cns = count_transitions_del(outside_seqs, outside_edges, fuse_cutoff=fuse_cutoff)
             n_cn_states = len(deduce_states(all_cns))
-            t_n_ratio = n_trans/n_cn_states
+            if n_cn_states == 0:  # this shouldn't happen
+                t_n_ratio = 0
+                logging.warning("No CN states detected!")
+            else:
+                t_n_ratio = n_trans / n_cn_states
             fb_count = fbCount(outside_edges)
             cross_edges = crossEdges(outside_edges)
 
@@ -406,7 +411,6 @@ def ecDNAMetrics(filtered_cycles, filtered_sequences, filtered_edges, sequences,
         # Look at all sequences in the amplicon to understand if ecDNA occurs with a complex background but if we know that it is a simple cycle with internal rearrangement, remove the rearrangements inside the cycle.
         _, sequences2, edges2 = simpleEverted(largest_cycle, sequences, edges)
 
-    
     n_trans2, all_cns2 = count_transitions_del(sequences2, edges2, fuse_cutoff=fuse_cutoff)
     n_cn_states2 = len(deduce_states(all_cns2))
     t_n_ratio2 = n_trans2/n_cn_states2
@@ -517,7 +521,7 @@ def ecDNAContext(metrics, t_n_cutoff = 4, cycle_cutoff = 0.15):
 
 def fetch_context(graph_file, cycles_file, FUSE_CUTOFF=5000, TN_RATIO_CUTOFF=4, CYCLE_FRAC_CUTOFF=0.15, bed_file=None, verbose=False, add_chr_tag=False):
     if not os.path.exists(graph_file) or not os.path.exists(cycles_file):
-        print("ecDNA context function could not find graph or cycles file: ", graph_file, cycles_file)
+        logging.error("ecDNA context function could not find graph or cycles file: {} {}".format(graph_file, cycles_file))
         return "Unknown"
 
     bed_regions = read_bed_file(bed_file, add_chr_tag)
@@ -532,8 +536,8 @@ def fetch_context(graph_file, cycles_file, FUSE_CUTOFF=5000, TN_RATIO_CUTOFF=4, 
 
     # output all the information
     if verbose:
-        print("Metrics: " + str(metrics))  # changed from print(f "") to give backwards compatibility with older python versions
-        print("Context: " + str(context))
+        logging.info("Metrics: " + str(metrics))  # changed from print(f "") to give backwards compatibility with older python versions
+        logging.info("Context: " + str(context))
 
     return context
 
@@ -562,4 +566,4 @@ if __name__ == "__main__":
 
     context = fetch_context(graph_file, cycles_file, FUSE_CUTOFF, TN_RATIO_CUTOFF, CYCLE_FRAC_CUTOFF, bed_file, verbose, add_chr_tag)
     if not verbose:
-        print("Context: " + str(context))
+        logging.info("Context: " + str(context))

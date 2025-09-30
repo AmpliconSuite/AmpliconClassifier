@@ -1,3 +1,4 @@
+import gzip
 import logging
 
 from intervaltree import IntervalTree
@@ -22,10 +23,19 @@ def setup_logger(output_prefix):
     return logging.getLogger()  # Return root logger (optional)
 
 # getting genes from the genes .gff file
-def parse_genes(gene_file, add_chr_tag):
+# if both add_chr_tag and strip_chr_tag are given, will default to adding the tag
+def parse_genes(gene_file, add_chr_tag=False, strip_chr_tag=False, keep_all=False):
     t = defaultdict(IntervalTree)
+
+    if not os.path.exists(gene_file):
+        logging.warning(f"filename {gene_file} does not exist.")
+        return t
+
     seenNames = set()
-    with open(gene_file) as infile:
+
+    open_func = gzip.open if gene_file.endswith('.gz') else open
+    mode = 'rt' if gene_file.endswith('.gz') else 'r'
+    with open_func(gene_file, mode) as infile:
         for line in infile:
             if line.startswith("#"):
                 continue
@@ -37,6 +47,9 @@ def parse_genes(gene_file, add_chr_tag):
             chrom, s, e, strand = fields[0], int(fields[3]), int(fields[4]), fields[6]
             if add_chr_tag and not fields[0].startswith('chr'):
                 chrom = 'chr' + chrom
+
+            elif strip_chr_tag and fields[0].startswith('chr'):
+                chrom = chrom.lstrip('chr')
 
             # parse the line and get the name
             propFields = {x.split("=")[0]: x.split("=")[1] for x in fields[-1].rstrip(";").split(";")}
@@ -51,7 +64,9 @@ def parse_genes(gene_file, add_chr_tag):
                 ncbi_id = propFields["ID"]
 
             is_other_feature = (gname.startswith("LOC") or gname.startswith("LINC") or gname.startswith("MIR"))
-            if gname not in seenNames and not is_other_feature:
+            skip = (not keep_all) and is_other_feature
+
+            if gname not in seenNames and not skip:
                 seenNames.add(gname)
                 t[chrom][s:e] = (gname, strand, ncbi_id)
 
@@ -208,16 +223,25 @@ def write_ec_per_sample(outname, samp_to_ec_count, summary_map):
 
 
 # take a list of 'feat_to_genes' dicts
-def write_gene_results(outname, ftg_list):
-    with open(outname, 'w') as outfile:
+def write_gene_results(outname_genes, outname_ncrna, ftg_list):
+    with open(outname_genes, 'w') as outfile_genes, open(outname_ncrna, 'w') as outfile_ncrna:
         head = ["sample_name", "amplicon_number", "feature", "gene", "gene_cn", "truncated", "is_canonical_oncogene", "ncbi_id"]
-        outfile.write("\t".join(head) + "\n")
-        for sname, anum, ampg_d in ftg_list:
+        outfile_genes.write("\t".join(head) + "\n")
+        head = ["sample_name", "amplicon_number", "feature", "ncRNA", "ncRNA_cn", "truncated", "ensembl_id"]
+        outfile_ncrna.write("\t".join(head) + "\n")
+
+        for sname, anum, ampg_d, ampnc_d in ftg_list:
             for feat_name in sorted(ampg_d.keys()):
                 for curr_ag in sorted(ampg_d[feat_name].values(), key=lambda x: x.name):
                     trunc_string = curr_ag.get_truncation_status()
-                    outfile.write("\t".join([sname, anum, feat_name, curr_ag.name, str(curr_ag.gene_cn), trunc_string,
+                    outfile_genes.write("\t".join([sname, anum, feat_name, curr_ag.name, str(curr_ag.gene_cn), trunc_string,
                                              str(curr_ag.is_oncogene), curr_ag.ncbi_id]) + "\n")
+
+            for feat_name in sorted(ampnc_d.keys()):
+                for curr_anc in sorted(ampnc_d[feat_name].values(), key=lambda x: x.name):
+                    trunc_string = curr_anc.get_truncation_status()
+                    outfile_ncrna.write("\t".join([sname, anum, feat_name, curr_anc.name, str(curr_anc.gene_cn), trunc_string,
+                                                   str(curr_anc.ncbi_id)]) + "\n")
 
 
 def write_basic_properties(feat_basic_propf, sname, ampN, prop_dict):
@@ -278,8 +302,9 @@ def create_context_table(prefix, sname, ampN, feature_dict, samp_amp_to_graph, a
     cycles_dir = prefix + "_annotated_cycles_files/"
     trim_sname = sname.rsplit("/")[-1].rsplit("_amplicon")[0]
     for feat_name, curr_fd in feature_dict.items():
-        intervals_fname = bedfile_dir + trim_sname + "_" + ampN + "_" + feat_name + "_intervals.bed"
         if feat_name.startswith("ecDNA"):
+            intervals_fname = bedfile_dir + trim_sname + "_" + ampN + "_" + feat_name + "_intervals.bed"
+            logging.info(trim_sname + "_" + ampN + "_" + feat_name)
             if not curr_fd:
                 context = "Unknown"
 
@@ -344,9 +369,10 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
                   AMP_classifications, AMP_dvaluesList, samp_to_ec_count, fd_list,
                   samp_amp_to_graph, prop_list, summary_map):
 
-    # Genes
+    # Genes and ncRNA
     gene_extraction_outname = args.o + "_gene_list.tsv"
-    write_gene_results(gene_extraction_outname, ftgd_list)
+    ncrna_extraction_outname = args.o + "_ncRNA_list.tsv"
+    write_gene_results(gene_extraction_outname, ncrna_extraction_outname, ftgd_list)
     ecDNA_count_outname = args.o + "_ecDNA_counts.tsv"
     write_ec_per_sample(ecDNA_count_outname, samp_to_ec_count, summary_map)
 
@@ -426,6 +452,7 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
     # report ecDNA context
     context_filename = args.o + "_ecDNA_context_calls.tsv"
     contexts = []
+    logging.info("Calling ecDNA context...")
     for ind, (sname, feature_dict) in enumerate(zip(sampNames, fd_list)):
         ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
         curr_contexts = create_context_table(args.o, sname, ampN, feature_dict, samp_amp_to_graph, add_chr_tag=args.add_chr_tag)

@@ -533,6 +533,18 @@ def read_patch_regions(ref):
     return patch_links
 
 
+def get_ncrna_file_loc(ref):
+    dp = os.path.dirname(os.path.abspath(__file__)) + "/resources/"
+    simple_rname = ref
+    if ref == "GRCh37":
+        simple_rname = 'hg19'
+    if ref == "GRCh38_viral":
+        simple_rname = 'GRCh38'
+
+    fname = "{}gencode_{}_long_noncoding_RNAs.gff3.gz".format(dp, simple_rname)
+    return fname
+
+
 def set_config_vars(config, args):
     for key in config:
         if hasattr(ConfigVars, key):
