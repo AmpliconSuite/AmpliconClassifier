@@ -371,7 +371,7 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
 
     # Genes and ncRNA
     gene_extraction_outname = args.o + "_gene_list.tsv"
-    ncrna_extraction_outname = args.o + "_ncRNA_list.tsv"
+    ncrna_extraction_outname = args.o + "_lncRNA_list.tsv"
     write_gene_results(gene_extraction_outname, ncrna_extraction_outname, ftgd_list)
     ecDNA_count_outname = args.o + "_ecDNA_counts.tsv"
     write_ec_per_sample(ecDNA_count_outname, samp_to_ec_count, summary_map)

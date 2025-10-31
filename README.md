@@ -100,8 +100,8 @@ Reports the genes present on amplicons with each classification, and which genom
 | `is_canonical_oncogene` | Reports if gene is present in [COSMIC](https://cancer.sanger.ac.uk/cosmic/curation), [ONGene](https://ongene.bioinfo-minzhao.org/).      |
 | `ncbi_id`               | Reports the [NCBI Accession ID](https://www.ncbi.nlm.nih.gov/books/NBK470040/) of the gene                                               |
 
-#### ****`[prefix]_ncRNA_list.tsv`****
-This file has a highly similar structure to the `gene_list.tsv` file and is based on [GENCODE](https://www.gencodegenes.org/) lncRNA annotations. 
+#### ****`[prefix]_lncRNA_list.tsv`****
+This file has a highly similar structure to the `gene_list.tsv` file and is based on [GENCODE](https://www.gencodegenes.org/) lncRNA annotations. Note some genes overlap with GENCODE lncRNA and the genes. Those are primarily reported in the gene list file.
 
 #### ****`[prefix]_feature_basic_properties.tsv`****
 Reports a table of basic properties such as size of captured regions, median and max CN, and a flag field to report if the call is "borderline" (ecDNA with CN < 8, other classes with CN < 5).
