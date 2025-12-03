@@ -1088,6 +1088,12 @@ if __name__ == "__main__":
     if not args.o.startswith("/"):
         args.o = os.path.abspath(args.o)
 
+    # Check for spaces in the final path
+    if ' ' in args.o:
+        sys.stderr.write("Error: Output path cannot contain spaces. Please use a path without spaces.\n")
+        sys.stderr.write("Output path: {}\n".format(args.o))
+        sys.exit(1)
+
     outdir_loc = os.path.dirname(args.o)
     if outdir_loc and not os.path.exists(outdir_loc):
         os.makedirs(outdir_loc)
