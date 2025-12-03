@@ -1067,12 +1067,14 @@ if __name__ == "__main__":
     parser.add_argument("--filter_similar", help="Only use if all samples are of independent origins (not replicates "
                         "and not multi-region biopsies). Permits filtering of false-positive amps arising in multiple "
                         "independent samples based on similarity calculation", action='store_true')
-    parser.add_argument("--filter_pval", help="P value cutoff to use when --filter_similar is set. Default is 0.05/(n_amps-1)",
+    parser.add_argument("--filter_pval",
+                        help="P value cutoff to use when --filter_similar is set. Default is 0.05/(n_amps-1)",
                         type=float)
     parser.add_argument("--config", help="Path to custom parameter configuration file. If not specified, "
-                                         "uses default config in ampclasslib directory.")
+                        "uses default config in ampclasslib directory.")
+    parser.add_argument("--make_results_table", help="Create summary results table after classification completes. "
+                        "Only works when using --AA_results or --input (not with -c/-g single amplicon mode).", action='store_true')
     parser.add_argument("-v", "--version", action='version', version=__ampliconclassifier_version__)
-
     args = parser.parse_args()
 
     # print("AmpliconClassifier " + __ampliconclassifier_version__)
@@ -1114,6 +1116,11 @@ if __name__ == "__main__":
         sys.exit(1)
 
     set_config_vars(config, args)
+
+    if args.make_results_table and not args.input and not args.AA_results:
+        logger.error(
+            "--make_results_table can only be used with --AA_results or --input, not with single amplicon mode (-c/-g)")
+        sys.exit(1)
 
     if args.add_chr_tag:
         if args.ref == "GRCh38_viral":
@@ -1277,6 +1284,23 @@ if __name__ == "__main__":
     write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, samp_to_ec_count, fd_list, samp_amp_to_graph, prop_list,
                   summary_map)
+
+    if args.make_results_table:
+        logger.info("Creating results table...")
+        try:
+            import make_results_table
+
+            classification_file = args.o + "_amplicon_classification_profiles.tsv"
+            make_results_table.make_results_table(
+                input_file=args.input,
+                classification_file=classification_file,
+                ref=args.ref
+            )
+            logger.info("Results table created successfully")
+        except ImportError:
+            logger.warning("Could not import make_results_table.py. Skipping results table creation.")
+        except Exception as e:
+            logger.warning("Failed to create results table: {}".format(str(e)))
 
     logger.info("")
     logger.info("Complete")

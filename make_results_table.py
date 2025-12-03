@@ -81,9 +81,9 @@ def read_summary_list(summ_map_file):
     return sumf_dict
 
 
-def cycles_graph_amp_lookup(input_lines):
+def cycles_graph_amp_lookup(input_file_path):
     lookup = {}
-    with open(args.input) as input_file:
+    with open(input_file_path) as input_file:
         for line in input_file:
             fields = line.rstrip().rsplit()
             a_id = fields[1].rsplit("/")[-1].rsplit("_cycles.txt")[0]
@@ -142,7 +142,6 @@ def write_json_dict(output_table_lines, json_ofname):
     dlist = []
     h = output_table_lines[0]
     for ll in output_table_lines[1:]:
-
         td = dict(zip(h, ll))
         dlist.append(td)
 
@@ -152,32 +151,25 @@ def write_json_dict(output_table_lines, json_ofname):
     pass
 
 
-if __name__ == "__main__":
-    # The input file must be the source of the classification file calls.
-    parser = argparse.ArgumentParser(description="Organize AC results into a table")
-    parser.add_argument("-i", "--input", help="Path to .input file produced by make_input.sh. Each line formatted as: "
-                        "sample_name cycles.txt graph.txt (required)", required=True)
-    parser.add_argument("--classification_file", help="Path of amplicon_classification_profiles.tsv file (required)",
-                        required=True)
-    parser.add_argument("--summary_map", help="Path to the _summary_map.txt file produced by make_input.sh")
-    parser.add_argument("--sample_metadata_file", help="Path of sample metadata, [sample]_sample_metadata.json file"
-                                                       " (for building table with a single sample).", default="")
-    parser.add_argument("--run_metadata_file", help="Path of run metadata, [sample]_run_metadata.json file (for "
-                                                    "building table with a single sample).", default="")
-    parser.add_argument("--cnv_bed", help="Path of the CNV_CALLS.bed file used for this run (for single sample).",
-                        default="")
-    parser.add_argument("--sample_metadata_list", help="Path of two-column file mapping sample name to sample json "
-                                                       "metadata file (for multiple samples).", default="")
-    parser.add_argument("--run_metadata_list", help="Path of two-column file mapping sample name to run json file (for"
-                                                    " multiple samples).", default="")
-    parser.add_argument("--sample_cnv_bed_list", help="Path of two-column file mapping sample name to CNV_CALLS.bed"
-                                                      " file (for multiple samples).", default="")
-    parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38. "
-                                      "Required if --run_metadata_file or --run_metadata_list are not set",
-                        choices=["hg19", "GRCh37", "GRCh38", "GRCh38_viral", "mm10"])
-    args = parser.parse_args()
+def make_results_table(input_file, classification_file, summary_map=None, sample_metadata_file="",
+                       run_metadata_file="", cnv_bed="", sample_metadata_list="", run_metadata_list="",
+                       sample_cnv_bed_list="", ref=None):
+    """
+    Main function to create results table from AC outputs.
 
-    if not args.run_metadata_file and not args.run_metadata_list and not args.ref:
+    Args:
+        input_file: Path to .input file produced by make_input.sh
+        classification_file: Path of amplicon_classification_profiles.tsv file
+        summary_map: Path to the _summary_map.txt file (optional)
+        sample_metadata_file: Path of sample metadata json (optional)
+        run_metadata_file: Path of run metadata json (optional)
+        cnv_bed: Path of the CNV_CALLS.bed file (optional)
+        sample_metadata_list: Path of file mapping sample name to metadata json (optional)
+        run_metadata_list: Path of file mapping sample name to run json (optional)
+        sample_cnv_bed_list: Path of file mapping sample name to CNV bed (optional)
+        ref: Reference genome name (optional if metadata files provided)
+    """
+    if not run_metadata_file and not run_metadata_list and not ref:
         sys.stderr.write("One of the following must be provided: --ref | --run_metadata_list | --run_metadata_file\n")
         sys.exit(1)
 
@@ -185,22 +177,23 @@ if __name__ == "__main__":
                    "All genes", "NCBI Gene IDs", "Complexity score", "ecDNA context", "Captured interval length",
                    "Feature median copy number", "Feature maximum copy number", "Filter flag", "Reference version",
                    "Tissue of origin", "Sample type", "Feature BED file", "CNV BED file", "AS-p version", "AA version",
-                   "AC version", "AA PNG file", "AA PDF file", "AA summary file", "Run metadata JSON", "Sample metadata JSON"]
+                   "AC version", "AA PNG file", "AA PDF file", "AA summary file", "Run metadata JSON",
+                   "Sample metadata JSON"]
 
-    classBase = args.classification_file.rsplit("_amplicon_classification_profiles.tsv")[0]
+    classBase = classification_file.rsplit("_amplicon_classification_profiles.tsv")[0]
     ldir = os.path.dirname(classBase) + "/files/"
     if ldir == "/files/": ldir = "files/"
     if not os.path.exists(ldir): os.makedirs(ldir)
 
-    if not args.summary_map:
-        args.summary_map = args.input.rsplit(".input", 1)[0] + "_summary_map.txt"
+    if not summary_map:
+        summary_map = input_file.rsplit(".input", 1)[0] + "_summary_map.txt"
 
     sumf_used = set()
-    sumf_dict = read_summary_list(args.summary_map)
+    sumf_dict = read_summary_list(summary_map)
     sample_metadata_dict = defaultdict(lambda: defaultdict(lambda: "NA"))
     sample_metadata_path = defaultdict(lambda: "Not provided")
-    if args.sample_metadata_list:
-        with open(args.sample_metadata_list) as infile:
+    if sample_metadata_list:
+        with open(sample_metadata_list) as infile:
             for line in infile:
                 fields = line.rstrip().rsplit("\t")
                 csmf = os.path.abspath(fields[1])
@@ -212,8 +205,8 @@ if __name__ == "__main__":
 
     run_metadata_dict = defaultdict(lambda: defaultdict(lambda: "NA"))
     run_metadata_path = defaultdict(lambda: "Not provided")
-    if args.run_metadata_list:
-        with open(args.run_metadata_list) as infile:
+    if run_metadata_list:
+        with open(run_metadata_list) as infile:
             for line in infile:
                 fields = line.rstrip().rsplit("\t")
                 crmf = os.path.abspath(fields[1])
@@ -224,15 +217,15 @@ if __name__ == "__main__":
                     shutil.copy(crmf, ldir)
 
     sample_cnv_calls_path = defaultdict(lambda: "Not provided")
-    if args.sample_cnv_bed_list:
-        with open(args.sample_cnv_bed_list) as infile:
+    if sample_cnv_bed_list:
+        with open(sample_cnv_bed_list) as infile:
             for line in infile:
                 fields = line.rstrip().rsplit()
                 sample_cnv_calls_path[fields[0]] = fields[1]
 
     output_table_lines = [output_head, ]
-    cyc_graph_lookup_dct = cycles_graph_amp_lookup(args.input)
-    with open(args.classification_file) as classification_file:
+    cyc_graph_lookup_dct = cycles_graph_amp_lookup(input_file)
+    with open(classification_file) as classification_file_handle:
         classBedDir = classBase + "_classification_bed_files/"
         gene_file = classBase + "_gene_list.tsv"
         entropy_file = classBase + "_feature_entropy.tsv"
@@ -243,28 +236,28 @@ if __name__ == "__main__":
         basic_stats_dict = read_basic_stats(basic_stats_file)
         context_dict = read_context(context_file)
 
-        if args.sample_metadata_file:
-            init_sample_metadata = json.load(open(args.sample_metadata_file, 'r'))
+        if sample_metadata_file:
+            init_sample_metadata = json.load(open(sample_metadata_file, 'r'))
             sample_metadata_dict = defaultdict(lambda: init_sample_metadata)
-            sample_metadata_path = defaultdict(lambda: os.path.abspath(args.sample_metadata_file))
-            if not os.path.exists(ldir + os.path.basename(args.sample_metadata_file)):
-                shutil.copy(args.sample_metadata_file, ldir)
+            sample_metadata_path = defaultdict(lambda: os.path.abspath(sample_metadata_file))
+            if not os.path.exists(ldir + os.path.basename(sample_metadata_file)):
+                shutil.copy(sample_metadata_file, ldir)
 
-        if args.run_metadata_file:
-            init_run_metadata = json.load(open(args.run_metadata_file, 'r'))
+        if run_metadata_file:
+            init_run_metadata = json.load(open(run_metadata_file, 'r'))
             run_metadata_dict = defaultdict(lambda: init_run_metadata)
-            run_metadata_path = defaultdict(lambda: os.path.abspath(args.run_metadata_file))
-            if not os.path.exists(ldir + os.path.basename(args.run_metadata_file)):
-                shutil.copy(args.run_metadata_file, ldir)
+            run_metadata_path = defaultdict(lambda: os.path.abspath(run_metadata_file))
+            if not os.path.exists(ldir + os.path.basename(run_metadata_file)):
+                shutil.copy(run_metadata_file, ldir)
 
-        if args.cnv_bed:
-            if not os.path.exists(ldir + os.path.basename(args.cnv_bed)):
-                shutil.copy(args.cnv_bed, ldir)
+        if cnv_bed:
+            if not os.path.exists(ldir + os.path.basename(cnv_bed)):
+                shutil.copy(cnv_bed, ldir)
 
-            args.cnv_bed = ldir + os.path.basename(args.cnv_bed)
-            sample_cnv_calls_path = defaultdict(lambda: os.path.abspath(args.cnv_bed))
+            cnv_bed = ldir + os.path.basename(cnv_bed)
+            sample_cnv_calls_path = defaultdict(lambda: os.path.abspath(cnv_bed))
 
-        elif args.sample_cnv_bed_list:
+        elif sample_cnv_bed_list:
             for k, f in sample_cnv_calls_path.items():
                 ofloc = ldir + os.path.basename(f)
                 if not os.path.exists(ofloc):
@@ -272,8 +265,8 @@ if __name__ == "__main__":
 
                 sample_cnv_calls_path[k] = os.path.abspath(ofloc)
 
-        class_head = next(classification_file).rstrip().rsplit("\t")
-        for classification_line in classification_file:
+        class_head = next(classification_file_handle).rstrip().rsplit("\t")
+        for classification_line in classification_file_handle:
             classD = dict(zip(class_head, classification_line.rstrip().rsplit("\t")))
             sample_name = classD['sample_name']
             ampliconID = "_".join([classD["sample_name"], classD["amplicon_number"]])
@@ -297,8 +290,8 @@ if __name__ == "__main__":
             # TODO: REVISE THIS ERROR AFTER NEW MATCHING OF INPUTS TO CLASSIFICATIONS
             if sample_name + "_amplicon" + AA_amplicon_number != ampliconID:
                 sys.stderr.write(sample_name + "_amplicon" + AA_amplicon_number + " | " + ampliconID + "\n")
-                sys.stderr.write("Amplicon names in " + args.input + " do not with "
-                                 + args.classification_file + "\n")
+                sys.stderr.write("Amplicon names in " + input_file + " do not match "
+                                 + classification_file + "\n")
                 sys.exit(1)
 
             # look up image locations
@@ -327,8 +320,8 @@ if __name__ == "__main__":
             curr_sample_metadata = sample_metadata_dict[sample_name]
             cnv_bed_path = sample_cnv_calls_path[sample_name]
             curr_run_metadata = run_metadata_dict[sample_name]
-            if curr_run_metadata['ref_genome'] == "NA" and args.ref:
-                curr_run_metadata['ref_genome'] = args.ref
+            if curr_run_metadata['ref_genome'] == "NA" and ref:
+                curr_run_metadata['ref_genome'] = ref
             asp_version, aa_version, ac_version = get_version_info(curr_run_metadata)
 
             # Get the AC intervals, genes and complexity
@@ -345,11 +338,11 @@ if __name__ == "__main__":
                         featureID = ecDNA_files[i][:-14]
 
                     else:
-                        featureID = "_".join([ampliconID, feature, str(i+1)])
+                        featureID = "_".join([ampliconID, feature, str(i + 1)])
                         featureBed = classBedDir + featureID + "_intervals.bed"
 
                     if not os.path.exists(featureBed):
-                        sys.stderr.write("Warning: image file " + f + " not found!\n")
+                        sys.stderr.write("Warning: interval file " + featureBed + " not found!\n")
                         intervals = "Interval file not found"
 
                     else:
@@ -372,9 +365,11 @@ if __name__ == "__main__":
                     context = context_dict[featureID]
                     basic_stats = basic_stats_dict[featureID]
 
-                    featureData.append([featureID, feature, intervals, oncogenes, all_genes, all_genes_ids, complexity, context] + basic_stats +
-                                        [curr_run_metadata["ref_genome"], curr_sample_metadata["tissue_of_origin"], curr_sample_metadata["sample_type"],
-                                         os.path.abspath(featureBed), cnv_bed_path])
+                    featureData.append([featureID, feature, intervals, oncogenes, all_genes, all_genes_ids, complexity,
+                                        context] + basic_stats +
+                                       [curr_run_metadata["ref_genome"], curr_sample_metadata["tissue_of_origin"],
+                                        curr_sample_metadata["sample_type"],
+                                        os.path.abspath(featureBed), cnv_bed_path])
 
                     vl = [asp_version, aa_version, ac_version]
                     sum_dl = [sumf, run_metadata_path[sample_name],
@@ -402,12 +397,13 @@ if __name__ == "__main__":
             curr_sample_metadata = sample_metadata_dict[sample_name]
             cnv_bed_path = sample_cnv_calls_path[sample_name]
             curr_run_metadata = run_metadata_dict[sample_name]
-            if curr_run_metadata['ref_genome'] == "NA" and args.ref:
-                curr_run_metadata["ref_genome"] = args.ref
+            if curr_run_metadata['ref_genome'] == "NA" and ref:
+                curr_run_metadata["ref_genome"] = ref
 
             asp_version, aa_version, ac_version = get_version_info(curr_run_metadata)
 
-            fdl = [featureID, feature, intervals, oncogenes, all_genes, all_genes_ids, complexity, context] + basic_stats + \
+            fdl = [featureID, feature, intervals, oncogenes, all_genes, all_genes_ids, complexity,
+                   context] + basic_stats + \
                   [curr_run_metadata["ref_genome"], curr_sample_metadata["tissue_of_origin"],
                    curr_sample_metadata["sample_type"], os.path.abspath(featureBed), cnv_bed_path]
 
@@ -418,7 +414,6 @@ if __name__ == "__main__":
 
             output_table_lines.append(
                 [sample_name, AA_amplicon_number] + fdl + vl + image_locs + sum_dl)
-
 
     tsv_ofname = classBase + "_result_table.tsv"
     # html_ofname = "index.html"
@@ -435,3 +430,43 @@ if __name__ == "__main__":
     write_json_dict(output_table_lines, json_ofname)
     # write_html_table(output_table_lines, html_ofname)
     print("Finished creating summary tables for " + str(len(output_table_lines[1:])) + " total entries")
+
+
+if __name__ == "__main__":
+    # The input file must be the source of the classification file calls.
+    parser = argparse.ArgumentParser(description="Organize AC results into a table")
+    parser.add_argument("-i", "--input", help="Path to .input file produced by make_input.sh. Each line formatted as: "
+                                              "sample_name cycles.txt graph.txt (required)", required=True)
+    parser.add_argument("--classification_file", help="Path of amplicon_classification_profiles.tsv file (required)",
+                        required=True)
+    parser.add_argument("--summary_map", help="Path to the _summary_map.txt file produced by make_input.sh")
+    parser.add_argument("--sample_metadata_file", help="Path of sample metadata, [sample]_sample_metadata.json file"
+                                                       " (for building table with a single sample).", default="")
+    parser.add_argument("--run_metadata_file", help="Path of run metadata, [sample]_run_metadata.json file (for "
+                                                    "building table with a single sample).", default="")
+    parser.add_argument("--cnv_bed", help="Path of the CNV_CALLS.bed file used for this run (for single sample).",
+                        default="")
+    parser.add_argument("--sample_metadata_list", help="Path of two-column file mapping sample name to sample json "
+                                                       "metadata file (for multiple samples).", default="")
+    parser.add_argument("--run_metadata_list", help="Path of two-column file mapping sample name to run json file (for"
+                                                    " multiple samples).", default="")
+    parser.add_argument("--sample_cnv_bed_list", help="Path of two-column file mapping sample name to CNV_CALLS.bed"
+                                                      " file (for multiple samples).", default="")
+    parser.add_argument("--ref", help="Reference genome name used for alignment, one of hg19, GRCh37, or GRCh38. "
+                                      "Required if --run_metadata_file or --run_metadata_list are not set",
+                        choices=["hg19", "GRCh37", "GRCh38", "GRCh38_viral", "mm10"])
+    args = parser.parse_args()
+
+    # Call the main function
+    make_results_table(
+        input_file=args.input,
+        classification_file=args.classification_file,
+        summary_map=args.summary_map,
+        sample_metadata_file=args.sample_metadata_file,
+        run_metadata_file=args.run_metadata_file,
+        cnv_bed=args.cnv_bed,
+        sample_metadata_list=args.sample_metadata_list,
+        run_metadata_list=args.run_metadata_list,
+        sample_cnv_bed_list=args.sample_cnv_bed_list,
+        ref=args.ref
+    )
