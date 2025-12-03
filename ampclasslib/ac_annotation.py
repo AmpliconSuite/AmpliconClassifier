@@ -267,20 +267,24 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                     ival_seg_t = IntervalTree([Interval(l, r + 1)])
                     # print("touches " + str(used_segs[chrom][l:r]))
 
-                    for x in used_segs[chrom][l:r]:
-                        ival_seg_t.chop(x.begin, x.end + 1)
+                    for x in used_segs[chrom][l:r + 1]:
+                        ival_seg_t.chop(x.begin, x.end)
 
                     if ival_seg_t:
                         other_class_c_inds.append(o_ind)
 
                     for sub_ival_seg in ival_seg_t:
                         # chop out low cn regions
-                        l, r = sub_ival_seg.begin, sub_ival_seg.end
-                        seg_t = IntervalTree([Interval(l, r + 1)])
-                        olapping_low_cns = [x for x in graph_cns[chrom][l:r + 1]
+                        sub_l, sub_r = sub_ival_seg.begin, sub_ival_seg.end
+                        if sub_l == sub_r:
+                            continue
+
+                        seg_t = IntervalTree([Interval(sub_l, sub_r)])
+                        olapping_low_cns = [x for x in graph_cns[chrom][sub_l:sub_r]
                                             if x.data < ConfigVars.min_amp_cn and ampClass != "Virus"]
                         for x in olapping_low_cns:
-                            seg_t.chop(x.begin, x.end + 1)
+                            if x.begin != x.end:
+                                seg_t.chop(x.begin, x.end)
 
                         for x in seg_t:
                             other_interval_dict[chrom].append((x.begin, x.end))
