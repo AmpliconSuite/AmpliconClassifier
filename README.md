@@ -136,6 +136,8 @@ The possibilities for ecDNA context classification are
 | Heavily rearranged multichromosomal | ecDNA from a heavily rearranged genome involving multiple chromosomes. Possibly due to chromothripsis and chromoplexy. |
 | Unknown | Does not match any of the classes above. |
 
+We suggest that `Simple circular simple background` and `Two-foldback` are most closely associated with simple excisional ecDNA. `Simple circular complex background`, `BFB-like`, `Heavily rearranged uni/multichromosomal` are most closely associated with chromothripsis.
+
 #### Amplicon bed files, annotated cycles, and SV summaries
 Additionally, there are three directories  created by `amplicon_classifier.py`. They are
 - `[prefix]_classification_bed_files/`, which contains bed files of the regions classified into each feature. May contain bed files marked `unknown` if the region could not be confidently assigned.
