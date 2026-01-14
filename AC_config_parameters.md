@@ -1,6 +1,6 @@
 # AmpliconClassifier Configuration Parameters
 
-This document describes all configuration parameters available in AmpliconClassifier's `config.json` file. These parameters control various aspects of amplicon classification, including size thresholds, copy number cutoffs, and structural variant detection criteria.
+This document describes all configuration parameters available in AmpliconClassifier's `default_config.json` file. These parameters control various aspects of amplicon classification, including size thresholds, copy number cutoffs, and structural variant detection criteria.
 
 ---
 
@@ -76,7 +76,7 @@ This document describes all configuration parameters available in AmpliconClassi
 
 ### `compCut`
 - **Default:** 0.3
-- **Description:** Minimum proportion of cycle weight attributed to complex (non-cyclic or complex-cyclic) structures for classification purposes.
+- **Description:** Minimum proportion of cycle weight attributed to "complex" (complex non-cyclic and cyclic) structures for classification purposes.
 - **Usage:** Used in `classifyAmpliconProfile()` as an alternative pathway for classification when cyclic signatures don't dominate.
 
 ---
@@ -91,7 +91,7 @@ This document describes all configuration parameters available in AmpliconClassi
 ### `segdup_max_extra_fraction`
 - **Default:** 0.25
 - **Description:** Maximum additional copy number ratio beyond the baseline 2× (diploid) for a region to be classified as a segmental duplication. For example, with default value 0.25, the cycle CN / border CN ratio must be ≤ 2.25 to be called a segmental duplication.
-- **Usage:** In `segdup_cycle()`, the ratio of cycle CN to flanking CN is calculated. If `(ratio - 2) <= segdup_max_extra_fraction`, and other criteria are met, the cycle may be called a segmental duplication rather than a true amplification.
+- **Usage:** In `segdup_cycle()`, the ratio of cycle CN to flanking CN is calculated. If `(ratio - 2) <= segdup_max_extra_fraction`, and other criteria are met, the cycle may be called a linear segmental duplication rather than an ecDNA amplification.
 
 ---
 
@@ -99,7 +99,7 @@ This document describes all configuration parameters available in AmpliconClassi
 
 ### `decomposition_strictness`
 - **Default:** 0.1
-- **Description:** Scaling factor (between 0 and 1) controlling how strictly to filter low copy number decomposed paths/cycles. Higher values filter more aggressively, removing more low-weight decompositions. Used to scale the CN threshold for singleton paths/cycles when determining validity.
+- **Description:** Scaling factor (between 0 and 1) controlling how strictly to filter low copy number decomposed paths/cycles. Higher values filter more aggressively, removing more low-weight decompositions. When multiplied against the maximum copy number found in the amplicon, it defines the minimum assigned CN a trivial valid cycle can have. Used to control the CN threshold for singleton paths/cycles when determining validity.
 - **Usage:** 
   - In `cycleIsNoAmpInvalid()`, multiplied by `maxCN` to create a threshold: `scale = min(min_flow, maxCN * decomposition_strictness)`
   - Can be overridden with `--decomposition_strictness` command-line argument
@@ -126,7 +126,7 @@ BFB is a specific type of genomic amplification mechanism characterized by inver
 
 ### `fb_break_weight_prop`
 - **Default:** 0.3
-- **Description:** Minimum proportion of utilized path/cycle structural variants that must support BFB foldback patterns, weighted by flow. This measures how dominant the BFB signature is among all structural variants in the amplicon.
+- **Description:** Minimum proportion of utilized path/cycle structural variants that must support BFB foldback patterns, where each SV is weighted by the path/cycle's assigned CN. This measures how dominant the BFB signature is among all structural variants in the amplicon, weighted by how dominant the path/cycle is.
 - **Usage:** In `classifyBFB()`, if `fb_bwp < fb_break_weight_prop`, BFB classification is rejected.
 
 ### `fb_dist_cut`
@@ -138,12 +138,12 @@ BFB is a specific type of genomic amplification mechanism characterized by inver
 
 ### `max_nonbfb_break_weight`
 - **Default:** 0.5
-- **Description:** Maximum proportion of utilized path/cycle structural variants that can support non-foldback (distal) connections while still calling BFB. If too many SVs are non-foldback, the amplicon likely isn't a pure BFB.
+- **Description:** Maximum proportion of utilized path/cycle structural variants that can support non-foldback SV connections while still calling BFB, where each SV is weighted by the path/cycle's assigned CN. If too many SVs are non-foldback, the amplicon likely isn't a pure BFB.
 - **Usage:** In `classifyBFB()` (via `cycles_file_bfb_props()`), if `nonbfb_sig > max_nonbfb_break_weight`, additional checks on cycle ratio are required.
 
 ### `min_bfb_cycle_weight_ratio`
 - **Default:** 0.6
-- **Description:** Minimum flow×length weighted proportion of BFB-like paths/cycles required for BFB classification when non-BFB content is also present. This ensures BFB structures dominate the amplicon.
+- **Description:** Minimum cycle CN × length-weighted proportion of BFB-like paths/cycles required for BFB classification when non-BFB content is also present. This ensures BFB structures dominate the amplicon.
 - **Usage:** In `classifyBFB()`, when non-BFB signal is high, `bfb_cyc_ratio` must exceed this threshold to maintain BFB classification.
 
 ---
