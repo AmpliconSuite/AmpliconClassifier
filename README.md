@@ -79,12 +79,18 @@ Note that amplicons receiving a "Cyclic" classification may be ecDNA+, BFB+ or b
 |--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `sample_name`                  | Sample name prefix                                                                                                                                                                      |
 | `amplicon_number`              | AA amplicon index, e.g. `amplicon2`                                                                                                                                        |
-| `amplicon_decomposition_class` | Abstract description of the AA amplicon type. Note that `Cyclic` can refer to either BFB or ecDNA. Please see the following columns for that distinction.                                                                                    |
+| `amplicon_decomposition_class` | Abstract description of the AA amplicon type.                                                                                   |
 | `ecDNA+`                       | Prediction about whether the AA amplicon contains ecDNA. Note, an AA amplicon may contain regions surrounding the ecDNA, or multiple linked ecDNA. Either `Positive` or `None detected` |
 | `BFB+`                         | Prediction about whether the AA amplicon is the result of a BFB. Either `Positive` or `None detected`                                                                                   |
-| `ecDNA_amplicons`              | Predicted number of distinct (non-overlapping) ecDNA which are represented in a single AA amplicon. This estimate is highly experimental.                                               |
+| `ecDNA_amplicons`              | Predicted number of distinct (non-overlapping) ecDNA which are represented in a single AA amplicon. This estimate is experimental.                                               |
 
-Because an ecDNA may overlap with a BFB, they are reported separately.
+The `amplicon_decomposition_class` is an abstract label and can be one of five classes:
+
+- `Cyclic`: This indicates the amplicon is bioinformatically cyclic (genome cycles) - and may be either an ecDNA or BFB (check `ecDNA+` and `BFB+` columns)
+- `Complex non-cyclic`: (CNC) The amplicon contains a focal amplification with significant rearrangements (e.g. derived by chromothripsis), but does not contain genome cycles characteristic of ecDNA. However, this may class still contain a BFB (check `BFB+` column).
+- `Linear`: A focal amplification with few to no significant rearrangments evident - frequently the exact mechanism is unclear. Label also includes low CN focal amplifications caused by tandem duplications.
+- `No amp/Invalid`: The AA amplicon does not correspond to a valid focal amplification after applying AC's filters.
+- `Virus`: If the GRCh38_viral reference was used with AA, then this amplicon corresponds to a viral genome.
 
 #### ****`[prefix]_gene_list.tsv`****
 Reports the genes present on amplicons with each classification, and which genomic feature (e.g. ecDNA_1, BFB_1, etc), it is located on, along with the copy number and which end(s) of the gene have been lost ("truncated"), will be one of `None`, `5p` (5-prime end), `3p` (3-prime end) or `5p_3p` if both. Genes are sourced from RefGene and most lncRNAs and micro-RNAs are excluded from the report.
