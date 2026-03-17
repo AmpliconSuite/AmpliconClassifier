@@ -45,12 +45,12 @@ def summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD):
         fl = []
         for f, intd in feature_dict.items():
             hitl, hitr = False, False
-            for p in intd[c1]:
+            for p in intd.get(c1, []):
                 if p[0] <= p1 <= p[1]:
                     hitl = True
                     break
 
-            for p in intd[c2]:
+            for p in intd.get(c2, []):
                 if p[0] <= p2 <= p[1]:
                     hitr = True
                     break
@@ -233,8 +233,8 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                     for ec_feat in ec_feat_names:
                         ec_interval_dict = feature_dict[ec_feat]
                         # segment touches the start and end
-                        l_hits = any([s <= l <= e for s, e in ec_interval_dict[chrom]])
-                        r_hits = any([s <= r <= e for s, e in ec_interval_dict[chrom]])
+                        l_hits = any([s <= l <= e for s, e in ec_interval_dict.get(chrom, [])])
+                        r_hits = any([s <= r <= e for s, e in ec_interval_dict.get(chrom, [])])
                         if l_hits and r_hits:
                             # chop out low cn regions
                             seg_t = IntervalTree([Interval(l, r + 1)])
@@ -290,11 +290,32 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                             other_interval_dict[chrom].append((x.begin, x.end))
 
         if not ecStat and not bfbStat:
-            feature_dict[ampClass + "_1"] = other_interval_dict
+            # If all segments were filtered by CN but viral segments exist, reclassify as Virus
+            if not other_interval_dict and ref == "GRCh38_viral":
+                viral_interval_dict = defaultdict(list)
+                for o_ind in range(len(cycleList)):
+                    if o_ind not in all_used and is_viral(ref, cycleList[o_ind], segSeqD):
+                        for c_id in cycleList[o_ind]:
+                            chrom, l, r = segSeqD[abs(c_id)]
+                            if not chrom or chrom.startswith("chr"):
+                                continue  # skip sentinel and human segments
+                            # viral segment - include without CN filtering
+                            ival_seg_t = IntervalTree([Interval(l, r + 1)])
+                            for x in used_segs[chrom][l:r + 1]:
+                                ival_seg_t.chop(x.begin, x.end)
+                            for sub_ival_seg in ival_seg_t:
+                                sub_l, sub_r = sub_ival_seg.begin, sub_ival_seg.end
+                                if sub_l != sub_r:
+                                    viral_interval_dict[chrom].append((sub_l, sub_r))
+                if viral_interval_dict:
+                    feature_dict["Virus_1"] = viral_interval_dict
+                    ampClass = "Virus"
+            else:
+                feature_dict[ampClass + "_1"] = other_interval_dict
         else:
             feature_dict["unknown_1"] = other_interval_dict
 
     merge_intervals(feature_dict)
     bpg_linelist = summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD)
     prop_dict = amplicon_len_and_cn(feature_dict, gseg_cn_d)
-    return bpg_linelist, gseg_cn_d, other_class_c_inds, feature_dict, prop_dict
+    return bpg_linelist, gseg_cn_d, other_class_c_inds, feature_dict, prop_dict, ampClass

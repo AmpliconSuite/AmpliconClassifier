@@ -116,7 +116,7 @@ def pos_str_int(pos):
     return res
 
 def cycleOverlapFraction(edge, filtered_sequences):
-    #Get the fraction of copy numbee accounted by sequences that overlap with the cycle (single everted edge)
+    #Get the fraction of copy number accounted by sequences that overlap with the cycle (single everted edge)
     start, end = abs(pos_str_int(edge['end'])), abs(pos_str_int(edge['start']))
     # end, start flipped above to maintain increasing order
     total_cn = 0
@@ -483,7 +483,6 @@ def simpleEverted(largest_cycle, filtered_sequences, filtered_edges):
         return everted, sequences_outside, edges_outside
     
     return edge_found, filtered_sequences, filtered_edges
-
 
 
 def ecDNAContext(metrics, t_n_cutoff = 4, cycle_cutoff = 0.15):

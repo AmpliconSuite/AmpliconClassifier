@@ -129,3 +129,6 @@ dmypy.json
 
 #Pycharm .idea
 .idea/
+
+# Developer stuff
+CLAUDE.md

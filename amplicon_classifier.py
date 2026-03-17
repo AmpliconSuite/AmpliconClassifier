@@ -984,7 +984,7 @@ def run_classification(segSeqD, cycleList, cycleCNs):
                                                                         bfb_cycle_inds, set())
         featEntropyD[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
 
-    bpg_linelist, gseg_cn_d, other_class_c_inds, feature_dict, prop_dict = amplicon_annotation(cycleList, segSeqD,
+    bpg_linelist, gseg_cn_d, other_class_c_inds, feature_dict, prop_dict, ampClass = amplicon_annotation(cycleList, segSeqD,
         bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass, graphFile, args.add_chr_tag, lcD, args.ref)
 
     bpgi_list.append(bpg_linelist)

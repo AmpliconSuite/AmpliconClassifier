@@ -15,26 +15,46 @@ See the section at the end of the README for information about the legacy versio
 
 ### 1. Installation
 
-AmpliconClassifier is included with [AmpliconSuite-pipeline](https://github.com/AmpliconSuite/AmpliconSuite-pipeline), but for re-classification, you may wish to keep a standalone installation of this module, using the instructions below.
+AmpliconClassifier is included with [AmpliconSuite-pipeline](https://github.com/AmpliconSuite/AmpliconSuite-pipeline), but for standalone re-classification you can install it directly using the steps below.
 
-#### Requirements
-- Either python 2.7+ or python 3.0+
-- `intervaltree`, `scipy`, `pandas`, `pysam` python libraries:  
->`conda install intervaltree scipy pandas pysam`  # or `pip install intervaltree scipy pandas pysam`
-- `$AA_DATA_REPO` environment variable and data repo files. See instructions [here](https://github.com/AmpliconSuite/AmpliconArchitect#setting-up-the-aa-data-repo). 
-- (optional) `matplotlib`: `conda install matplotlib-base` or `pip install matplotlib`
-
-Mac users will need to perform one additional installation step:
+#### Step 1: Create and activate a conda environment
 ```bash
-brew install coreutils
+conda create -n ampliconclassifier python=3
+conda activate ampliconclassifier
 ```
 
-#### Setup:
+#### Step 2: Install dependencies
+```bash
+# Required
+conda install -c conda-forge -c bioconda intervaltree scipy pandas
+
+# Optional: needed only for check_SV_support.py and BAM-based SV validation
+conda install -c bioconda pysam
+
+# Optional: needed only for classification plots
+conda install -c conda-forge matplotlib-base
+```
+
+If you prefer pip:
+```bash
+pip install intervaltree scipy pandas
+# optional: pip install pysam matplotlib
+```
+
+#### Step 3: Clone the repository and set the source path
 ```bash
 git clone https://github.com/jluebeck/AmpliconClassifier.git
 cd AmpliconClassifier
 echo export AC_SRC=$PWD >> ~/.bashrc
 source ~/.bashrc
+```
+
+#### Step 4: Set up the AA data repo
+Set the `$AA_DATA_REPO` environment variable pointing to the reference genome data. See setup instructions [here](https://github.com/AmpliconSuite/AmpliconArchitect#setting-up-the-aa-data-repo).
+
+Mac users will also need:
+```bash
+brew install coreutils
 ```
 
 
