@@ -19,32 +19,39 @@ AmpliconClassifier is included with [AmpliconSuite-pipeline](https://github.com/
 
 #### Step 1: Create and activate a conda environment
 ```bash
-conda create -n ampliconclassifier python=3
+conda create -n ampliconclassifier "python>=3.8"
 conda activate ampliconclassifier
 ```
 
 #### Step 2: Install dependencies
 ```bash
 # Required
-conda install -c conda-forge -c bioconda intervaltree scipy pandas
+conda install -c conda-forge -c bioconda intervaltree scipy pandas numpy matplotlib-base
 
 # Optional: needed only for check_SV_support.py and BAM-based SV validation
 conda install -c bioconda pysam
 
-# Optional: needed only for classification plots
-conda install -c conda-forge matplotlib-base
+# Optional: needed only for coordinate lifting utility scripts
+conda install -c conda-forge pyliftover
 ```
 
-If you prefer pip:
+If you prefer pip, clone the repository first and then install from the source tree in Step 3. The pip dependency list is also available in `requirements.txt`:
+
 ```bash
-pip install intervaltree scipy pandas
-# optional: pip install pysam matplotlib
+pip install -r requirements.txt
+# optional: pip install pysam pyliftover
 ```
 
-#### Step 3: Clone the repository and set the source path
+#### Step 3: Clone and install AmpliconClassifier
 ```bash
 git clone https://github.com/jluebeck/AmpliconClassifier.git
 cd AmpliconClassifier
+python -m pip install -e .
+```
+
+For older workflows that call scripts directly from the source tree, you may still set `$AC_SRC`:
+
+```bash
 echo export AC_SRC=$PWD >> ~/.bashrc
 source ~/.bashrc
 ```
@@ -56,6 +63,16 @@ Mac users will also need:
 ```bash
 brew install coreutils
 ```
+
+#### Optional: BFBArchitect
+
+AmpliconClassifier can annotate amplicon classification profiles with BFBArchitect scores when `--bfbarchitect --verbose_classification` is used. BFBArchitect is not installed as an AmpliconClassifier dependency yet, so install it separately:
+
+```bash
+python -m pip install -e /path/to/BFBArchitect
+```
+
+These scores are reported for inspection only and do not currently change AmpliconClassifier classifications.
 
 
 ### 2. Usage
@@ -201,6 +218,7 @@ Else if running on multiple amplicons, use argument
 | `--no_LC_filter`                                | Set this to turn off filtering low-complexity & poor mappability genome region paths & cycles based on the regions in the AA data repo.                                                                              |
 | `--filter_similar`                              | Permits filtering of false-positive amps arising in multiple independent samples based on similarity calculation. Only use if all samples are of independent origins (not replicates and not multi-region biopsies). |
 | `--make_results_table`                          | Creates summary results table (_results_table.tsv) after classification completes.                                                                                                                                   |
+| `--bfbarchitect`                                | Run BFBArchitect and add score summaries to verbose amplicon classification profiles. Scores are annotation-only and do not change classifications.                                                                    |
 | `-i/--input`                                    | If you have already run `make_input.sh`, you can give the resulting .input file instead of setting `--AA_results`                                                                                                    | 
 
 ### 5. Other utilities:

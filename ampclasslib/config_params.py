@@ -32,7 +32,8 @@ DEFAULT_CONFIG = {
     "fb_break_weight_prop": 0.3,       # min proportion of utilized path/cycle SVs supporting BFB foldbacks (weighted by flow)
     "fb_dist_cut": 25000,              # max distance between ends for inversion to be foldback
     "max_nonbfb_break_weight": 0.5,    # max proportion of utilized path/cycle SVs supporting non-foldback connections
-    "min_bfb_cycle_weight_ratio": 0.6  # minimum flow*length weighted proportion of BFB-like paths/cycles for BFB
+    "min_bfb_cycle_weight_ratio": 0.6,  # minimum flow*length weighted proportion of BFB-like paths/cycles for BFB
+    "bfbarchitect_max_score": 2.8      # maximum BFBArchitect score considered passing
 }
 
 

@@ -146,6 +146,11 @@ BFB is a specific type of genomic amplification mechanism characterized by inver
 - **Description:** Minimum cycle CN × length-weighted proportion of BFB-like paths/cycles required for BFB classification when non-BFB content is also present. This ensures BFB structures dominate the amplicon.
 - **Usage:** In `classifyBFB()`, when non-BFB signal is high, `bfb_cyc_ratio` must exceed this threshold to maintain BFB classification.
 
+### `bfbarchitect_max_score`
+- **Default:** 2.8
+- **Description:** Maximum BFBArchitect reconstruction score considered passing. Lower BFBArchitect scores indicate a more parsimonious reconstruction.
+- **Usage:** When `--bfbarchitect` is enabled, first-pass BFBArchitect graph-region results are considered passing at or below this score. If no candidate regions are returned, or all candidate regions score above this cutoff, AmpliconClassifier calls BFBArchitect again with `whole_graph=True`.
+
 ---
 
 ## Customizing Parameters
@@ -207,4 +212,3 @@ BFB classification requires multiple criteria to be met simultaneously:
 - Copy number parameters are in absolute copy number units
 - Parameters marked with command-line override options provide runtime flexibility
 - Most parameters have been empirically tuned based on analysis of real cancer genomics data
-

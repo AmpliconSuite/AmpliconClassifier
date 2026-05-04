@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "AmpliconClassifier"
+dynamic = ["version"]
+description = "Classify AmpliconArchitect outputs by focal amplification type"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "BSD-2-Clause"}
+authors = [
+    {name = "Bafna Lab"}
+]
+dependencies = [
+    "intervaltree",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "scipy",
+]
+
+[project.optional-dependencies]
+bam = ["pysam"]
+liftover = ["pyliftover"]
+
+[project.urls]
+Homepage = "https://github.com/AmpliconSuite/AmpliconClassifier"
+Repository = "https://github.com/AmpliconSuite/AmpliconClassifier"
+
+[tool.setuptools.dynamic]
+version = {attr = "ampclasslib._version.__ampliconclassifier_version__"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ampclasslib*"]
+exclude = ["legacy_natgen_2020*"]
+
+[tool.setuptools]
+script-files = [
+    "amplicon_classifier.py",
+    "feature_similarity.py",
+    "make_results_table.py",
+    "ampclasslib/check_SV_support.py",
+    "ampclasslib/convert_cycles_file.py",
+    "ampclasslib/ecDNA_context.py",
+    "ampclasslib/make_input.sh",
+    "ampclasslib/profile_connections.py",
+    "scripts/amplicons_intersecting_bed.py",
+    "scripts/lift_AC_coords.py",
+    "scripts/results_comparator.py",
+    "scripts/softlink_images.py",
+]
+include-package-data = true
+
+[tool.setuptools.package-data]
+ampclasslib = [
+    "default_config.json",
+    "make_input.sh",
+    "resources/*",
+]

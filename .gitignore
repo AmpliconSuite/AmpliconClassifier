@@ -79,6 +79,7 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+notebooks/
 
 # IPython
 profile_default/
@@ -132,3 +133,4 @@ dmypy.json
 
 # Developer stuff
 CLAUDE.md
+AGENTS.md

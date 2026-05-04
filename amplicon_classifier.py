@@ -7,6 +7,7 @@ import copy
 import logging
 from math import log
 import operator
+import os
 import re
 import subprocess
 import sys
@@ -22,6 +23,11 @@ from ampclasslib._version import __ampliconclassifier_version__
 
 
 add_chr_tag = False
+BFBARCHITECT_RECONSTRUCT = None
+BFBARCHITECT_WRITE_GRAPH = None
+BFBARCHITECT_WRITE_CYCLES = None
+BFBARCHITECT_VISUALIZE = None
+BFBARCHITECT_CENTROMERES = None
 
 # ------------------------------------------------------------
 # Methods to compute values used in classification
@@ -635,6 +641,200 @@ def classifyBFB(fb_read_prop, fb_bwp, nonbfb_sig, bfb_cyc_ratio, maxCN, tot_over
 
     return "BFB"
 
+
+def empty_bfbarchitect_summary():
+    return {
+        "min_score": "NA",
+        "passing_region_count": "NA",
+        "multiplicities": "NA",
+        "regions": "NA",
+        "whole_graph_used": "NA"
+    }
+
+
+def format_bfbarchitect_score(score):
+    if score is None:
+        return "NA"
+
+    return "{:.6g}".format(score)
+
+
+def summarize_bfbarchitect_results(results, whole_graph_used):
+    all_scores = []
+    passing_regions = 0
+    multiplicities = []
+    region_strings = []
+
+    for res in results or []:
+        raw_scores = res.get("scores", [])
+        if raw_scores is None:
+            raw_scores = []
+        elif not isinstance(raw_scores, (list, tuple)):
+            raw_scores = [raw_scores]
+
+        scores = []
+        for score in raw_scores:
+            try:
+                scores.append(float(score))
+            except (TypeError, ValueError):
+                continue
+
+        region_min = min(scores) if scores else None
+        if region_min is not None:
+            all_scores.append(region_min)
+            if region_min <= ConfigVars.bfbarchitect_max_score:
+                passing_regions += 1
+
+        multiplicity = res.get("multiplicity", "NA")
+        multiplicities.append(str(multiplicity))
+
+        region = res.get("region", "NA")
+        if isinstance(region, (list, tuple)) and len(region) >= 3:
+            region_label = "{}:{}-{}".format(region[0], region[1], region[2])
+        else:
+            region_label = str(region)
+
+        region_strings.append("{}:{}:{}".format(region_label, format_bfbarchitect_score(region_min), multiplicity))
+
+    if not all_scores and not region_strings:
+        return empty_bfbarchitect_summary()
+
+    return {
+        "min_score": format_bfbarchitect_score(min(all_scores) if all_scores else None),
+        "passing_region_count": str(passing_regions),
+        "multiplicities": ";".join(multiplicities) if multiplicities else "NA",
+        "regions": ";".join(region_strings) if region_strings else "NA",
+        "whole_graph_used": str(whole_graph_used)
+    }
+
+
+def should_retry_bfbarchitect_whole_graph(results):
+    if not results:
+        return True
+
+    all_scores = []
+    for res in results:
+        raw_scores = res.get("scores", [])
+        if raw_scores is None:
+            continue
+        elif not isinstance(raw_scores, (list, tuple)):
+            raw_scores = [raw_scores]
+
+        for score in raw_scores:
+            try:
+                all_scores.append(float(score))
+            except (TypeError, ValueError):
+                continue
+
+    return not all_scores or all(score > ConfigVars.bfbarchitect_max_score for score in all_scores)
+
+
+def write_bfbarchitect_outputs(results, output_prefix, whole_graph_used):
+    if not args.verbose_classification:
+        return
+
+    if not results:
+        return
+
+    if BFBARCHITECT_WRITE_GRAPH is None or BFBARCHITECT_WRITE_CYCLES is None or BFBARCHITECT_VISUALIZE is None:
+        return
+
+    output_dir = os.path.join(os.path.dirname(args.o), "bfbarchitect_outputs")
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+    except OSError as e:
+        logger.warning("Could not create BFBArchitect output directory {}: {}".format(output_dir, str(e)))
+        return
+
+    for i, res in enumerate(results, 1):
+        suffix = "whole_graph" if whole_graph_used else "region{}".format(i)
+        region_prefix = os.path.join(output_dir, "{}_{}".format(output_prefix, suffix))
+        graph_out = "{}_BFB_graph.txt".format(region_prefix)
+        cycles_out = "{}_BFB_cycles.txt".format(region_prefix)
+
+        try:
+            BFBARCHITECT_WRITE_GRAPH(graph_out, res["new_segments"], res["svs"], res["sv_info"])
+            BFBARCHITECT_WRITE_CYCLES(cycles_out, res["new_segments"], res["bfb_strings"], res["scores"],
+                                      res["multiplicity"])
+            BFBARCHITECT_VISUALIZE(cycle_file=cycles_out, graph_file=graph_out, cnr_file=None,
+                                   output_prefix="{}_BFB".format(region_prefix), multiple=False,
+                                   centromere_dict=BFBARCHITECT_CENTROMERES)
+        except Exception as e:
+            logger.warning("Could not write BFBArchitect outputs for {}: {}".format(region_prefix, str(e)))
+
+
+def run_bfbarchitect(graphf, fb_edges, output_prefix):
+    if not args.bfbarchitect:
+        return empty_bfbarchitect_summary()
+
+    if fb_edges == 0:
+        return empty_bfbarchitect_summary()
+
+    if BFBARCHITECT_RECONSTRUCT is None:
+        return empty_bfbarchitect_summary()
+
+    if BFBARCHITECT_CENTROMERES is None:
+        return empty_bfbarchitect_summary()
+
+    try:
+        results = BFBARCHITECT_RECONSTRUCT(graphf, centromere_dict=BFBARCHITECT_CENTROMERES, solver=None,
+                                           multiple=False, whole_graph=False, threads=args.bfb_threads)
+        whole_graph_used = False
+        if should_retry_bfbarchitect_whole_graph(results):
+            results = BFBARCHITECT_RECONSTRUCT(graphf, centromere_dict=BFBARCHITECT_CENTROMERES, solver=None,
+                                               multiple=False, whole_graph=True, threads=args.bfb_threads)
+            whole_graph_used = True
+
+        summary = summarize_bfbarchitect_results(results, whole_graph_used)
+        write_bfbarchitect_outputs(results, output_prefix, whole_graph_used)
+        return summary
+
+    except Exception as e:
+        logger.warning("BFBArchitect failed for {}: {}".format(graphf, str(e)))
+        return empty_bfbarchitect_summary()
+
+
+def get_bfbarchitect_centromere_path(aa_data_repo_base, ref):
+    if ref == "GRCh38_viral":
+        c_ref = "GRCh38"
+        c_file = "GRCh38_centromere.bed"
+    elif ref == "GRCh37":
+        c_ref = "GRCh37"
+        c_file = "human_g1k_v37_centromere.bed"
+    else:
+        c_ref = ref
+        c_file = ref + "_centromere.bed"
+
+    return os.path.join(aa_data_repo_base, c_ref, c_file)
+
+
+def load_bfbarchitect_centromeres(aa_data_repo_base, ref):
+    centromere_path = get_bfbarchitect_centromere_path(aa_data_repo_base, ref)
+    if not os.path.exists(centromere_path):
+        logger.warning("BFBArchitect centromere BED not found: {}. Skipping BFBArchitect.".format(centromere_path))
+        return None
+
+    centromeres = {}
+    with open(centromere_path) as infile:
+        for line in infile:
+            if not line.strip() or line.startswith("#"):
+                continue
+
+            fields = line.rstrip().rsplit()
+            if len(fields) < 3:
+                continue
+
+            chrom, start, end = fields[:3]
+            centromeres[chrom] = int((int(start) + int(end)) / 2)
+
+    if not centromeres:
+        logger.warning("BFBArchitect centromere BED contained no usable intervals: {}. Skipping BFBArchitect.".format(
+            centromere_path))
+        return None
+
+    return centromeres
+
+
 # ------------------------------------------------------------
 
 
@@ -931,6 +1131,8 @@ def run_classification(segSeqD, cycleList, cycleCNs):
         else:
             ampClass = "No amp/Invalid"
 
+    bfbarchitect_summaries.append(run_bfbarchitect(graphFile, fb_edges, "{}_amplicon{}".format(sName, ampN)))
+
     ecStat = False
     bfbStat = False
     if ampClass == "Cyclic" and not bfbClass:
@@ -1074,6 +1276,9 @@ if __name__ == "__main__":
                         "uses default config in ampclasslib directory.")
     parser.add_argument("--make_results_table", help="Create summary results table after classification completes. "
                         "Only works when using --AA_results or --input (not with -c/-g single amplicon mode).", action='store_true')
+    parser.add_argument("--bfbarchitect", help="Enable BFBArchitect score annotation. Results are reported in verbose "
+                        "classification profiles and do not change classifications.", action='store_true')
+    parser.add_argument("--bfb_threads", help="Number of threads for BFBArchitect ILP solver.", type=int, default=1)
     parser.add_argument("-v", "--version", action='version', version=__ampliconclassifier_version__)
     args = parser.parse_args()
 
@@ -1177,6 +1382,11 @@ if __name__ == "__main__":
     elif args.ref == "GRCm38":
         args.ref = "mm10"
 
+    if args.bfbarchitect and args.ref == "hg19" and args.add_chr_tag:
+        logger.error("--bfbarchitect cannot be used with --ref hg19 --add_chr_tag because BFBArchitect reads raw "
+                     "graph chromosome names and the matching hg19/GRCh37 centromere source is ambiguous.")
+        sys.exit(1)
+
     patch_links = read_patch_regions(args.ref)
     ncRNAFileLoc = get_ncrna_file_loc(args.ref)
 
@@ -1192,7 +1402,8 @@ if __name__ == "__main__":
 
     # check if aa data repo set, construct low-complexity (LC) datatabase
     try:
-        AA_DATA_REPO = os.environ["AA_DATA_REPO"] + "/" + args.ref + "/"
+        AA_DATA_REPO_BASE = os.environ["AA_DATA_REPO"]
+        AA_DATA_REPO = AA_DATA_REPO_BASE + "/" + args.ref + "/"
         fDict = {}
         with open(AA_DATA_REPO + "file_list.txt") as infile:
             for line in infile:
@@ -1207,6 +1418,20 @@ if __name__ == "__main__":
     except KeyError:
         logger.error("$AA_DATA_REPO not set. Please see AA installation instructions.")
         sys.exit(1)
+
+    if args.bfbarchitect:
+        try:
+            from bfbarchitect import reconstruct_bfb_from_graph, write_bfb_graph, write_bfb_cycles, visualize_BFB
+            BFBARCHITECT_RECONSTRUCT = reconstruct_bfb_from_graph
+            BFBARCHITECT_WRITE_GRAPH = write_bfb_graph
+            BFBARCHITECT_WRITE_CYCLES = write_bfb_cycles
+            BFBARCHITECT_VISUALIZE = visualize_BFB
+            BFBARCHITECT_CENTROMERES = load_bfbarchitect_centromeres(AA_DATA_REPO_BASE, args.ref)
+            if BFBARCHITECT_CENTROMERES:
+                logger.info("BFBArchitect integration enabled.")
+
+        except ImportError:
+            logger.warning("BFBArchitect is not installed. Skipping BFBArchitect annotation.")
 
     if args.exclude_bed:
         addtnl_lcD = buildLCDatabase(args.exclude_bed, filtsize=0)
@@ -1234,6 +1459,7 @@ if __name__ == "__main__":
     AMP_dvaluesList = []
     # EDGE_dvaluesList = []
     AMP_classifications = []
+    bfbarchitect_summaries = []
     sampNames = []
     cyclesFiles = []
     featEntropyD = {}
@@ -1243,7 +1469,7 @@ if __name__ == "__main__":
     full_featname_to_intervals = {}
 
     # ITERATE OVER FILES CONDUCT THE CLASSIFICATION
-    for fpair in flist:
+    for i, fpair in enumerate(flist, 1):
         if len(fpair) > 2:
             orig_sName, cyclesFile, graphFile = fpair[:3]
             #sName = orig_sName.rsplit("_amplicon")[0]
@@ -1252,7 +1478,7 @@ if __name__ == "__main__":
             cyclesFiles.append(cyclesFile)
             ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
             samp_amp_to_graph[sName + "_" + ampN] = graphFile
-            logger.info(sName + " " + ampN)
+            logger.info("[{}/{}] {} {}".format(i, len(flist), sName, ampN))
             segSeqD, cycleList, cycleCNs = parseCycle(cyclesFile, graphFile, add_chr_tag, lcD, patch_links)
             if args.ref == "hg19" or args.ref == "GRCh37":
                 chroms = set([x[0] for k,x in segSeqD.items() if k != 0])
@@ -1283,7 +1509,7 @@ if __name__ == "__main__":
     # OUTPUT FILE WRITING
     write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, samp_to_ec_count, fd_list, samp_amp_to_graph, prop_list,
-                  summary_map)
+                  summary_map, bfbarchitect_summaries)
 
     if args.make_results_table:
         logger.info("Creating results table...")

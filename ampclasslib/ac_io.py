@@ -367,7 +367,7 @@ def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, 
 
 def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, samp_to_ec_count, fd_list,
-                  samp_amp_to_graph, prop_list, summary_map):
+                  samp_amp_to_graph, prop_list, summary_map, bfbarchitect_summaries=None):
 
     # Genes and ncRNA
     gene_extraction_outname = args.o + "_gene_list.tsv"
@@ -391,6 +391,10 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
         oh = ["sample_name", "amplicon_number", "amplicon_decomposition_class", "ecDNA+", "BFB+", "ecDNA_amplicons"]
         if args.verbose_classification:
             oh += categories
+            if args.bfbarchitect:
+                oh += ["BFBArchitect_min_score", "BFBArchitect_passing_region_count",
+                       "BFBArchitect_multiplicities", "BFBArchitect_regions",
+                       "BFBArchitect_whole_graph_used"]
 
         outfile.write("\t".join(oh) + "\n")
         for ind, sname in enumerate(sampNames):
@@ -401,6 +405,18 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
             ov = [sname.rsplit("_amplicon")[0], ampN, ampClass, ecOut, bfbOut, str(ecAmpliconCount)]
             if args.verbose_classification:
                 ov += [str(x) for x in AMP_dvaluesList[ind]]
+                if args.bfbarchitect:
+                    curr_summary = {}
+                    if bfbarchitect_summaries and ind < len(bfbarchitect_summaries):
+                        curr_summary = bfbarchitect_summaries[ind]
+
+                    ov += [
+                        str(curr_summary.get("min_score", "NA")),
+                        str(curr_summary.get("passing_region_count", "NA")),
+                        curr_summary.get("multiplicities", "NA"),
+                        curr_summary.get("regions", "NA"),
+                        str(curr_summary.get("whole_graph_used", "NA"))
+                    ]
 
             outfile.write("\t".join(ov) + "\n")
 

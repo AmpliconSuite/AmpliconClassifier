@@ -30,6 +30,7 @@ class ConfigVars:
         min_flow = 1.0
         max_nonbfb_break_weight = 0.5
         min_bfb_cycle_weight_ratio = 0.6
+        bfbarchitect_max_score = 2.8
 
 
 class breakpoint(object):
