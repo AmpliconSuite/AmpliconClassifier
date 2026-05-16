@@ -109,7 +109,7 @@ If combining data from both GRCh37 and hg19 in the same classification run, you 
 
 #### ****`[prefix]_amplicon_classification_profiles.tsv`**** 
 
-Contains an abstract classification of the amplicon, and also indicates in separate columns "BFB+" and "ecDNA+" status.
+Contains an abstract classification of the amplicon, and also indicates in separate columns "BFB+", "ecDNA+", and "chromoauxesis+" status.
 Note that amplicons receiving a "Cyclic" classification may be ecDNA+, BFB+ or both.
 
 | Column name                    | Contents                                                                                                                                                                                |
@@ -119,14 +119,16 @@ Note that amplicons receiving a "Cyclic" classification may be ecDNA+, BFB+ or b
 | `amplicon_decomposition_class` | Abstract description of the AA amplicon type.                                                                                   |
 | `ecDNA+`                       | Prediction about whether the AA amplicon contains ecDNA. Note, an AA amplicon may contain regions surrounding the ecDNA, or multiple linked ecDNA. Either `Positive` or `None detected` |
 | `BFB+`                         | Prediction about whether the AA amplicon is the result of a BFB. Either `Positive` or `None detected`                                                                                   |
+| `chromoauxesis+`                | Prediction about whether the AA amplicon has chromoauxesis-like graph structure. Either `Positive` or `None detected`                                                                   |
 | `ecDNA_amplicons`              | Predicted number of distinct (non-overlapping) ecDNA which are represented in a single AA amplicon. This estimate is experimental.                                               |
 
-The `amplicon_decomposition_class` is an abstract label and can be one of five classes:
+The `amplicon_decomposition_class` is an abstract label and can be one of six classes:
 
 - `Cyclic`: This indicates the amplicon is bioinformatically cyclic (genome cycles) - and may be either an ecDNA or BFB (check `ecDNA+` and `BFB+` columns)
 - `Complex non-cyclic`: (CNC) The amplicon contains a focal amplification with significant rearrangements (e.g. derived by chromothripsis), but does not contain genome cycles characteristic of ecDNA. However, this may class still contain a BFB (check `BFB+` column).
 - `Linear`: A focal amplification with few to no significant rearrangments evident - frequently the exact mechanism is unclear. Label also includes low CN focal amplifications caused by tandem duplications.
-- `No amp/Invalid`: The AA amplicon does not correspond to a valid focal amplification after applying AC's filters.
+- `No-FSCNA`: The AA amplicon is valid, but AC did not detect a focal significant copy-number amplification.
+- `Invalid`: The AA amplicon failed AC validity checks, such as when cycles are removed by low-complexity filtering. AC also marks high foldback-orientation artifact cases as `Invalid` and logs QC guidance for re-running AmpliconSuite-pipeline with stricter foldback pair support.
 - `Virus`: If the GRCh38_viral reference was used with AA, then this amplicon corresponds to a viral genome.
 
 #### ****`[prefix]_gene_list.tsv`****
@@ -162,6 +164,12 @@ Reports amplicon complexity scores as measured by the number of genomic segments
 | `Amp_nseg_entropy`              | Amount of entropy or diversity captured by the number of genomic segments overlapping this feature. |
 
 
+#### ****`[output_prefix]_chromoauxesis_calls.tsv`****
+Reports the chromoauxesis classifier result for each AA amplicon. The file includes `sample_name`, `amplicon_number`, `chromoauxesis_call`, `chromoauxesis_probability`, and the model features used for the call.
+
+#### ****`[output_prefix]_feature_similarity_scores.tsv`****
+Reports pairwise feature similarity scores for cross-sample feature pairs with overlapping genomic intervals. Same-sample pairs are not compared. The score table includes ecDNA, BFB, Linear, Complex-non-cyclic, and chromoauxesis features, and is written by default for each AC run. These rows are also the audit trail used by `--filter_similar`; the table is written regardless of whether filtering is enabled.
+
 #### ****`[output_prefix]_ecDNA_counts.tsv`****
 This two-column file reports the `sample_name` and the number of ecDNA identified in the samples.
 
@@ -184,12 +192,16 @@ We suggest that `Simple circular simple background` and `Two-foldback` are most 
 #### Amplicon bed files, annotated cycles, and SV summaries
 Additionally, there are three directories  created by `amplicon_classifier.py`. They are
 - `[prefix]_classification_bed_files/`, which contains bed files of the regions classified into each feature. May contain bed files marked `unknown` if the region could not be confidently assigned.
+  - Chromoauxesis-positive amplicons are reported as a numbered feature, e.g. `sample_amplicon1_chromoauxesis_1_intervals.bed`.
   - The bed files report genomic intervals using a [0-based, half-open counting system](https://genome-blog.soe.ucsc.edu/blog/2016/12/12/the-ucsc-genome-browser-coordinate-counting-systems/). This is the same system used by the UCSC genome browser.
   - By contrast, AmpliconArchitect's graph and cycles files report genomic coordinates using a 0-based, fully closed counting system. This means that intervals reported by AC will contain one additional base on the second coordinate, which is not part of the amplicon (half-open).
   - Intervals reported in these bed files do not represent the structure of ecDNA, and may face limitations related to missing SVs or inexactly refined amplicon endpoints (a limitation of short-reads).
 
 - `[prefix]_SV_summaries/`, which contains tab-separated files summarizing the SVs detected by AA and what features the overlap in the amplicon.
 - `[prefix]_annotated_cycles_files/`, which contains AA cycles files with additional annotations about length of discovered paths/cycles and their classification status. Using these annotated cycles files is preferred over the unannotated cycles file produced by AA. These cycles are filtered to remove cycles overlapping low-complexity regions of the genome, patches reference genome issues, and filters duplicate cycle entries erroneously output by AA (uncommon).
+
+#### Results table
+When `--make_results_table` is used, AC creates `[prefix]_result_table.tsv` and `[prefix]_result_data.json`. The table has one row per reported feature, including ecDNA, BFB, decomposition features, and chromoauxesis features. Chromoauxesis rows use the numbered feature ID `chromoauxesis_1`; the `Chromoauxesis probability` column reports the model probability for each amplicon.
 
 
 ### 4. Command-Line Options
@@ -211,7 +223,7 @@ Else if running on multiple amplicons, use argument
 | `--min_flow`                                    | Minumum cycle CN flow to consider among decomposed paths (default=1).                                                                                                                                                | 
 | `--min_size`                                    | Minimum cycle size (in bp) to consider as valid amplicon (default=5000).                                                                                                                                             |
 | `--verbose_classification`                      | Output verbose information in the `amplicon_classification_profiles.tsv` file, and create `edge_classification_profiles.tsv`. Useful for debugging.                                                                  |
-| `--force`                                       | Disable No amp/Invalid class, if possible. Use only when extremely large CN seeds were used in AA amplicon generation (>10 Mbp intervals) or if debugging.                                                           |
+| `--force`                                       | Disable No-FSCNA/Invalid class, if possible. Use only when extremely large CN seeds were used in AA amplicon generation (>10 Mbp intervals) or if debugging.                                                           |
 | `--plotstyle [noplot, individual]`              | \[experimental] Produce a radar-style plot of classification strengths. Default `noplot`.                                                                                                                            |
 | `--decomposition_strictness`                    | Value between 0 and 1 reflecting how strictly to filter low CN decompositions (default = 0.1). Higher values filter more of the low-weight decompositions.                                                           |
 | `--exclude_bed`                                 | Provide a bed file of regions to ignore during classification. Useful for separating linked amplicons or augmenting existing low-complexity annotations.                                                             |
@@ -248,7 +260,11 @@ Where "[sample]_features_to_graph.txt" is one of the output files generated by `
 (after combining both `_features_to_graph.txt` files from each run into one file).
 
 **How do I use this to perform similarity score-based filtering on my samples?**
-To remove potential false-positive focal amplificaiton calls from a collection of samples, we can use the similarity scores and p-value reported by AC. The motivating idea is that in unrelated samples, precisely conserved CN boundaries and SVs should be exceptionally rare unless they are derived from issues with the reference genome. If all samples in the collection are from unrelated sources (no replicates, no multi-region or longitudinal samples, etc.) users can simply run AC on the batch of samples setting the `--filter_similar` flag. However, if the collection contains a mixture of samples from related and unrelated sources, then some samples will likely have focal amplifications having a high degree of similarity due to being from related origins. In this case, users can run the `feature_similarity.py` script described above on the samples to produce a table of similarity scores and p-values. Users can then filter highly similar focal amplifications from unrelated samples using the p-value in the table. Since this involves multiple hypothesis testing, to control false positive rate, users can mirror what is done by internally by AC and apply a slightly modified Bonferroni correction of `alpha/(n-1)` where alpha by default is 0.05 and `n` is the number of samples in the collection having a focal amplification. 
+To remove potential false-positive focal amplification calls from a collection of samples, AC uses the similarity scores and p-value reported in `[output_prefix]_feature_similarity_scores.tsv`. The motivating idea is that in unrelated samples, precisely conserved CN boundaries and SVs should be exceptionally rare unless they are derived from issues with the reference genome. If all samples in the collection are from unrelated sources (no replicates, no multi-region or longitudinal samples, etc.) users can simply run AC on the batch of samples setting the `--filter_similar` flag. AC never compares features from the same sample during this filtering step.
+
+When `--filter_similar` is set, AC reuses the same feature similarity rows that it writes to `[output_prefix]_feature_similarity_scores.tsv`. ecDNA, BFB, Linear, and Complex-non-cyclic hits are filtered at feature scope. Chromoauxesis hits are filtered at amplicon scope: if a chromoauxesis feature is significantly similar to a feature from another sample, AC removes the whole amplicon from reported feature outputs and downgrades the amplicon to `No-FSCNA`. The chromoauxesis call for that amplicon is also cleared to `None detected`. The triggering similarity rows remain in the similarity score table for review.
+
+If the collection contains a mixture of samples from related and unrelated sources, then some samples will likely have focal amplifications having a high degree of similarity due to being from related origins. In this case, users can run the `feature_similarity.py` script described above on the samples to produce a table of similarity scores and p-values. Users can then filter highly similar focal amplifications from unrelated samples using the p-value in the table. Since this involves multiple hypothesis testing, to control false positive rate, users can mirror what is done internally by AC and apply a slightly modified Bonferroni correction of `alpha/(n-1)` where alpha by default is 0.05 and `n` is the number of samples in the collection having a focal amplification.
 
 ### SV Support Checker
 

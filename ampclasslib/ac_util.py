@@ -378,6 +378,7 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
     segSeqD = {0: (None, 0, 0)}
     cycleList = []
     cycleCNs = []
+    lc_filtered_cycles = 0
     seenCycs = set()
 
     with open(cyclef) as infile:
@@ -412,6 +413,7 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
                             break
 
                 if lcCycle:
+                    lc_filtered_cycles += 1
                     continue
 
                 elif pop_inds:
@@ -429,7 +431,7 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
                     seenCycs.add(uid)
                     cycleCNs.append(float(cd["Copy_count"]))
 
-    return segSeqD, cycleList, cycleCNs
+    return segSeqD, cycleList, cycleCNs, lc_filtered_cycles
 
 
 def get_graph_cns(gfile, add_chr_tag):

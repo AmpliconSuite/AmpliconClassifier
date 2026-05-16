@@ -169,7 +169,7 @@ def amplicon_len_and_cn(feature_dict, gseg_cn_d):
 
 
 def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass,
-                        graphf, add_chr_tag, lcD, ref):
+                        graphf, add_chr_tag, lcD, ref, chromoauxesis_intervals=None):
     feature_dict = {}
     gseg_cn_d = get_gseg_cns(graphf, add_chr_tag)
     invalidSet = set(invalidInds)
@@ -253,7 +253,7 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
 
                             break
 
-    if ampClass != "No amp/Invalid":
+    if ampClass not in {"No amp/Invalid", "No-FSCNA", "Invalid"}:
         other_interval_dict = defaultdict(list)
         for o_ind in range(len(cycleList)):
             if o_ind not in all_used:
@@ -310,10 +310,21 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                 if viral_interval_dict:
                     feature_dict["Virus_1"] = viral_interval_dict
                     ampClass = "Virus"
+                else:
+                    ampClass = "No-FSCNA"
             else:
-                feature_dict[ampClass + "_1"] = other_interval_dict
+                if other_interval_dict:
+                    feature_dict[ampClass + "_1"] = other_interval_dict
+                else:
+                    ampClass = "No-FSCNA"
         else:
             feature_dict["unknown_1"] = other_interval_dict
+
+    if chromoauxesis_intervals:
+        ca_interval_dict = defaultdict(list)
+        for chrom, ilist in chromoauxesis_intervals.items():
+            ca_interval_dict[chrom].extend(ilist)
+        feature_dict["chromoauxesis_1"] = ca_interval_dict
 
     merge_intervals(feature_dict)
     bpg_linelist = summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD)

@@ -29,6 +29,27 @@ BFBARCHITECT_WRITE_GRAPH = None
 BFBARCHITECT_WRITE_CYCLES = None
 BFBARCHITECT_VISUALIZE = None
 BFBARCHITECT_CENTROMERES = None
+NO_AMP_INVALID_INTERNAL_CLASS = "No amp/Invalid"
+NO_FSCNA_CLASS = "No-FSCNA"
+INVALID_CLASS = "Invalid"
+
+
+def is_non_feature_amplicon_class(amp_class):
+    return amp_class in {NO_AMP_INVALID_INTERNAL_CLASS, NO_FSCNA_CLASS, INVALID_CLASS}
+
+
+def amplicon_log_id(sample_name, amplicon_number):
+    return "{}_{}".format(sample_name, amplicon_number)
+
+
+def finalize_no_amp_invalid_class(amp_class, lc_filtered_cycle_count):
+    if amp_class != NO_AMP_INVALID_INTERNAL_CLASS:
+        return amp_class
+
+    if lc_filtered_cycle_count:
+        return INVALID_CLASS
+
+    return NO_FSCNA_CLASS
 
 # ------------------------------------------------------------
 # Methods to compute values used in classification
@@ -840,7 +861,7 @@ def load_bfbarchitect_centromeres(aa_data_repo_base, ref):
 
 
 def plotting():
-    textCategories = ["No amp/Invalid", "Linear\namplification", "Trivial\ncycle", "Complex\nnon-cyclic",
+    textCategories = ["No-FSCNA/\nInvalid", "Linear\namplification", "Trivial\ncycle", "Complex\nnon-cyclic",
                       "Complex\ncyclic", "BFB\nfoldback"]
     if args.plotstyle == "grouped":
         logger.info("plotting")
@@ -854,7 +875,182 @@ def plotting():
                                       sampNames)
 
 
-def filter_similar_amplicons(n_files, pval):
+FEATURE_SIMILARITY_TYPES = {"ecDNA", "BFB", "Complex-non-cyclic", "Linear", "chromoauxesis"}
+FILTER_SIMILARITY_TYPES = {"ecDNA", "BFB", "Complex-non-cyclic", "Linear", "chromoauxesis"}
+AMPLICON_SCOPE_FILTER_TYPES = {"chromoauxesis"}
+FEATURE_SIMILARITY_HEADER = [
+    "Amp1", "Amp2", "SimilarityScore", "SimScorePercentile", "SimScorePvalue", "AsymmetricScore1",
+    "AsymmetricScore2", "GenomicSegmentScore1", "GenomicSegmentScore2", "BreakpointScore1",
+    "BreakpointScore2", "JaccardGenomicSegment", "JaccardBreakpoint", "NumSharedBPs", "Amp1NumBPs",
+    "Amp2NumBPs", "AmpOverlapLen", "Amp1AmpLen", "Amp2AmpLen"
+]
+
+
+def feature_type_from_name(feat_name):
+    return feat_name.rsplit("_", 1)[0]
+
+
+def feature_number_from_name(feat_name):
+    return feat_name.rsplit("_", 1)[1]
+
+
+def interval_dict_to_tree(interval_dict):
+    ivald = defaultdict(IntervalTree)
+    for chrom, intlist in interval_dict.items():
+        for start, end in intlist:
+            ivald[chrom].addi(start, end)
+
+    return ivald
+
+
+def merge_interval_trees(target_ivald, source_ivald):
+    for chrom, interval_tree in source_ivald.items():
+        for interval in interval_tree:
+            target_ivald[chrom].addi(interval.begin, interval.end)
+
+
+def register_feature(feature_registry, feature_id, sample_name, amplicon_number, feat_name, graph_path, cycles_path,
+                     interval_dict):
+    feature_registry[feature_id] = {
+        "feature_id": feature_id,
+        "sample_name": sample_name,
+        "amplicon_number": amplicon_number,
+        "feature_type": feature_type_from_name(feat_name),
+        "feature_number": feature_number_from_name(feat_name),
+        "graph_path": graph_path,
+        "cycles_path": cycles_path,
+        "png_path": cycles_path.rsplit("_cycles.txt", 1)[0] + ".png",
+        "pdf_path": cycles_path.rsplit("_cycles.txt", 1)[0] + ".pdf",
+        "intervals": interval_dict,
+    }
+
+
+def get_cross_sample_feature_pairs(feat_to_ivald, feature_registry, amps_overlap):
+    pairs = []
+    feature_items = list(feat_to_ivald.items())
+    for ind1 in range(len(feature_items)):
+        feature_id_1, graph_pair_1 = feature_items[ind1]
+        sample_name_1 = feature_registry[feature_id_1]["sample_name"]
+        for ind2 in range(ind1):
+            feature_id_2, graph_pair_2 = feature_items[ind2]
+            if sample_name_1 == feature_registry[feature_id_2]["sample_name"]:
+                continue
+
+            if amps_overlap(graph_pair_1[1], graph_pair_2[1]):
+                pairs.append((feature_id_1, feature_id_2))
+
+    return pairs
+
+
+def compute_feature_similarity_scores(feature_registry):
+    from feature_similarity import amps_overlap, parse_bpg, compute_similarity, cn_cut
+
+    feat_to_ivald = {}
+    for feature_id, feature_info in feature_registry.items():
+        if feature_info["feature_type"] not in FEATURE_SIMILARITY_TYPES:
+            continue
+
+        feat_to_ivald[feature_id] = (None, interval_dict_to_tree(feature_info["intervals"]))
+
+    candidate_pairs = get_cross_sample_feature_pairs(feat_to_ivald, feature_registry, amps_overlap)
+    logger.info("Total of {} cross-sample pairs of features to compare for similarity.".format(len(candidate_pairs)))
+
+    outdata = []
+    for feature_id_1, feature_id_2 in candidate_pairs:
+        graph_path_1 = feature_registry[feature_id_1]["graph_path"]
+        graph_path_2 = feature_registry[feature_id_2]["graph_path"]
+        if graph_path_1 == graph_path_2:
+            continue
+
+        graph1 = parse_bpg(graph_path_1, add_chr_tag, lcD, subset_ivald=feat_to_ivald[feature_id_1][1],
+                           cn_cut=cn_cut, cg5D=None, min_de=0)
+        graph2 = parse_bpg(graph_path_2, add_chr_tag, lcD, subset_ivald=feat_to_ivald[feature_id_2][1],
+                           cn_cut=cn_cut, cg5D=None, min_de=0)
+        if not graph1[1] or not graph2[1]:
+            continue
+
+        compute_similarity({feature_id_1: graph1, feature_id_2: graph2}, [(feature_id_1, feature_id_2)], outdata)
+
+    outdata.sort(key=lambda x: (x[2], x[1], x[0]), reverse=True)
+    return outdata
+
+
+def write_feature_similarity_scores(similarity_rows, output_prefix):
+    with open(output_prefix + "_feature_similarity_scores.tsv", "w") as outfile:
+        outfile.write("\t".join(FEATURE_SIMILARITY_HEADER) + "\n")
+        for row in similarity_rows:
+            outfile.write("\t".join([str(x) for x in row]) + "\n")
+
+    logger.info("Feature similarity score rows written: {}".format(len(similarity_rows)))
+
+
+def feature_filter_tuple(feature_registry, feature_id):
+    feature_info = feature_registry[feature_id]
+    return (
+        feature_info["sample_name"],
+        feature_info["amplicon_number"],
+        feature_info["feature_type"],
+        feature_info["feature_number"],
+    )
+
+
+def amplicon_filter_tuple(feature_registry, feature_id):
+    feature_info = feature_registry[feature_id]
+    return feature_info["sample_name"], feature_info["amplicon_number"]
+
+
+def add_similarity_filter_target(feature_registry, feature_id, feats_to_filter, amps_to_filter):
+    if feature_registry[feature_id]["feature_type"] in AMPLICON_SCOPE_FILTER_TYPES:
+        amps_to_filter.add(amplicon_filter_tuple(feature_registry, feature_id))
+    else:
+        feats_to_filter.add(feature_filter_tuple(feature_registry, feature_id))
+
+
+def get_amplicon_feature_ids(feature_registry, sample_name, amplicon_number):
+    feature_ids = []
+    for feature_id, feature_info in feature_registry.items():
+        if feature_info["sample_name"] == sample_name and feature_info["amplicon_number"] == amplicon_number:
+            feature_ids.append(feature_id)
+
+    return feature_ids
+
+
+def choose_similarity_filter_targets(similarity_rows, feature_registry, pval):
+    feats_to_filter = set()
+    amps_to_filter = set()
+    filter_events = []
+    for fields in similarity_rows:
+        feature_id_1, feature_id_2 = fields[:2]
+        if feature_id_1 not in feature_registry or feature_id_2 not in feature_registry:
+            continue
+
+        feat1 = feature_registry[feature_id_1]["feature_type"]
+        feat2 = feature_registry[feature_id_2]["feature_type"]
+        if feat1 not in FILTER_SIMILARITY_TYPES or feat2 not in FILTER_SIMILARITY_TYPES:
+            continue
+
+        # filter linear amp pairs >0.9 in each asymmetric score
+        if feat1 == "Linear" and feat2 == "Linear":
+            if float(fields[5]) > 0.9 and float(fields[6]) > 0.9:
+                add_similarity_filter_target(feature_registry, feature_id_1, feats_to_filter, amps_to_filter)
+                add_similarity_filter_target(feature_registry, feature_id_2, feats_to_filter, amps_to_filter)
+                filter_events.append((feature_id_1, feature_id_2, "linear_asymmetric_score"))
+
+        elif float(fields[4]) <= pval:  # at least one is not a linear, apply the p-value threshold
+            add_similarity_filter_target(feature_registry, feature_id_1, feats_to_filter, amps_to_filter)
+            add_similarity_filter_target(feature_registry, feature_id_2, feats_to_filter, amps_to_filter)
+            filter_events.append((feature_id_1, feature_id_2, "similarity_pvalue"))
+
+        else:
+            if feat1 in AMPLICON_SCOPE_FILTER_TYPES or feat2 in AMPLICON_SCOPE_FILTER_TYPES:
+                continue
+
+            break
+
+    return feats_to_filter, amps_to_filter, filter_events
+
+
+def filter_similar_amplicons(n_files, pval, feature_registry, similarity_rows):
     # adjust the p value cutoff based on number of input amplicons
     if pval is None:
         pval = 0.05/(max(1, n_files-1))
@@ -865,65 +1061,30 @@ def filter_similar_amplicons(n_files, pval):
 
     logger.info("\nSamples are assumed to be independent as --filter_similar was set.\nFiltering highly similar amplicons"
           " across independent samples...\n")
-    required_classes = {"ecDNA", "BFB", "Complex-non-cyclic", "Linear"}
-    # cg5Path = AA_DATA_REPO + fDict["conserved_regions_filename"]
-    # cg5D = build_CG5_database(cg5Path)
-    # cg5D = defaultdict(IntervalTree)
-    feat_to_ivald = {}
-    for full_featname, curr_fd in full_featname_to_intervals.items():
-        curr_feat = full_featname.rsplit("_")[-2]
-        if curr_feat in required_classes:
-            ivald = defaultdict(IntervalTree)
-            for c, intlist in curr_fd.items():
-                for a, b in intlist:
-                    ivald[c].addi(a, b)
+    feats_to_filter, amps_to_filter, filter_events = choose_similarity_filter_targets(
+        similarity_rows, feature_registry, pval
+    )
+    chromo_event_count = sum(
+        1 for event in filter_events
+        if feature_registry[event[0]]["feature_type"] == "chromoauxesis"
+        or feature_registry[event[1]]["feature_type"] == "chromoauxesis"
+    )
+    logger.info(
+        "Similarity filtering threshold-passing pairs: {} total, {} involving chromoauxesis".format(
+            len(filter_events), chromo_event_count
+        )
+    )
+    logger.info(
+        "Similarity filtering targets: {} feature-scope removals, {} amplicon-scope removals".format(
+            len(feats_to_filter), len(amps_to_filter)
+        )
+    )
+    if filter_events:
+        logger.info("Similarity filtering triggering pairs:")
+        for feature_id_1, feature_id_2, reason in filter_events:
+            logger.info("{}\t{}\t{}".format(feature_id_1, feature_id_2, reason))
 
-            feat_to_ivald[full_featname] = (None, ivald)
-
-    pairs = get_pairs(feat_to_ivald)
-    logger.info("Total of " + str(len(pairs)) + " pairs of features to compare.")
-    fsim_data = []
-    for x in pairs:
-        s2a_graph = {}
-        graph0 = parse_bpg(full_featname_to_graph[x[0]], add_chr_tag, lcD, subset_ivald=feat_to_ivald[x[0]][1],
-                           cn_cut=cn_cut, cg5D=None, min_de=0)
-        graph1 = parse_bpg(full_featname_to_graph[x[1]], add_chr_tag, lcD, subset_ivald=feat_to_ivald[x[1]][1],
-                           cn_cut=cn_cut, cg5D=None, min_de=0)
-
-        if not graph0[1] or not graph1[1] or full_featname_to_graph[x[0]] == full_featname_to_graph[x[1]]:
-            continue
-
-        s2a_graph[x[0]] = graph0
-        s2a_graph[x[1]] = graph1
-
-        compute_similarity(s2a_graph, [x], fsim_data)
-
-    fsim_data.sort(key=lambda x: (x[2], x[1], x[0]), reverse=True)
-
-    feats_to_filter = set()
-    for fields in fsim_data:
-        splitname1 = fields[0].rsplit("_")
-        amp1, feat1, fnum1 = splitname1[-3:]
-        sampname1 = "_".join(splitname1[:-3])
-
-        splitname2 = fields[1].rsplit("_")
-        amp2, feat2, fnum2 = splitname2[-3:]
-        sampname2 = "_".join(splitname2[:-3])
-
-        # filter linear amp pairs >0.9 in each asymmetric score
-        if feat1.startswith("Linear") and feat2.startswith("Linear"):
-            if float(fields[5]) > 0.9 and float(fields[6]) > 0.9:
-                feats_to_filter.add((sampname1, amp1, feat1, fnum1))
-                feats_to_filter.add((sampname2, amp2, feat2, fnum2))
-
-        elif float(fields[4]) <= pval:  # at least one is not a linear, apply the p-value threshold
-            feats_to_filter.add((sampname1, amp1, feat1, fnum1))
-            feats_to_filter.add((sampname2, amp2, feat2, fnum2))
-
-        else:
-            break
-
-    if not feats_to_filter:
+    if not feats_to_filter and not amps_to_filter:
         return
 
     samp_amp_to_filt_ivald = defaultdict(lambda: defaultdict(IntervalTree))
@@ -937,8 +1098,20 @@ def filter_similar_amplicons(n_files, pval):
         samp_amp = x[0] + "_" + x[1]
         samp_filt_set.add(x[0])
         samp_amp_filt_set.add(samp_amp)
-        samp_amp_to_filt_ivald[samp_amp] = feat_to_ivald[full_featname][1]
+        merge_interval_trees(samp_amp_to_filt_ivald[samp_amp], interval_dict_to_tree(feature_registry[full_featname]["intervals"]))
         samp_amp_to_feat[samp_amp].add((x[2], x[3]))
+
+    logger.info("The following " + str(len(amps_to_filter)) + " amplicons will be removed:")
+    for sname, ampN in sorted(amps_to_filter):
+        logger.info(sname + "_" + ampN)
+        samp_amp = sname + "_" + ampN
+        samp_filt_set.add(sname)
+        samp_amp_filt_set.add(samp_amp)
+        for feature_id in get_amplicon_feature_ids(feature_registry, sname, ampN):
+            feature_info = feature_registry[feature_id]
+            merge_interval_trees(samp_amp_to_filt_ivald[samp_amp],
+                                 interval_dict_to_tree(feature_info["intervals"]))
+            samp_amp_to_feat[samp_amp].add((feature_info["feature_type"], feature_info["feature_number"]))
 
     # now do the filtering
     '''
@@ -957,14 +1130,15 @@ def filter_similar_amplicons(n_files, pval):
 
     for sname, anum, ag_dict, nc_dict in ftgd_list:
         if sname + "_" + anum in samp_amp_filt_set:
+            filter_whole_amplicon = (sname, anum) in amps_to_filter
             for feat_name in sorted(ag_dict.keys()):
-                fname, fnum = feat_name.rsplit("_")
-                if (sname, anum, fname, fnum) in feats_to_filter:
+                fname, fnum = feat_name.rsplit("_", 1)
+                if filter_whole_amplicon or (sname, anum, fname, fnum) in feats_to_filter:
                     ag_dict[feat_name].clear()
 
             for feat_name in sorted(nc_dict.keys()):
-                fname, fnum = feat_name.rsplit("_")
-                if (sname, anum, fname, fnum) in feats_to_filter:
+                fname, fnum = feat_name.rsplit("_", 1)
+                if filter_whole_amplicon or (sname, anum, fname, fnum) in feats_to_filter:
                     nc_dict[feat_name].clear()
 
     for ind, x in enumerate(ftci_list):
@@ -989,6 +1163,7 @@ def filter_similar_amplicons(n_files, pval):
         ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
         samp_amp = sname + "_" + ampN
         if samp_amp in samp_amp_filt_set:
+            filter_whole_amplicon = (sname, ampN) in amps_to_filter
             filt_ivald = samp_amp_to_filt_ivald[samp_amp]
             for bpgi_ind, bpg_line in enumerate(bpg_linelist):
                 if filt_ivald[bpg_line[0]][bpg_line[1]] or filt_ivald[bpg_line[2]][bpg_line[3]]:
@@ -996,8 +1171,8 @@ def filter_similar_amplicons(n_files, pval):
 
             keys_to_del = set()
             for feat_name, curr_fd in feature_dict.items():
-                fname, fnum = feat_name.rsplit("_")
-                if (sname, ampN, fname, fnum) in feats_to_filter:
+                fname, fnum = feat_name.rsplit("_", 1)
+                if filter_whole_amplicon or (sname, ampN, fname, fnum) in feats_to_filter:
                     keys_to_del.add(feat_name)
 
             for k in keys_to_del:
@@ -1011,11 +1186,27 @@ def filter_similar_amplicons(n_files, pval):
         except KeyError:
             pass
 
+    for sname, ampN in amps_to_filter:
+        keys_to_del = [x for x in featEntropyD if x[0] == sname and x[1] == ampN]
+        for key in keys_to_del:
+            del featEntropyD[key]
+
     for ind, sname in enumerate(sampNames):
         ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
         samp_amp = sname + "_" + ampN
         if samp_amp in samp_amp_filt_set:
             ampClass, ecStat, bfbStat, ecAmpliconCount = AMP_classifications[ind]
+            if (sname, ampN) in amps_to_filter:
+                if ecAmpliconCount:
+                    samp_to_ec_count[sname] -= ecAmpliconCount
+
+                AMP_classifications[ind] = (NO_FSCNA_CLASS, False, False, 0)
+                if ind < len(chromoauxesis_results):
+                    chromoauxesis_results[ind]["decision"] = "not_chromoauxesis"
+                    chromoauxesis_results[ind]["probability"] = 0.0
+                    chromoauxesis_results[ind]["filtered_by_similarity"] = True
+                continue
+
             feats_to_remove = [x[0] for x in samp_amp_to_feat[samp_amp]]
             was_ec_or_bfb = False
             if "BFB" in feats_to_remove:
@@ -1033,11 +1224,11 @@ def filter_similar_amplicons(n_files, pval):
 
             if not ecStat and not bfbStat:
                 if not was_ec_or_bfb:
-                    ampClass = "No amp/Invalid"
+                    ampClass = NO_FSCNA_CLASS
 
                 else:
                     # TODO: Update this based on reclassification or "layered" classification.
-                    ampClass = "No amp/Invalid"
+                    ampClass = NO_FSCNA_CLASS
 
             AMP_classifications[ind] = (ampClass, ecStat, bfbStat, ecAmpliconCount)
 
@@ -1137,7 +1328,7 @@ def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn, graph_cns):
     return totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights, rearrCycleInds
 
 
-def run_classification(segSeqD, cycleList, cycleCNs):
+def run_classification(segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count=0):
     graph_cns = get_graph_cns(graphFile, args.add_chr_tag)
     # first compute some properties about the foldbacks and copy numbers
     fb_edges, fb_readcount, fb_read_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile)
@@ -1171,7 +1362,23 @@ def run_classification(segSeqD, cycleList, cycleCNs):
         elif tot_over_min_cn > ConfigVars.compCycContCut and maxCN > ConfigVars.sig_amp:
             ampClass = "Linear"
         else:
-            ampClass = "No amp/Invalid"
+            ampClass = INVALID_CLASS
+            logger.warning(
+                "{} has high foldback edge count ({}) and foldback read fraction ({:.3f}), "
+                "suggesting read-orientation artifacts. Marking amplicon Invalid. Re-run the sample with "
+                "AmpliconSuite-pipeline --foldback_pair_support_min 3 or higher if artifacts persist.".format(
+                    amplicon_log_id(sName, ampN), fb_edges, fb_read_prop
+                )
+            )
+
+    pre_finalize_ampClass = ampClass
+    ampClass = finalize_no_amp_invalid_class(ampClass, lc_filtered_cycle_count)
+    if pre_finalize_ampClass == NO_AMP_INVALID_INTERNAL_CLASS and ampClass == INVALID_CLASS:
+        logger.info(
+            "{} marked Invalid because {} cycle(s) were removed by low-complexity filtering.".format(
+                amplicon_log_id(sName, ampN), lc_filtered_cycle_count
+            )
+        )
 
     bfbarchitect_summaries.append(run_bfbarchitect(graphFile, fb_edges, "{}_amplicon{}".format(sName, ampN)))
 
@@ -1188,22 +1395,23 @@ def run_classification(segSeqD, cycleList, cycleCNs):
 
     if is_chromoauxesis:
         # BFB detection is unchanged; ecDNA requires strict high-CN criterion
-        if bfbClass and ampClass != "No amp/Invalid":
+        if bfbClass and not is_non_feature_amplicon_class(ampClass):
             bfbStat = True
         else:
             bfb_cycle_inds = []
-        qualifying_ecdna_inds = find_chromoauxesis_ecdna_cycles(
-            cycleList, cycleCNs, segSeqD, graph_cns, invalidInds, bfb_cycle_inds
-        )
-        if qualifying_ecdna_inds:
-            ecStat = True
+        if not is_non_feature_amplicon_class(ampClass):
+            qualifying_ecdna_inds = find_chromoauxesis_ecdna_cycles(
+                cycleList, cycleCNs, segSeqD, graph_cns, invalidInds, bfb_cycle_inds
+            )
+            if qualifying_ecdna_inds:
+                ecStat = True
 
     else:
         if ampClass == "Cyclic" and not bfbClass:
             ecStat = True
             bfb_cycle_inds = []
 
-        elif bfbClass and ampClass != "No amp/Invalid":
+        elif bfbClass and not is_non_feature_amplicon_class(ampClass):
             bfbStat = True
             if bfbHasEC:
                 ecStat = True
@@ -1228,9 +1436,10 @@ def run_classification(segSeqD, cycleList, cycleCNs):
     # if no ecDNA-like intervals were identified, update and re-call.
     if ecStat and not ecIndexClusters:
         if not bfbStat:
-            remaining_classes = ["No amp/Invalid", "Linear", "Complex-non-cyclic"]
+            remaining_classes = [NO_AMP_INVALID_INTERNAL_CLASS, "Linear", "Complex-non-cyclic"]
             remaining_scores = [AMP_dvaluesDict[x] for x in remaining_classes]
             ampClass = remaining_classes[remaining_scores.index(max(remaining_scores))]
+            ampClass = finalize_no_amp_invalid_class(ampClass, lc_filtered_cycle_count)
 
         ecStat = False
         ecAmpliconCount = 0
@@ -1254,8 +1463,16 @@ def run_classification(segSeqD, cycleList, cycleCNs):
                                                                         bfb_cycle_inds, set())
         featEntropyD[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
 
+    if is_chromoauxesis:
+        chromoauxesis_cycle_inds = set(range(len(cycleList))) - set(invalidInds)
+        ca_totalEnt, ca_decompEnt, ca_nEnt = decompositionComplexity(
+            graphFile, cycleList, cycleCNs, segSeqD, chromoauxesis_cycle_inds, set()
+        )
+        featEntropyD[(sName, ampN, "chromoauxesis_1")] = (ca_totalEnt, ca_decompEnt, ca_nEnt)
+
     bpg_linelist, gseg_cn_d, other_class_c_inds, feature_dict, prop_dict, ampClass = amplicon_annotation(cycleList, segSeqD,
-        bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass, graphFile, args.add_chr_tag, lcD, args.ref)
+        bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass, graphFile, args.add_chr_tag, lcD,
+        args.ref, ca_result.get("amplicon_intervals") if is_chromoauxesis else None)
 
     bpgi_list.append(bpg_linelist)
     fd_list.append(feature_dict)
@@ -1266,8 +1483,9 @@ def run_classification(segSeqD, cycleList, cycleCNs):
             full_fname = trim_sname + "_" + ampN + "_" + feat_name
             full_featname_to_graph[full_fname] = graphFile
             full_featname_to_intervals[full_fname] = curr_fd
+            register_feature(feature_registry, full_fname, trim_sname, ampN, feat_name, graphFile, cyclesFile, curr_fd)
 
-    if not bfbStat and not ecStat and not ampClass == "No amp/Invalid":
+    if not bfbStat and not ecStat and not is_non_feature_amplicon_class(ampClass):
         featEntropyD[(sName, ampN, ampClass + "_1")] = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
             other_class_c_inds, set())
 
@@ -1288,12 +1506,13 @@ def run_classification(segSeqD, cycleList, cycleCNs):
 # ------------------------------------------------------------
 '''
 Amplicon Classes:
-1) No amp/Invalid
+1) No-FSCNA
 2) Linear
 3) Complex-non-cyclic
 4) Virus (viral episome w/out human DNA attached in amplicon)
 5) BFB
 6) ecDNA
+7) Invalid
 '''
 
 categories = ["No amp/Invalid", "Linear", "Trivial cycle", "Complex-non-cyclic", "Complex-cyclic", "Virus",
@@ -1324,7 +1543,7 @@ if __name__ == "__main__":
                         "decompositions.", type=float, default=0.1)
     parser.add_argument("--plotstyle", help="Type of visualizations to produce.",
                         choices=["grouped", "individual", "noplot"], default="noplot")
-    parser.add_argument("--force", help="Disable No amp/Invalid class if possible", action='store_true')
+    parser.add_argument("--force", help="Disable No-FSCNA/Invalid class if possible", action='store_true')
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files.",
                         action='store_true')
     parser.add_argument("--report_complexity", help="[Deprecated - on by default] Compute a measure of amplicon entropy"
@@ -1536,6 +1755,7 @@ if __name__ == "__main__":
     samp_amp_to_graph = {}
     full_featname_to_graph = {}
     full_featname_to_intervals = {}
+    feature_registry = {}
 
     # ITERATE OVER FILES CONDUCT THE CLASSIFICATION
     for i, fpair in enumerate(flist, 1):
@@ -1548,7 +1768,8 @@ if __name__ == "__main__":
             ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
             samp_amp_to_graph[sName + "_" + ampN] = graphFile
             logger.info("[{}/{}] {} {}".format(i, len(flist), sName, ampN))
-            segSeqD, cycleList, cycleCNs = parseCycle(cyclesFile, graphFile, add_chr_tag, lcD, patch_links)
+            segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count = parseCycle(cyclesFile, graphFile, add_chr_tag, lcD,
+                                                                               patch_links)
             if args.ref == "hg19" or args.ref == "GRCh37":
                 chroms = set([x[0] for k,x in segSeqD.items() if k != 0])
                 if args.ref == "hg19" and not any([x.startswith("chr") for x in chroms]):
@@ -1563,13 +1784,15 @@ if __name__ == "__main__":
             logger.error("File list not properly formatted\n")
             sys.exit(1)
 
-        run_classification(segSeqD, cycleList, cycleCNs)
+        run_classification(segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count)
 
     logger.info("Classification stage completed")
+    logger.info("Computing feature similarity scores...")
+    feature_similarity_rows = compute_feature_similarity_scores(feature_registry)
+    write_feature_similarity_scores(feature_similarity_rows, args.o)
     if args.filter_similar:
         logger.info("Filtering similar amplicons...")
-        from feature_similarity import *
-        filter_similar_amplicons(len(flist), args.filter_pval)
+        filter_similar_amplicons(len(flist), args.filter_pval, feature_registry, feature_similarity_rows)
 
     # make any requested visualizations
     plotting()

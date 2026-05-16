@@ -8,6 +8,72 @@ import shutil
 import sys
 
 
+NON_FEATURE_CLASSES = {"No amp/Invalid", "No-FSCNA", "Invalid"}
+OUTPUT_HEAD = ["Sample name", "AA amplicon number", "Feature ID", "Classification",
+               "Chromoauxesis probability", "Location", "Oncogenes", "All genes", "NCBI Gene IDs",
+               "Complexity score", "ecDNA context", "Captured interval length", "Feature median copy number",
+               "Feature maximum copy number", "Filter flag", "Reference version", "Tissue of origin",
+               "Sample type", "Feature BED file", "CNV BED file", "AS-p version", "AA version", "AC version",
+               "AA PNG file", "AA PDF file", "AA summary file", "Run metadata JSON", "Sample metadata JSON"]
+FILE_COLUMNS = ["AA PNG file", "AA PDF file", "AA summary file", "Run metadata JSON", "Sample metadata JSON"]
+
+
+def parse_bool(value):
+    if isinstance(value, bool):
+        return value
+
+    sval = str(value).strip().lower()
+    if sval in {"true", "t", "1", "yes", "y"}:
+        return True
+    if sval in {"false", "f", "0", "no", "n", "", "na", "none"}:
+        return False
+
+    raise ValueError("Cannot parse boolean value: {!r}".format(value))
+
+
+def feature_sort_key(fname):
+    base = fname.rsplit("_intervals.bed", 1)[0]
+    suffix = base.rsplit("_", 1)[-1]
+    try:
+        return int(suffix)
+    except ValueError:
+        return suffix
+
+
+def copy_if_needed(src, dest_dir):
+    if src in {"Not found", "Not provided", "NA"} or src.endswith("Not found") or src.endswith("Not provided"):
+        return src
+
+    dest = os.path.join(dest_dir, os.path.basename(src))
+    if not os.path.exists(dest):
+        shutil.copy(src, dest_dir)
+
+    return dest
+
+
+def copy_result_files(row, output_dir):
+    for col in FILE_COLUMNS:
+        row[col] = copy_if_needed(row[col], output_dir)
+
+
+def row_values(row):
+    return [str(row.get(col, "NA")) for col in OUTPUT_HEAD]
+
+
+def write_result_outputs(rows, tsv_ofname, json_ofname, files_dir):
+    with open(tsv_ofname, 'w') as outfile:
+        outfile.write("\t".join(OUTPUT_HEAD) + "\n")
+        for row in rows:
+            outfile.write("\t".join(row_values(row)) + "\n")
+
+    for row in rows:
+        copy_result_files(row, files_dir)
+
+    with open(json_ofname, 'w') as outfile:
+        json.dump([{col: row.get(col, "NA") for col in OUTPUT_HEAD} for row in rows],
+                  outfile, sort_keys=True, indent=2)
+
+
 def read_amplicon_gene_list(gene_file):
     amplicon_gene_dict = defaultdict(list)
     with open(gene_file) as infile:
@@ -18,10 +84,10 @@ def read_amplicon_gene_list(gene_file):
             featureID = "_".join(fields[:3])
             if 'ncbi_id' in fd:
                 amplicon_gene_dict[featureID].append(
-                    (fd['gene'], fd['gene_cn'], eval(fd['is_canonical_oncogene']), fd['ncbi_id']))
+                    (fd['gene'], fd['gene_cn'], parse_bool(fd['is_canonical_oncogene']), fd['ncbi_id']))
             else:
                 amplicon_gene_dict[featureID].append(
-                    (fd['gene'], fd['gene_cn'], eval(fd['is_canonical_oncogene']), "NA"))
+                    (fd['gene'], fd['gene_cn'], parse_bool(fd['is_canonical_oncogene']), "NA"))
 
     return amplicon_gene_dict
 
@@ -66,9 +132,36 @@ def read_basic_stats(basic_stats_file):
     return basic_stats_dict
 
 
+def read_chromoauxesis_calls(chromoauxesis_file):
+    chromoauxesis_dict = defaultdict(lambda: {"call": "NA", "probability": "NA"})
+    if not os.path.exists(chromoauxesis_file):
+        return chromoauxesis_dict
+
+    with open(chromoauxesis_file) as infile:
+        try:
+            h = next(infile).rstrip().rsplit("\t")
+        except StopIteration:
+            return chromoauxesis_dict
+        for line in infile:
+            fields = line.rstrip().rsplit("\t")
+            fd = dict(zip(h, fields))
+            amplicon_id = "_".join([fd["sample_name"], fd["amplicon_number"]])
+            chromoauxesis_dict[amplicon_id] = {
+                "call": fd.get("chromoauxesis_call", "NA"),
+                "probability": fd.get("chromoauxesis_probability", "NA"),
+            }
+
+    return chromoauxesis_dict
+
+
 def read_summary_list(summ_map_file):
     sumf_dict = {}
     if not summ_map_file:
+        return sumf_dict
+
+    if not os.path.exists(summ_map_file):
+        sys.stderr.write("Warning: summary map {} not found. Continuing without AA summary files.\n".format(
+            summ_map_file))
         return sumf_dict
 
     # key is the sample name plus the base path of the summary file.
@@ -84,9 +177,15 @@ def read_summary_list(summ_map_file):
 def cycles_graph_amp_lookup(input_file_path):
     lookup = {}
     with open(input_file_path) as input_file:
-        for line in input_file:
+        for line_num, line in enumerate(input_file, 1):
+            if not line.strip():
+                continue
             fields = line.rstrip().rsplit()
+            if len(fields) < 3:
+                raise ValueError("Malformed input line {} in {}: {}".format(line_num, input_file_path, line.rstrip()))
             a_id = fields[1].rsplit("/")[-1].rsplit("_cycles.txt")[0]
+            if a_id in lookup:
+                raise ValueError("Duplicate amplicon ID {} in {}".format(a_id, input_file_path))
             lookup[a_id] = (fields[1], fields[2])
 
     return lookup
@@ -109,14 +208,130 @@ def get_version_info(run_meta_dict):
     return asp, aa, ac
 
 
-def copy_AA_files(ll, ldir):
-    for i in range(-5, 0):
-        s = ll[i]
-        if not s.endswith("Not found") and not s.endswith("Not provided") and not s == "NA":
-            if not os.path.exists(ldir + os.path.basename(s)):
-                shutil.copy(s, ldir)
+def read_bed_intervals(feature_bed):
+    if not os.path.exists(feature_bed):
+        sys.stderr.write("Warning: interval file " + feature_bed + " not found!\n")
+        return "Interval file not found"
 
-            ll[i] = ldir + os.path.basename(ll[i])
+    interval_list = []
+    with open(feature_bed) as bedfile:
+        for line in bedfile:
+            fields = line.rstrip().rsplit("\t")
+            if len(fields) >= 3:
+                interval_list.append(fields[0] + ":" + fields[1] + "-" + fields[2])
+
+    return str(interval_list)
+
+
+def discover_feature_specs(classD, amplicon_id, class_bed_dir):
+    feature_specs = []
+    if classD["ecDNA+"] == "Positive":
+        ecDNA_files = sorted(
+            [x for x in os.listdir(class_bed_dir)
+             if x.startswith(amplicon_id + "_") and x.rsplit("_")[-3] == "ecDNA"],
+            key=feature_sort_key
+        )
+        for ind in range(int(classD["ecDNA_amplicons"])):
+            if ind >= len(ecDNA_files):
+                sys.stderr.write("Warning: expected ecDNA interval file for {} ecDNA_{} not found!\n".format(
+                    amplicon_id, ind + 1))
+                feature_id = "_".join([amplicon_id, "ecDNA", str(ind + 1)])
+                feature_bed = os.path.join(class_bed_dir, feature_id + "_intervals.bed")
+            else:
+                feature_bed = os.path.join(class_bed_dir, ecDNA_files[ind])
+                feature_id = ecDNA_files[ind][:-14]
+            feature_specs.append((feature_id, "ecDNA", feature_bed))
+
+    if classD["BFB+"] == "Positive":
+        feature_id = "_".join([amplicon_id, "BFB", "1"])
+        feature_specs.append((feature_id, "BFB", os.path.join(class_bed_dir, feature_id + "_intervals.bed")))
+
+    if (not feature_specs and classD["amplicon_decomposition_class"] not in NON_FEATURE_CLASSES):
+        feature = classD["amplicon_decomposition_class"]
+        feature_id = "_".join([amplicon_id, feature, "1"])
+        feature_specs.append((feature_id, feature, os.path.join(class_bed_dir, feature_id + "_intervals.bed")))
+
+    if classD.get("chromoauxesis+", "None detected") == "Positive":
+        feature_id = "_".join([amplicon_id, "chromoauxesis", "1"])
+        feature_specs.append((feature_id, "chromoauxesis", os.path.join(class_bed_dir, feature_id + "_intervals.bed")))
+
+    return feature_specs
+
+
+def build_feature_row(sample_name, amplicon_number, feature_id, feature, feature_bed, chromo_prob, intervals,
+                      gene_dict, complexity_dict, context_dict, basic_stats_dict, run_metadata, sample_metadata,
+                      cnv_bed_path, versions, image_locs, summary_files):
+    sorted_glist = sorted(gene_dict[feature_id])
+    asp_version, aa_version, ac_version = versions
+    sumf, run_metadata_file, sample_metadata_file = summary_files
+    basic_stats = basic_stats_dict[feature_id]
+    return {
+        "Sample name": sample_name,
+        "AA amplicon number": amplicon_number,
+        "Feature ID": feature_id,
+        "Classification": feature,
+        "Chromoauxesis probability": chromo_prob,
+        "Location": intervals,
+        "Oncogenes": str([g[0] for g in sorted_glist if g[2]]),
+        "All genes": str([g[0] for g in sorted_glist]),
+        "NCBI Gene IDs": str([g[3] for g in sorted_glist]),
+        "Complexity score": complexity_dict[feature_id],
+        "ecDNA context": context_dict[feature_id],
+        "Captured interval length": basic_stats[0],
+        "Feature median copy number": basic_stats[1],
+        "Feature maximum copy number": basic_stats[2],
+        "Filter flag": basic_stats[3],
+        "Reference version": run_metadata["ref_genome"],
+        "Tissue of origin": sample_metadata["tissue_of_origin"],
+        "Sample type": sample_metadata["sample_type"],
+        "Feature BED file": os.path.abspath(feature_bed),
+        "CNV BED file": cnv_bed_path,
+        "AS-p version": asp_version,
+        "AA version": aa_version,
+        "AC version": ac_version,
+        "AA PNG file": image_locs[0],
+        "AA PDF file": image_locs[1],
+        "AA summary file": sumf,
+        "Run metadata JSON": run_metadata_file,
+        "Sample metadata JSON": sample_metadata_file,
+    }
+
+
+def build_no_feature_row(sample_name, sumf, sample_metadata, run_metadata, cnv_bed_path, versions, summary_files):
+    asp_version, aa_version, ac_version = versions
+    _, run_metadata_file, sample_metadata_file = summary_files
+    feature_id = sample_name + "_NA"
+    basic_stats = ["NA", "NA", "NA", "NA"]
+    return {
+        "Sample name": sample_name,
+        "AA amplicon number": "NA",
+        "Feature ID": feature_id,
+        "Classification": "NA",
+        "Chromoauxesis probability": "NA",
+        "Location": "[]",
+        "Oncogenes": "[]",
+        "All genes": "[]",
+        "NCBI Gene IDs": "[]",
+        "Complexity score": "NA",
+        "ecDNA context": "NA",
+        "Captured interval length": basic_stats[0],
+        "Feature median copy number": basic_stats[1],
+        "Feature maximum copy number": basic_stats[2],
+        "Filter flag": basic_stats[3],
+        "Reference version": run_metadata["ref_genome"],
+        "Tissue of origin": sample_metadata["tissue_of_origin"],
+        "Sample type": sample_metadata["sample_type"],
+        "Feature BED file": os.path.abspath("NA"),
+        "CNV BED file": cnv_bed_path,
+        "AS-p version": asp_version,
+        "AA version": aa_version,
+        "AC version": ac_version,
+        "AA PNG file": "NA",
+        "AA PDF file": "NA",
+        "AA summary file": sumf,
+        "Run metadata JSON": run_metadata_file,
+        "Sample metadata JSON": sample_metadata_file,
+    }
 
 
 def write_html_table(output_table_lines, html_ofname):
@@ -135,20 +350,6 @@ def write_html_table(output_table_lines, html_ofname):
             outfile.write('</td></tr>\n')
 
         outfile.write('</table>\n')
-
-
-def write_json_dict(output_table_lines, json_ofname):
-    # zip the head to the line to make a dict and dump them.
-    dlist = []
-    h = output_table_lines[0]
-    for ll in output_table_lines[1:]:
-        td = dict(zip(h, ll))
-        dlist.append(td)
-
-    with open(json_ofname, 'w') as outfile:
-        json.dump(dlist, outfile, sort_keys=True, indent=2)
-
-    pass
 
 
 def make_results_table(input_file, classification_file, summary_map=None, sample_metadata_file="",
@@ -172,13 +373,6 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
     if not run_metadata_file and not run_metadata_list and not ref:
         sys.stderr.write("One of the following must be provided: --ref | --run_metadata_list | --run_metadata_file\n")
         sys.exit(1)
-
-    output_head = ["Sample name", "AA amplicon number", "Feature ID", "Classification", "Location", "Oncogenes",
-                   "All genes", "NCBI Gene IDs", "Complexity score", "ecDNA context", "Captured interval length",
-                   "Feature median copy number", "Feature maximum copy number", "Filter flag", "Reference version",
-                   "Tissue of origin", "Sample type", "Feature BED file", "CNV BED file", "AS-p version", "AA version",
-                   "AC version", "AA PNG file", "AA PDF file", "AA summary file", "Run metadata JSON",
-                   "Sample metadata JSON"]
 
     classBase = classification_file.rsplit("_amplicon_classification_profiles.tsv")[0]
     ldir = os.path.dirname(classBase) + "/files/"
@@ -223,7 +417,7 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
                 fields = line.rstrip().rsplit()
                 sample_cnv_calls_path[fields[0]] = fields[1]
 
-    output_table_lines = [output_head, ]
+    result_rows = []
     cyc_graph_lookup_dct = cycles_graph_amp_lookup(input_file)
     with open(classification_file) as classification_file_handle:
         classBedDir = classBase + "_classification_bed_files/"
@@ -231,10 +425,12 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
         entropy_file = classBase + "_feature_entropy.tsv"
         basic_stats_file = classBase + "_feature_basic_properties.tsv"
         context_file = classBase + "_ecDNA_context_calls.tsv"
+        chromoauxesis_file = classBase + "_chromoauxesis_calls.tsv"
         amplicon_gene_dict = read_amplicon_gene_list(gene_file)
         amplicon_complexity_dict = read_complexity_scores(entropy_file)
         basic_stats_dict = read_basic_stats(basic_stats_file)
         context_dict = read_context(context_file)
+        chromoauxesis_dict = read_chromoauxesis_calls(chromoauxesis_file)
 
         if sample_metadata_file:
             init_sample_metadata = json.load(open(sample_metadata_file, 'r'))
@@ -270,6 +466,8 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
             classD = dict(zip(class_head, classification_line.rstrip().rsplit("\t")))
             sample_name = classD['sample_name']
             ampliconID = "_".join([classD["sample_name"], classD["amplicon_number"]])
+            if ampliconID not in cyc_graph_lookup_dct:
+                raise ValueError("Classification amplicon {} not found in input {}".format(ampliconID, input_file))
             cycles_file, graph_file = cyc_graph_lookup_dct[ampliconID]
             shutil.copy(cycles_file, ldir)
             shutil.copy(graph_file, ldir)
@@ -304,132 +502,48 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
                     sys.stderr.write("Warning: image file " + f + " not found!\n")
                     image_locs[ind] = "Not found"
 
-            amps_classes = []
-            if classD["ecDNA+"] == "Positive":
-                sumf_used.add((sample_name, cfile_dir))
-                amps_classes.append(("ecDNA", int(classD["ecDNA_amplicons"])))
-
-            if classD["BFB+"] == "Positive":
-                sumf_used.add((sample_name, cfile_dir))
-                amps_classes.append(("BFB", 1))
-
-            elif not amps_classes and classD["amplicon_decomposition_class"] != "No amp/Invalid":
-                sumf_used.add((sample_name, cfile_dir))
-                amps_classes.append((classD["amplicon_decomposition_class"], 1))
-
             curr_sample_metadata = sample_metadata_dict[sample_name]
             cnv_bed_path = sample_cnv_calls_path[sample_name]
             curr_run_metadata = run_metadata_dict[sample_name]
             if curr_run_metadata['ref_genome'] == "NA" and ref:
                 curr_run_metadata['ref_genome'] = ref
-            asp_version, aa_version, ac_version = get_version_info(curr_run_metadata)
+            versions = get_version_info(curr_run_metadata)
+            summary_files = (sumf, run_metadata_path[sample_name], sample_metadata_path[sample_name])
 
-            # Get the AC intervals, genes and complexity
-            featureData = []
-            for feature, namps in amps_classes:
-                if feature == "ecDNA":
-                    ecDNA_files = [x for x in os.listdir(classBedDir) if x.startswith(ampliconID + "_") and
-                                   x.rsplit("_")[-3] == "ecDNA"]
-
-                # this is necessary since AA amps can have more than one ecDNA
-                for i in range(namps):
-                    if feature == "ecDNA":
-                        featureBed = classBedDir + ecDNA_files[i]
-                        featureID = ecDNA_files[i][:-14]
-
-                    else:
-                        featureID = "_".join([ampliconID, feature, str(i + 1)])
-                        featureBed = classBedDir + featureID + "_intervals.bed"
-
-                    if not os.path.exists(featureBed):
-                        sys.stderr.write("Warning: interval file " + featureBed + " not found!\n")
-                        intervals = "Interval file not found"
-
-                    else:
-                        interval_list = []
-                        with open(featureBed) as bedfile:
-                            for l in bedfile:
-                                bfields = l.rstrip().rsplit("\t")
-                                interval_list.append(bfields[0] + ":" + bfields[1] + "-" + bfields[2])
-
-                        # intervals = "|".join(interval_list)
-                        intervals = str(interval_list)
-
-                    sorted_glist = sorted(amplicon_gene_dict[featureID])
-                    # oncogenes = "|".join(sorted([g[0] for g in raw_glist if g[2]]))
-
-                    oncogenes = str([g[0] for g in sorted_glist if g[2]])
-                    all_genes = str([g[0] for g in sorted_glist])
-                    all_genes_ids = str([g[3] for g in sorted_glist])
-                    complexity = amplicon_complexity_dict[featureID]
-                    context = context_dict[featureID]
-                    basic_stats = basic_stats_dict[featureID]
-
-                    featureData.append([featureID, feature, intervals, oncogenes, all_genes, all_genes_ids, complexity,
-                                        context] + basic_stats +
-                                       [curr_run_metadata["ref_genome"], curr_sample_metadata["tissue_of_origin"],
-                                        curr_sample_metadata["sample_type"],
-                                        os.path.abspath(featureBed), cnv_bed_path])
-
-                    vl = [asp_version, aa_version, ac_version]
-                    sum_dl = [sumf, run_metadata_path[sample_name],
-                              sample_metadata_path[sample_name]]
-
-            for ft in featureData:
-                output_table_lines.append(
-                    [sample_name, AA_amplicon_number] + ft + vl + image_locs + sum_dl)
+            feature_specs = discover_feature_specs(classD, ampliconID, classBedDir)
+            if feature_specs:
+                sumf_used.add((sample_name, cfile_dir))
+            chromo_prob = chromoauxesis_dict[ampliconID]["probability"]
+            for featureID, feature, featureBed in feature_specs:
+                result_rows.append(build_feature_row(
+                    sample_name, AA_amplicon_number, featureID, feature, featureBed, chromo_prob,
+                    read_bed_intervals(featureBed), amplicon_gene_dict, amplicon_complexity_dict, context_dict,
+                    basic_stats_dict, curr_run_metadata, curr_sample_metadata, cnv_bed_path, versions, image_locs,
+                    summary_files
+                ))
 
         for k in set(sumf_dict.keys()) - sumf_used:
             print(k[0] + " had no identifiable focal amplifications in the AA amplicons")
             sumf = sumf_dict[k]
             sample_name = k[0]
-            AA_amplicon_number = "NA"
-            feature = "NA"
-            featureID = sample_name + "_" + feature
-            intervals = "[]"
-            oncogenes = "[]"
-            all_genes = "[]"
-            all_genes_ids = "[]"
-            complexity = "NA"
-            context = "NA"
-            basic_stats = basic_stats_dict[featureID]
-            featureBed = "NA"
             curr_sample_metadata = sample_metadata_dict[sample_name]
             cnv_bed_path = sample_cnv_calls_path[sample_name]
             curr_run_metadata = run_metadata_dict[sample_name]
             if curr_run_metadata['ref_genome'] == "NA" and ref:
                 curr_run_metadata["ref_genome"] = ref
 
-            asp_version, aa_version, ac_version = get_version_info(curr_run_metadata)
-
-            fdl = [featureID, feature, intervals, oncogenes, all_genes, all_genes_ids, complexity,
-                   context] + basic_stats + \
-                  [curr_run_metadata["ref_genome"], curr_sample_metadata["tissue_of_origin"],
-                   curr_sample_metadata["sample_type"], os.path.abspath(featureBed), cnv_bed_path]
-
-            vl = [asp_version, aa_version, ac_version]
-            image_locs = ["NA", "NA"]
-
-            sum_dl = [sumf, run_metadata_path[sample_name], sample_metadata_path[sample_name]]
-
-            output_table_lines.append(
-                [sample_name, AA_amplicon_number] + fdl + vl + image_locs + sum_dl)
+            versions = get_version_info(curr_run_metadata)
+            summary_files = (sumf, run_metadata_path[sample_name], sample_metadata_path[sample_name])
+            result_rows.append(build_no_feature_row(
+                sample_name, sumf, curr_sample_metadata, curr_run_metadata, cnv_bed_path, versions, summary_files
+            ))
 
     tsv_ofname = classBase + "_result_table.tsv"
     # html_ofname = "index.html"
     json_ofname = classBase + "_result_data.json"
 
-    with open(tsv_ofname, 'w') as outfile:
-        for ll in output_table_lines:
-            oline = "\t".join(ll) + "\n"
-            outfile.write(oline)
-
-    for ll in output_table_lines[1:]:
-        copy_AA_files(ll, ldir)
-
-    write_json_dict(output_table_lines, json_ofname)
-    # write_html_table(output_table_lines, html_ofname)
-    print("Finished creating summary tables for " + str(len(output_table_lines[1:])) + " total entries")
+    write_result_outputs(result_rows, tsv_ofname, json_ofname, ldir)
+    print("Finished creating summary tables for " + str(len(result_rows)) + " total entries")
 
 
 if __name__ == "__main__":

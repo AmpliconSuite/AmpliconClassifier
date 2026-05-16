@@ -506,25 +506,6 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
                 caCall, caProb, feat_vals = "NA", "NA", ["NA"] * len(_ca_feat_cols)
             cafile.write("\t".join([sname.rsplit("_amplicon")[0], ampN, caCall, caProb] + feat_vals) + "\n")
 
-    # Chromoauxesis BED files (whole amplicon interval for positive calls)
-    if chromoauxesis_results:
-        ca_bed_dir = args.o + "_classification_bed_files/"
-        if not os.path.exists(ca_bed_dir):
-            os.makedirs(ca_bed_dir)
-        for ind, sname in enumerate(sampNames):
-            if ind >= len(chromoauxesis_results):
-                break
-            if chromoauxesis_results[ind]["decision"] != "chromoauxesis":
-                continue
-            ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
-            trim_sname = sname.rsplit("/")[-1].rsplit("_amplicon")[0]
-            ca_bed_fname = ca_bed_dir + trim_sname + "_" + ampN + "_chromoauxesis_intervals.bed"
-            intervals = chromoauxesis_results[ind].get("amplicon_intervals", {})
-            with open(ca_bed_fname, 'w') as bedfile:
-                for chrom, ilist in intervals.items():
-                    for start, end in ilist:
-                        bedfile.write("{}\t{}\t{}\n".format(chrom, start, end))
-
     for x in ftci_list:
         outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds, rearrCycleInds = x
         write_annotated_corrected_cycles_file(args.o, outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds,
