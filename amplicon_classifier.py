@@ -20,6 +20,7 @@ from ampclasslib.ac_util import ConfigVars
 from ampclasslib.config_params import load_config
 from ampclasslib.radar_plotting import *
 from ampclasslib._version import __ampliconclassifier_version__
+from ampclasslib.chromoauxesis_ml import classify_from_edges as _chromoauxesis_classify_from_edges
 
 
 add_chr_tag = False
@@ -1041,6 +1042,47 @@ def filter_similar_amplicons(n_files, pval):
             AMP_classifications[ind] = (ampClass, ecStat, bfbStat, ecAmpliconCount)
 
 
+def _run_chromoauxesis_from_edges(seq_edges, sv_edges):
+    try:
+        return _chromoauxesis_classify_from_edges(seq_edges, sv_edges)
+    except Exception as e:
+        logger.warning("Chromoauxesis classifier failed: {}".format(e))
+        return {"decision": "not_chromoauxesis", "probability": 0.0, "features": {}}
+
+
+def _get_intervals_from_seq_edges(seq_edges):
+    intervals = defaultdict(list)
+    for e in seq_edges:
+        if e["chrom"]:
+            intervals[e["chrom"]].append((e["start"], e["end"]))
+    return dict(intervals)
+
+
+def find_chromoauxesis_ecdna_cycles(cycleList, cycleCNs, segSeqD, graph_cns, invalidInds, bfb_cycle_inds):
+    """Find circular cycles >250 kbp where every segment's graph CN exceeds the chromoauxesis ecDNA threshold."""
+    exclude = set(invalidInds) | set(bfb_cycle_inds)
+    qualifying = []
+    for ind, cycle in enumerate(cycleList):
+        if ind in exclude or cycle[0] == 0:
+            continue
+        if get_size(cycle, segSeqD) < 250000:
+            continue
+        all_above = True
+        for seg_id in cycle:
+            if seg_id == 0:
+                continue
+            chrom, start, end = segSeqD[abs(seg_id)]
+            if end - start < 1000:
+                continue
+            seg_cns = [iv.data for iv in graph_cns[chrom][start:end]]
+            if not seg_cns or max(seg_cns) <= ConfigVars.chromoauxesis_ecDNA_min_cn:
+                all_above = False
+                break
+        if all_above:
+            qualifying.append(ind)
+    return qualifying
+
+
 def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn, graph_cns):
     cycleTypes = []
     cycleWeights = []
@@ -1133,24 +1175,50 @@ def run_classification(segSeqD, cycleList, cycleCNs):
 
     bfbarchitect_summaries.append(run_bfbarchitect(graphFile, fb_edges, "{}_amplicon{}".format(sName, ampN)))
 
+    # Chromoauxesis classification (graph already read once by parse_graph_edges_raw)
+    _ca_seq_edges, _ca_sv_edges = parse_graph_edges_raw(graphFile, args.add_chr_tag)
+    ca_result = _run_chromoauxesis_from_edges(_ca_seq_edges, _ca_sv_edges)
+    ca_result["amplicon_intervals"] = _get_intervals_from_seq_edges(_ca_seq_edges)
+    chromoauxesis_results.append(ca_result)
+    is_chromoauxesis = (ca_result["decision"] == "chromoauxesis")
+
     ecStat = False
     bfbStat = False
-    if ampClass == "Cyclic" and not bfbClass:
-        ecStat = True
-        bfb_cycle_inds = []
+    qualifying_ecdna_inds = []
 
-    elif bfbClass and ampClass != "No amp/Invalid":
-        bfbStat = True
-        if bfbHasEC:
+    if is_chromoauxesis:
+        # BFB detection is unchanged; ecDNA requires strict high-CN criterion
+        if bfbClass and ampClass != "No amp/Invalid":
+            bfbStat = True
+        else:
+            bfb_cycle_inds = []
+        qualifying_ecdna_inds = find_chromoauxesis_ecdna_cycles(
+            cycleList, cycleCNs, segSeqD, graph_cns, invalidInds, bfb_cycle_inds
+        )
+        if qualifying_ecdna_inds:
             ecStat = True
 
     else:
-        bfb_cycle_inds = []
+        if ampClass == "Cyclic" and not bfbClass:
+            ecStat = True
+            bfb_cycle_inds = []
+
+        elif bfbClass and ampClass != "No amp/Invalid":
+            bfbStat = True
+            if bfbHasEC:
+                ecStat = True
+
+        else:
+            bfb_cycle_inds = []
 
     # determine number of ecDNA present (excluding BFB cycles)
     ecIndexClusters = []
     if ecStat:
-        excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
+        if is_chromoauxesis:
+            non_qualifying = set(range(len(cycleList))) - set(qualifying_ecdna_inds)
+            excludableCycleIndices = non_qualifying | set(bfb_cycle_inds) | set(invalidInds)
+        else:
+            excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
         ecIndexClusters = clusterECCycles(cycleList, cycleCNs, segSeqD, graph_cns, excludableCycleIndices)
         ecAmpliconCount = max(len(ecIndexClusters), 1)
 
@@ -1460,6 +1528,7 @@ if __name__ == "__main__":
     # EDGE_dvaluesList = []
     AMP_classifications = []
     bfbarchitect_summaries = []
+    chromoauxesis_results = []
     sampNames = []
     cyclesFiles = []
     featEntropyD = {}
@@ -1509,7 +1578,7 @@ if __name__ == "__main__":
     # OUTPUT FILE WRITING
     write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, samp_to_ec_count, fd_list, samp_amp_to_graph, prop_list,
-                  summary_map, bfbarchitect_summaries)
+                  summary_map, bfbarchitect_summaries, chromoauxesis_results)
 
     if args.make_results_table:
         logger.info("Creating results table...")

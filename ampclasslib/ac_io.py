@@ -88,6 +88,69 @@ def bed_to_interval_dict(bedf, add_chr_tag):
     return ivald
 
 
+def parse_graph_edges_raw(graphf, add_chr_tag=False):
+    """
+    Read an AA graph file once and return raw sequence and discordant edges.
+
+    Used to feed the chromoauxesis classifier without re-reading the file.
+
+    Returns
+    -------
+    seq_edges : list of dict  — keys: chrom, start, end, cn, size_bp
+    sv_edges  : list of dict  — keys: chrom1, pos1, strand1,
+                                      chrom2, pos2, strand2, cn, sv_type
+    """
+    def _sv_type(c1, p1, s1, c2, p2, s2):
+        if c1 != c2:
+            return "interchromosomal"
+        if s1 == s2:
+            return "inversion"
+        if s1 == "+" and s2 == "-":
+            return "deletion" if p2 > p1 else "duplication"
+        return "duplication" if p2 > p1 else "deletion"
+
+    seq_edges = []
+    sv_edges  = []
+    with open(graphf) as fh:
+        for line in fh:
+            parts = line.rstrip("\n").split("\t")
+            if not parts:
+                continue
+            if parts[0] == "sequence":
+                try:
+                    c1, pd1 = parts[1].rsplit(":", 1)
+                    c2, pd2 = parts[2].rsplit(":", 1)
+                    start   = int(pd1[:-1])
+                    end     = int(pd2[:-1])
+                    cn      = float(parts[3])
+                    size_bp = int(parts[5])
+                    if add_chr_tag and not c1.startswith("chr"):
+                        c1 = "chr" + c1
+                except (ValueError, IndexError):
+                    continue
+                seq_edges.append({"chrom": c1, "start": start, "end": end,
+                                   "cn": cn, "size_bp": size_bp})
+            elif parts[0] == "discordant":
+                try:
+                    left, right = parts[1].split("->", 1)
+                    c1, pd1 = left.rsplit(":", 1)
+                    c2, pd2 = right.rsplit(":", 1)
+                    p1, s1  = int(pd1[:-1]), pd1[-1]
+                    p2, s2  = int(pd2[:-1]), pd2[-1]
+                    cn      = float(parts[2])
+                    if add_chr_tag:
+                        if not c1.startswith("chr"):
+                            c1 = "chr" + c1
+                        if not c2.startswith("chr"):
+                            c2 = "chr" + c2
+                except (ValueError, IndexError):
+                    continue
+                sv_edges.append({"chrom1": c1, "pos1": p1, "strand1": s1,
+                                  "chrom2": c2, "pos2": p2, "strand2": s2,
+                                  "cn": cn, "sv_type": _sv_type(c1, p1, s1, c2, p2, s2)})
+    return seq_edges, sv_edges
+
+
 def parse_bpg(bpgf, add_chr_tag, lcD=None, subset_ivald=None, cn_cut=0, cg5D=None, min_de=0, min_de_size=0):
     """
     Parse breakpoint data from AA-formatted breakpoint graph files.
@@ -367,7 +430,8 @@ def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, 
 
 def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, samp_to_ec_count, fd_list,
-                  samp_amp_to_graph, prop_list, summary_map, bfbarchitect_summaries=None):
+                  samp_amp_to_graph, prop_list, summary_map, bfbarchitect_summaries=None,
+                  chromoauxesis_results=None):
 
     # Genes and ncRNA
     gene_extraction_outname = args.o + "_gene_list.tsv"
@@ -388,7 +452,8 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
 
     # Amplicon profiles
     with open(args.o + "_amplicon_classification_profiles.tsv", 'w') as outfile:
-        oh = ["sample_name", "amplicon_number", "amplicon_decomposition_class", "ecDNA+", "BFB+", "ecDNA_amplicons"]
+        oh = ["sample_name", "amplicon_number", "amplicon_decomposition_class", "ecDNA+", "BFB+",
+              "chromoauxesis+", "ecDNA_amplicons"]
         if args.verbose_classification:
             oh += categories
             if args.bfbarchitect:
@@ -402,7 +467,11 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
             ampClass, ecStat, bfbStat, ecAmpliconCount = AMP_classifications[ind]
             ecOut = "Positive" if ecStat else "None detected"
             bfbOut = "Positive" if bfbStat else "None detected"
-            ov = [sname.rsplit("_amplicon")[0], ampN, ampClass, ecOut, bfbOut, str(ecAmpliconCount)]
+            if chromoauxesis_results and ind < len(chromoauxesis_results):
+                caOut = "Positive" if chromoauxesis_results[ind]["decision"] == "chromoauxesis" else "None detected"
+            else:
+                caOut = "NA"
+            ov = [sname.rsplit("_amplicon")[0], ampN, ampClass, ecOut, bfbOut, caOut, str(ecAmpliconCount)]
             if args.verbose_classification:
                 ov += [str(x) for x in AMP_dvaluesList[ind]]
                 if args.bfbarchitect:
@@ -419,6 +488,42 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
                     ]
 
             outfile.write("\t".join(ov) + "\n")
+
+    # Chromoauxesis calls TSV
+    _ca_feat_cols = ["amplified_span_mb", "sv_qualifying_inter_or_large", "chrom_dominant_frac",
+                     "sv_crossing_frac", "amplified_cn40_span_mb"]
+    with open(args.o + "_chromoauxesis_calls.tsv", 'w') as cafile:
+        cafile.write("\t".join(["sample_name", "amplicon_number", "chromoauxesis_call",
+                                "chromoauxesis_probability"] + _ca_feat_cols) + "\n")
+        for ind, sname in enumerate(sampNames):
+            ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
+            if chromoauxesis_results and ind < len(chromoauxesis_results):
+                ca = chromoauxesis_results[ind]
+                caCall = "Positive" if ca["decision"] == "chromoauxesis" else "None detected"
+                caProb = "{:.4f}".format(ca["probability"])
+                feat_vals = [str(ca["features"].get(f, "NA")) for f in _ca_feat_cols]
+            else:
+                caCall, caProb, feat_vals = "NA", "NA", ["NA"] * len(_ca_feat_cols)
+            cafile.write("\t".join([sname.rsplit("_amplicon")[0], ampN, caCall, caProb] + feat_vals) + "\n")
+
+    # Chromoauxesis BED files (whole amplicon interval for positive calls)
+    if chromoauxesis_results:
+        ca_bed_dir = args.o + "_classification_bed_files/"
+        if not os.path.exists(ca_bed_dir):
+            os.makedirs(ca_bed_dir)
+        for ind, sname in enumerate(sampNames):
+            if ind >= len(chromoauxesis_results):
+                break
+            if chromoauxesis_results[ind]["decision"] != "chromoauxesis":
+                continue
+            ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
+            trim_sname = sname.rsplit("/")[-1].rsplit("_amplicon")[0]
+            ca_bed_fname = ca_bed_dir + trim_sname + "_" + ampN + "_chromoauxesis_intervals.bed"
+            intervals = chromoauxesis_results[ind].get("amplicon_intervals", {})
+            with open(ca_bed_fname, 'w') as bedfile:
+                for chrom, ilist in intervals.items():
+                    for start, end in ilist:
+                        bedfile.write("{}\t{}\t{}\n".format(chrom, start, end))
 
     for x in ftci_list:
         outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds, rearrCycleInds = x

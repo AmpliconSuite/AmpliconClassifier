@@ -32,6 +32,9 @@ class ConfigVars:
         min_bfb_cycle_weight_ratio = 0.6
         bfbarchitect_max_score = 2.8
 
+        # chromoauxesis-related items
+        chromoauxesis_ecDNA_min_cn = 60
+
 
 class breakpoint(object):
     def __init__(self, lchrom, lpos, rchrom, rpos, cn=None, support=None, ldir=None, rdir=None, homlen="NA", homseq="NA"):
