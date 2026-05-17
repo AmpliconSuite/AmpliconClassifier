@@ -149,7 +149,12 @@ BFB is a specific type of genomic amplification mechanism characterized by inver
 ### `bfbarchitect_max_score`
 - **Default:** 2.8
 - **Description:** Maximum BFBArchitect reconstruction score considered passing. Lower BFBArchitect scores indicate a more parsimonious reconstruction.
-- **Usage:** When `--bfbarchitect` is enabled, first-pass BFBArchitect graph-region results are considered passing at or below this score. If no candidate regions are returned, or all candidate regions score above this cutoff, AmpliconClassifier calls BFBArchitect again with `whole_graph=True`.
+- **Usage:** When BFBArchitect is available and not disabled by `--no_bfbarchitect`, first-pass BFBArchitect graph-region results are considered passing at or below this score. If no candidate regions are returned, or all candidate regions score above this cutoff, AmpliconClassifier calls BFBArchitect again with `whole_graph=True`.
+
+### `bfbarchitect_cycle_overlap_threshold`
+- **Default:** 0.95
+- **Description:** Minimum fraction of a cycle's genomic span that must overlap snapped BFBArchitect-positive intervals before the cycle is marked as BFB.
+- **Usage:** BFBArchitect-positive intervals are snapped to the nearest AA graph segment endpoints, then cycles meeting this overlap threshold are marked as BFB cycles for annotation and ecDNA exclusion.
 
 ---
 

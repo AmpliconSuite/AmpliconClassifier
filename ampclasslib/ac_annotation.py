@@ -169,15 +169,29 @@ def amplicon_len_and_cn(feature_dict, gseg_cn_d):
 
 
 def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass,
-                        graphf, add_chr_tag, lcD, ref, chromoauxesis_intervals=None):
+                        graphf, add_chr_tag, lcD, ref, chromoauxesis_intervals=None, bfb_features=None):
     feature_dict = {}
     gseg_cn_d = get_gseg_cns(graphf, add_chr_tag)
     invalidSet = set(invalidInds)
+    if bfb_features:
+        bfb_cycle_inds = set()
+        for feature in bfb_features:
+            bfb_cycle_inds.update(feature.cycle_indices)
     all_used = invalidSet.union(bfb_cycle_inds)
     used_segs = defaultdict(IntervalTree)
     graph_cns = get_graph_cns(graphf, add_chr_tag)
     other_class_c_inds = []
-    if bfbStat:
+    if bfbStat and bfb_features:
+        for feature in bfb_features:
+            bfb_interval_dict = defaultdict(list)
+            for chrom, intervals in feature.intervals.items():
+                for start, end in intervals:
+                    bfb_interval_dict[chrom].append((start, end))
+                    used_segs[chrom].addi(start, end)
+
+            feature_dict[feature.feature_id] = bfb_interval_dict
+
+    elif bfbStat:
         # collect unmerged genomic intervals comprising the feature
         bfb_interval_dict = defaultdict(list)
         for b_ind in bfb_cycle_inds:

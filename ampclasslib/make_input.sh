@@ -5,124 +5,177 @@
 # arg 1-N: locations to search for AA files
 # arg N+1: output name prefix
 
-# Validate arguments
-if [ $# -lt 2 ]; then
+set -u
+
+usage() {
     echo "Usage: $0 <search_path1> [search_path2 ...] <output_name>" >&2
+}
+
+if [ "$#" -lt 2 ]; then
+    usage
     exit 1
 fi
 
-# Extract output prefix (last argument) and search paths (all but last)
 outpre="${@: -1}"
-# Use a more compatible way to get all but last argument
 search_paths=()
 for ((i=1; i<$#; i++)); do
     search_paths+=("${!i}")
 done
 
-# Temporary files
-cycles_file="scf.txt"
-graph_file="sgf.txt"
-summary_file="ssf.txt"
-sample_names="san.txt"
-summary_names="ssn.txt"
+outdir=$(dirname "$outpre")
+if [ "$outdir" != "." ] && [ ! -d "$outdir" ]; then
+    mkdir -p "$outdir" || {
+        echo "ERROR: Could not create output directory: $outdir" >&2
+        exit 1
+    }
+fi
 
-# Clean up any existing temporary files
-cleanup_temp_files() {
-    rm -f "$cycles_file" "$graph_file" "$summary_file" "$sample_names" "$summary_names"
-}
-
-# Set up cleanup on exit
-trap cleanup_temp_files EXIT
-
-# Initialize temporary files
-: > "$cycles_file"
-: > "$graph_file"
-
-# Find all AA graph and cycles files from AA runs
-echo "Searching for AA cycles and graph files..."
+resolved_paths=()
 for search_path in "${search_paths[@]}"; do
     if ! exppath=$(realpath "$search_path" 2>/dev/null); then
         echo "Warning: Cannot resolve path $search_path, skipping..." >&2
         continue
     fi
-    
-    # Find cycles files with exclusions
-    find "$exppath" -name "*_cycles.txt" 2>/dev/null \
-        | grep -v "annotated_cycles" \
-        | grep -v "/\._" \
-        | grep -v "BPG_converted" \
-        | grep -v "_classification/files/" \
-        | sort >> "$cycles_file"
-    
-    # Find graph files with exclusions  
-    find "$exppath" -name "*_graph.txt" 2>/dev/null \
-        | grep -v "features_to_graph" \
-        | grep -v "/\._" \
-        | grep -v "feature_to_graph" \
-        | grep -v "_classification/files/" \
-        | sort >> "$graph_file"
+
+    if [ ! -d "$exppath" ]; then
+        echo "Warning: Search path is not a directory: $exppath, skipping..." >&2
+        continue
+    fi
+
+    resolved_paths+=("$exppath")
 done
 
-# Verify equal numbers of cycles and graph files
-cycles_count=$(wc -l < "$cycles_file" 2>/dev/null || echo 0)
-graph_count=$(wc -l < "$graph_file" 2>/dev/null || echo 0)
-
-if [ "$cycles_count" -ne "$graph_count" ]; then
-    echo "ERROR: Unequal numbers of cycles and graph files found! AA may not have completed correctly." >&2
-    echo "Found $cycles_count cycles files and $graph_count graph files." >&2
+if [ "${#resolved_paths[@]}" -eq 0 ]; then
+    echo "ERROR: No valid search paths provided." >&2
     exit 1
 fi
 
-if [ "$cycles_count" -eq 0 ]; then
-    echo "No cycles/graph files found - creating empty input file"
-    # Create empty input file
-    : > "${outpre}.input"
-else
-    echo "Found $cycles_count matching cycles/graph file pairs"
-    
-    # Extract sample names and create main input file
-    rev "$cycles_file" \
-        | cut -f 1 -d '/' \
-        | cut -c12- \
-        | rev \
-        | sed 's/_amplicon[0-9]*$//' > "$sample_names"
-    
-    paste "$sample_names" "$cycles_file" "$graph_file" > "${outpre}.input"
-fi
+is_excluded_path() {
+    case "$1" in
+        */._*|*BPG_converted*|*_classification/files/*)
+            return 0
+            ;;
+    esac
 
-# Find summary files for samples that may not have corresponding AA outputs
-echo "Searching for summary files..."
-: > "$summary_file"
+    return 1
+}
 
-for search_path in "${search_paths[@]}"; do
-    if ! exppath=$(realpath "$search_path" 2>/dev/null); then
-        echo "Warning: Cannot resolve path $search_path, skipping..." >&2
-        continue
-    fi
-    
-    find "$exppath" -name "*_summary.txt" 2>/dev/null \
-        | grep -v "/\._" \
-        | grep -v "_classification/files/" \
-        | sort >> "$summary_file"
+sample_name_from_cycles() {
+    local base
+    base=$(basename "$1")
+    base=${base%_cycles.txt}
+    echo "$base" | sed 's/_amplicon[0-9]*$//'
+}
+
+sample_name_from_summary() {
+    local base
+    base=$(basename "$1")
+    echo "${base%_summary.txt}"
+}
+
+cycles_files=()
+graph_files=()
+summary_files=()
+
+echo "Searching for AA cycles and graph files..."
+for exppath in "${resolved_paths[@]}"; do
+    while IFS= read -r file; do
+        if is_excluded_path "$file"; then
+            continue
+        fi
+        if [[ "$(basename "$file")" == *annotated_cycles* ]]; then
+            continue
+        fi
+        cycles_files+=("$file")
+    done < <(find "$exppath" -type f -name "*_cycles.txt" 2>/dev/null | sort)
+
+    while IFS= read -r file; do
+        if is_excluded_path "$file"; then
+            continue
+        fi
+        case "$(basename "$file")" in
+            *features_to_graph*|*feature_to_graph*)
+                continue
+                ;;
+        esac
+        graph_files+=("$file")
+    done < <(find "$exppath" -type f -name "*_graph.txt" 2>/dev/null | sort)
+
+    while IFS= read -r file; do
+        if is_excluded_path "$file"; then
+            continue
+        fi
+        summary_files+=("$file")
+    done < <(find "$exppath" -type f -name "*_summary.txt" 2>/dev/null | sort)
 done
 
-summary_count=$(wc -l < "$summary_file" 2>/dev/null || echo 0)
-echo "Found $summary_count summary files"
+declare -A graph_seen
+for graph_file in "${graph_files[@]}"; do
+    graph_seen["$graph_file"]=0
+done
 
-if [ "$summary_count" -eq 0 ]; then
-    echo "No summary files found - creating empty summary map"
-    # Create empty summary map file
-    : > "${outpre}_summary_map.txt"
-else
-    # Extract sample names from summary files and create summary map
-    rev "$summary_file" \
-        | cut -f 1 -d '/' \
-        | cut -c13- \
-        | rev \
-        | sed 's/_summary\.txt$//' > "$summary_names"
-    
-    paste "$summary_names" "$summary_file" > "${outpre}_summary_map.txt"
+missing_graph_count=0
+: > "${outpre}.input" || {
+    echo "ERROR: Could not write ${outpre}.input" >&2
+    exit 1
+}
+
+for cycles_file in "${cycles_files[@]}"; do
+    graph_file="${cycles_file%_cycles.txt}_graph.txt"
+    if [ ! -f "$graph_file" ]; then
+        echo "ERROR: Missing graph file for cycles file:" >&2
+        echo "  cycles: $cycles_file" >&2
+        echo "  expected graph: $graph_file" >&2
+        missing_graph_count=$((missing_graph_count + 1))
+        continue
+    fi
+
+    graph_seen["$graph_file"]=1
+    sample_name=$(sample_name_from_cycles "$cycles_file")
+    printf "%s\t%s\t%s\n" "$sample_name" "$cycles_file" "$graph_file" >> "${outpre}.input"
+done
+
+orphan_graph_count=0
+for graph_file in "${graph_files[@]}"; do
+    if [ "${graph_seen[$graph_file]}" -eq 0 ]; then
+        echo "Warning: Graph file has no matching cycles file, ignoring: $graph_file" >&2
+        orphan_graph_count=$((orphan_graph_count + 1))
+    fi
+done
+
+if [ "$missing_graph_count" -gt 0 ]; then
+    echo "ERROR: Found $missing_graph_count cycles file(s) without matching graph files." >&2
+    exit 1
 fi
 
-echo "Created ${outpre}.input with $cycles_count entries"
+input_count=$(wc -l < "${outpre}.input" 2>/dev/null || echo 0)
+if [ "$input_count" -eq 0 ]; then
+    echo "No cycles/graph file pairs found - created empty input file"
+else
+    echo "Found $input_count matching cycles/graph file pairs"
+fi
+
+if [ "$orphan_graph_count" -gt 0 ]; then
+    echo "Ignored $orphan_graph_count graph file(s) without matching cycles files" >&2
+fi
+
+echo "Searching for summary files..."
+: > "${outpre}_summary_map.txt" || {
+    echo "ERROR: Could not write ${outpre}_summary_map.txt" >&2
+    exit 1
+}
+
+for summary_file in "${summary_files[@]}"; do
+    sample_name=$(sample_name_from_summary "$summary_file")
+    printf "%s\t%s\n" "$sample_name" "$summary_file" >> "${outpre}_summary_map.txt"
+done
+
+summary_count=$(wc -l < "${outpre}_summary_map.txt" 2>/dev/null || echo 0)
+if [ "$summary_count" -eq 0 ]; then
+    echo "No summary files found - created empty summary map"
+else
+    echo "Found $summary_count summary files"
+fi
+
+echo "Created ${outpre}.input with $input_count entries"
 echo "Created ${outpre}_summary_map.txt with $summary_count entries"

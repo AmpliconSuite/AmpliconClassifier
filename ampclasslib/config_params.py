@@ -34,6 +34,7 @@ DEFAULT_CONFIG = {
     "max_nonbfb_break_weight": 0.5,    # max proportion of utilized path/cycle SVs supporting non-foldback connections
     "min_bfb_cycle_weight_ratio": 0.6,  # minimum flow*length weighted proportion of BFB-like paths/cycles for BFB
     "bfbarchitect_max_score": 2.8,     # maximum BFBArchitect score considered passing
+    "bfbarchitect_cycle_overlap_threshold": 0.95,  # min cycle overlap with BFBArchitect intervals to mark BFB
 
     # chromoauxesis-related items
     "chromoauxesis_ecDNA_min_cn": 60   # minimum graph CN required for all segments in an ecDNA cycle when chromoauxesis is detected

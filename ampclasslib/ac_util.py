@@ -31,6 +31,7 @@ class ConfigVars:
         max_nonbfb_break_weight = 0.5
         min_bfb_cycle_weight_ratio = 0.6
         bfbarchitect_max_score = 2.8
+        bfbarchitect_cycle_overlap_threshold = 0.95
 
         # chromoauxesis-related items
         chromoauxesis_ecDNA_min_cn = 60

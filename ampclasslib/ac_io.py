@@ -460,6 +460,7 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
                 oh += ["BFBArchitect_min_score", "BFBArchitect_passing_region_count",
                        "BFBArchitect_multiplicities", "BFBArchitect_regions",
                        "BFBArchitect_whole_graph_used"]
+            oh += ["BFB_source"]
 
         outfile.write("\t".join(oh) + "\n")
         for ind, sname in enumerate(sampNames):
@@ -486,6 +487,10 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
                         curr_summary.get("regions", "NA"),
                         str(curr_summary.get("whole_graph_used", "NA"))
                     ]
+                curr_summary = {}
+                if bfbarchitect_summaries and ind < len(bfbarchitect_summaries):
+                    curr_summary = bfbarchitect_summaries[ind]
+                ov += [str(curr_summary.get("bfb_sources", "NA"))]
 
             outfile.write("\t".join(ov) + "\n")
 
@@ -572,3 +577,25 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
     #             ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
     #             outfile.write(
     #                 "\t".join([sname.rsplit("_amplicon")[0], ampN] + [str(x) for x in EDGE_dvaluesList[ind]]) + "\n")
+
+
+def write_classification_results(args, classification_results, categories, summary_map):
+    write_outputs(
+        args,
+        classification_results.ftgd_list,
+        classification_results.ftci_list,
+        classification_results.bpgi_list,
+        classification_results.featEntropyD,
+        categories,
+        classification_results.sampNames,
+        classification_results.cyclesFiles,
+        classification_results.AMP_classifications,
+        classification_results.AMP_dvaluesList,
+        classification_results.samp_to_ec_count,
+        classification_results.fd_list,
+        classification_results.samp_amp_to_graph,
+        classification_results.prop_list,
+        summary_map,
+        classification_results.bfbarchitect_summaries,
+        classification_results.chromoauxesis_results,
+    )

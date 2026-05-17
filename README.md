@@ -66,13 +66,13 @@ brew install coreutils
 
 #### Optional: BFBArchitect
 
-AmpliconClassifier can annotate amplicon classification profiles with BFBArchitect scores when `--bfbarchitect --verbose_classification` is used. BFBArchitect is not installed as an AmpliconClassifier dependency yet, so install it separately:
+AmpliconClassifier uses BFBArchitect for additional BFB detection when it is installed. BFBArchitect is not installed as an AmpliconClassifier dependency yet, so install it separately:
 
 ```bash
 python -m pip install -e /path/to/BFBArchitect
 ```
 
-These scores are reported for inspection only and do not currently change AmpliconClassifier classifications.
+BFBArchitect-positive regions are integrated into `BFB+` calls and reported BFB feature intervals. Use `--no_bfbarchitect` to disable this integration. When `--verbose_classification` is set, BFBArchitect scores and the BFB call source are reported in the classification profile.
 
 
 ### 2. Usage
@@ -84,6 +84,9 @@ You can provide the directory containing multiple AA amplicons or multiple uniqu
 >`python amplicon_classifier.py --ref GRCh38 --AA_results /path/to/AA/output/directories/ > classifier_stdout.log`
 
 AC will crawl the given location and find all relevant AA files and perform classification on them.
+Amplicons can be classified in parallel with `--jobs N`; output order follows the input file order.
+When BFBArchitect is enabled, the approximate BFBArchitect solver thread budget is
+`--jobs * --bfb_threads`.
 
 **To classify a single amplicon**:
 
@@ -99,6 +102,8 @@ Alternatively, you can use the `make_input.sh` script to gather the necessary in
 >`make_input.sh /path/to/AA/output/directories/ example_collection` 
 
 This would create a file called `example_collection.input` which can be given as the `--input` argument for AC.
+The script pairs each `*_cycles.txt` file with the exact sibling `*_graph.txt` file sharing the same prefix,
+reports missing graph files as errors, and reports orphan graph files as warnings.
 
 
 #### Combining classification results from GRCh37 and hg19:
@@ -121,6 +126,8 @@ Note that amplicons receiving a "Cyclic" classification may be ecDNA+, BFB+ or b
 | `BFB+`                         | Prediction about whether the AA amplicon is the result of a BFB. Either `Positive` or `None detected`                                                                                   |
 | `chromoauxesis+`                | Prediction about whether the AA amplicon has chromoauxesis-like graph structure. Either `Positive` or `None detected`                                                                   |
 | `ecDNA_amplicons`              | Predicted number of distinct (non-overlapping) ecDNA which are represented in a single AA amplicon. This estimate is experimental.                                               |
+
+When `--verbose_classification` is set and BFBArchitect is available, the profile also includes BFBArchitect score summaries and `BFB_source`, which reports `AC`, `BFBArchitect`, or `AC|BFBArchitect` for positive BFB calls.
 
 The `amplicon_decomposition_class` is an abstract label and can be one of six classes:
 
@@ -230,7 +237,9 @@ Else if running on multiple amplicons, use argument
 | `--no_LC_filter`                                | Set this to turn off filtering low-complexity & poor mappability genome region paths & cycles based on the regions in the AA data repo.                                                                              |
 | `--filter_similar`                              | Permits filtering of false-positive amps arising in multiple independent samples based on similarity calculation. Only use if all samples are of independent origins (not replicates and not multi-region biopsies). |
 | `--make_results_table`                          | Creates summary results table (_results_table.tsv) after classification completes.                                                                                                                                   |
-| `--bfbarchitect`                                | Run BFBArchitect and add score summaries to verbose amplicon classification profiles. Scores are annotation-only and do not change classifications.                                                                    |
+| `--no_bfbarchitect`                             | Disable BFBArchitect integration. By default, AmpliconClassifier uses BFBArchitect when it is installed and warns when it is unavailable.                                                                               |
+| `--bfb_threads`                                 | Number of BFBArchitect ILP solver threads per amplicon. When using `--jobs`, approximate total BFBArchitect solver threads are `--jobs * --bfb_threads`.                                                              |
+| `--jobs`                                        | Number of amplicons to classify in parallel. Default is 1. Output rows are collected in input order.                                                                                                                   |
 | `-i/--input`                                    | If you have already run `make_input.sh`, you can give the resulting .input file instead of setting `--AA_results`                                                                                                    | 
 
 ### 5. Other utilities:

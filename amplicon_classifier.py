@@ -3,12 +3,14 @@
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 import copy
 import logging
 from math import log
 import operator
 import os
 import re
+import shlex
 import subprocess
 import sys
 
@@ -16,7 +18,10 @@ from intervaltree import IntervalTree, Interval
 
 from ampclasslib.ac_annotation import *
 from ampclasslib.ac_io import *
-from ampclasslib.ac_util import ConfigVars
+from ampclasslib.ac_util import ConfigVars, is_human_viral_hybrid
+from ampclasslib.classification_records import (
+    AmpliconInput, AmpliconRecord, ClassificationContext, Feature, collect_amplicon_records
+)
 from ampclasslib.config_params import load_config
 from ampclasslib.radar_plotting import *
 from ampclasslib._version import __ampliconclassifier_version__
@@ -24,6 +29,7 @@ from ampclasslib.chromoauxesis_ml import classify_from_edges as _chromoauxesis_c
 
 
 add_chr_tag = False
+WORKER_CONTEXT = None
 BFBARCHITECT_RECONSTRUCT = None
 BFBARCHITECT_WRITE_GRAPH = None
 BFBARCHITECT_WRITE_CYCLES = None
@@ -32,6 +38,8 @@ BFBARCHITECT_CENTROMERES = None
 NO_AMP_INVALID_INTERNAL_CLASS = "No amp/Invalid"
 NO_FSCNA_CLASS = "No-FSCNA"
 INVALID_CLASS = "Invalid"
+BFBARCHITECT_SOURCE = "BFBArchitect"
+AC_SOURCE = "AC"
 
 
 def is_non_feature_amplicon_class(amp_class):
@@ -213,7 +221,7 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
 
 
 # Compute f (foldback fraction) from the edges in the AA graph alone
-def compute_f_from_AA_graph(graphf):
+def compute_f_from_AA_graph(graphf, lcD):
     h = "SequenceEdge: StartPosition, EndPosition, PredictedCopyCount, AverageCoverage, Size, NumberReadsMapped".rsplit()
     h = [x.rstrip(',') for x in h]
     with open(graphf) as infile:
@@ -670,7 +678,10 @@ def empty_bfbarchitect_summary():
         "passing_region_count": "NA",
         "multiplicities": "NA",
         "regions": "NA",
-        "whole_graph_used": "NA"
+        "whole_graph_used": "NA",
+        "passing_intervals": [],
+        "passing_scores": [],
+        "bfb_sources": "NA"
     }
 
 
@@ -686,6 +697,8 @@ def summarize_bfbarchitect_results(results, whole_graph_used):
     passing_regions = 0
     multiplicities = []
     region_strings = []
+    passing_intervals = []
+    passing_scores = []
 
     for res in results or []:
         raw_scores = res.get("scores", [])
@@ -706,6 +719,10 @@ def summarize_bfbarchitect_results(results, whole_graph_used):
             all_scores.append(region_min)
             if region_min <= ConfigVars.bfbarchitect_max_score:
                 passing_regions += 1
+                region = res.get("region")
+                if isinstance(region, (list, tuple)) and len(region) >= 3:
+                    passing_intervals.append((region[0], int(region[1]), int(region[2])))
+                passing_scores.append(region_min)
 
         multiplicity = res.get("multiplicity", "NA")
         multiplicities.append(str(multiplicity))
@@ -726,7 +743,10 @@ def summarize_bfbarchitect_results(results, whole_graph_used):
         "passing_region_count": str(passing_regions),
         "multiplicities": ";".join(multiplicities) if multiplicities else "NA",
         "regions": ";".join(region_strings) if region_strings else "NA",
-        "whole_graph_used": str(whole_graph_used)
+        "whole_graph_used": str(whole_graph_used),
+        "passing_intervals": passing_intervals,
+        "passing_scores": passing_scores,
+        "bfb_sources": "NA"
     }
 
 
@@ -786,7 +806,7 @@ def write_bfbarchitect_outputs(results, output_prefix, whole_graph_used):
 
 
 def run_bfbarchitect(graphf, fb_edges, output_prefix):
-    if not args.bfbarchitect:
+    if args.no_bfbarchitect:
         return empty_bfbarchitect_summary()
 
     if fb_edges == 0:
@@ -814,6 +834,198 @@ def run_bfbarchitect(graphf, fb_edges, output_prefix):
     except Exception as e:
         logger.warning("BFBArchitect failed for {}: {}".format(graphf, str(e)))
         return empty_bfbarchitect_summary()
+
+
+def interval_dict_from_intervals(intervals):
+    interval_dict = defaultdict(list)
+    for chrom, start, end in intervals:
+        if chrom and start < end:
+            interval_dict[chrom].append((start, end))
+
+    merge_intervals({"_": interval_dict})
+    return interval_dict
+
+
+def feature_intervals_overlap(left, right):
+    for chrom, left_intervals in left.items():
+        right_intervals = right.get(chrom, [])
+        for l_start, l_end in left_intervals:
+            for r_start, r_end in right_intervals:
+                if max(l_start, r_start) < min(l_end, r_end):
+                    return True
+
+    return False
+
+
+def add_interval_dict(target, source):
+    for chrom, intervals in source.items():
+        target[chrom].extend(intervals)
+
+
+def graph_segment_endpoints(seq_edges):
+    endpoints = defaultdict(list)
+    for edge in seq_edges:
+        endpoints[edge["chrom"]].append(edge["start"])
+        endpoints[edge["chrom"]].append(edge["end"])
+
+    return endpoints
+
+
+def snap_position_to_nearest_endpoint(pos, endpoints):
+    return min(endpoints, key=lambda x: (abs(x - pos), x))
+
+
+def snap_bfbarchitect_intervals(intervals, seq_edges, add_chr_tag):
+    endpoints_by_chrom = graph_segment_endpoints(seq_edges)
+    snapped = []
+    for chrom, start, end in intervals:
+        if add_chr_tag and chrom not in endpoints_by_chrom and not chrom.startswith("chr"):
+            chrom = "chr" + chrom
+        endpoints = endpoints_by_chrom.get(chrom)
+        if not endpoints:
+            continue
+
+        snapped_start = snap_position_to_nearest_endpoint(start, endpoints)
+        snapped_end = snap_position_to_nearest_endpoint(end, endpoints)
+        if snapped_start == snapped_end:
+            continue
+
+        snapped.append((chrom, min(snapped_start, snapped_end), max(snapped_start, snapped_end)))
+
+    return snapped
+
+
+def interval_overlap_bp(intervals, chrom, start, end):
+    overlap = 0
+    for int_start, int_end in intervals.get(chrom, []):
+        overlap += max(0, min(end, int_end) - max(start, int_start))
+
+    return overlap
+
+
+def cycle_bfb_overlap_fraction(cycle, segSeqD, bfb_intervals):
+    total_bp = 0
+    overlap_bp = 0
+    for seg in cycle:
+        if seg == 0:
+            continue
+        chrom, start, end = segSeqD[abs(seg)]
+        if not chrom or start >= end:
+            continue
+        total_bp += end - start
+        overlap_bp += interval_overlap_bp(bfb_intervals, chrom, start, end)
+
+    if total_bp == 0:
+        return 0.0
+
+    return overlap_bp / float(total_bp)
+
+
+def cycle_indices_overlapping_bfb_intervals(cycleList, segSeqD, bfb_intervals, threshold):
+    cycle_indices = set()
+    for ind, cycle in enumerate(cycleList):
+        if cycle_bfb_overlap_fraction(cycle, segSeqD, bfb_intervals) >= threshold:
+            cycle_indices.add(ind)
+
+    return cycle_indices
+
+
+def bfb_intervals_from_cycles(cycleList, segSeqD, cycle_indices, invalidInds, graph_cns, ref):
+    invalid_set = set(invalidInds)
+    bfb_interval_dict = defaultdict(list)
+    for b_ind in cycle_indices:
+        if b_ind in invalid_set:
+            continue
+        for c_id in cycleList[b_ind]:
+            if c_id == 0:
+                continue
+            chrom, start, end = segSeqD[abs(c_id)]
+            if not chrom:
+                continue
+
+            seg_t = IntervalTree([Interval(start, end + 1)])
+            low_cn_intervals = [
+                x for x in graph_cns[chrom][start:end + 1]
+                if x.data < 4 and not is_human_viral_hybrid(ref, cycleList[b_ind], segSeqD)
+            ]
+            for x in low_cn_intervals:
+                seg_t.chop(x.begin, x.end + 1)
+
+            for x in seg_t:
+                bfb_interval_dict[chrom].append((x.begin, x.end))
+
+    merge_intervals({"_": bfb_interval_dict})
+    return bfb_interval_dict
+
+
+def merge_bfb_features(features):
+    merged = []
+    for feature in features:
+        target = None
+        for existing in merged:
+            if feature_intervals_overlap(existing.intervals, feature.intervals):
+                target = existing
+                break
+
+        if target is None:
+            merged.append(feature)
+            continue
+
+        add_interval_dict(target.intervals, feature.intervals)
+        merge_intervals({"_": target.intervals})
+        target.cycle_indices.update(feature.cycle_indices)
+        target.sources.update(feature.sources)
+        if target.score is None or (feature.score is not None and feature.score < target.score):
+            target.score = feature.score
+        target.metadata.setdefault("merged_features", []).append(feature.feature_id)
+
+    for ind, feature in enumerate(merged, 1):
+        feature.feature_id = "BFB_{}".format(ind)
+
+    return merged
+
+
+def build_bfb_features(bfb_cycle_inds, bfbarchitect_summary, cycleList, segSeqD, invalidInds, graphFile, graph_cns):
+    features = []
+    if bfb_cycle_inds:
+        native_intervals = bfb_intervals_from_cycles(
+            cycleList, segSeqD, set(bfb_cycle_inds), invalidInds, graph_cns, args.ref
+        )
+        if native_intervals:
+            features.append(Feature(
+                feature_id="BFB_1",
+                feature_type="BFB",
+                intervals=native_intervals,
+                cycle_indices=set(bfb_cycle_inds),
+                sources={AC_SOURCE},
+                score=None,
+            ))
+
+    passing_intervals = bfbarchitect_summary.get("passing_intervals", [])
+    if passing_intervals:
+        seq_edges, _sv_edges = parse_graph_edges_raw(graphFile, args.add_chr_tag)
+        snapped_intervals = snap_bfbarchitect_intervals(passing_intervals, seq_edges, args.add_chr_tag)
+        for ind, region in enumerate(snapped_intervals, 1):
+            interval_dict = interval_dict_from_intervals([region])
+            cycle_indices = cycle_indices_overlapping_bfb_intervals(
+                cycleList, segSeqD, interval_dict, ConfigVars.bfbarchitect_cycle_overlap_threshold
+            )
+            score = None
+            passing_scores = bfbarchitect_summary.get("passing_scores", [])
+            if ind - 1 < len(passing_scores):
+                score = passing_scores[ind - 1]
+
+            features.append(Feature(
+                feature_id="BFB_{}".format(len(features) + 1),
+                feature_type="BFB",
+                intervals=interval_dict,
+                cycle_indices=cycle_indices,
+                sources={BFBARCHITECT_SOURCE},
+                score=score,
+                metadata={"snapped_region": region},
+            ))
+
+    return merge_bfb_features(features)
 
 
 def get_bfbarchitect_centromere_path(aa_data_repo_base, ref):
@@ -860,19 +1072,22 @@ def load_bfbarchitect_centromeres(aa_data_repo_base, ref):
 # ------------------------------------------------------------
 
 
-def plotting():
+def plotting(classification_results):
     textCategories = ["No-FSCNA/\nInvalid", "Linear\namplification", "Trivial\ncycle", "Complex\nnon-cyclic",
                       "Complex\ncyclic", "BFB\nfoldback"]
     if args.plotstyle == "grouped":
         logger.info("plotting")
-        make_classification_radar(textCategories, AMP_dvaluesList, args.o + "_amp_class", sampNames)
+        make_classification_radar(
+            textCategories, classification_results.AMP_dvaluesList, args.o + "_amp_class",
+            classification_results.sampNames
+        )
 
     elif args.plotstyle == "individual":
         logger.info("plotting")
-        for a, s in zip(AMP_dvaluesList, sampNames):
+        for a, s in zip(classification_results.AMP_dvaluesList, classification_results.sampNames):
             # print(textCategories, a)
             make_classification_radar(textCategories, [a[:len(textCategories)], ], args.o + "_" + s + "_amp_class",
-                                      sampNames)
+                                      classification_results.sampNames)
 
 
 FEATURE_SIMILARITY_TYPES = {"ecDNA", "BFB", "Complex-non-cyclic", "Linear", "chromoauxesis"}
@@ -1050,7 +1265,7 @@ def choose_similarity_filter_targets(similarity_rows, feature_registry, pval):
     return feats_to_filter, amps_to_filter, filter_events
 
 
-def filter_similar_amplicons(n_files, pval, feature_registry, similarity_rows):
+def filter_similar_amplicons(n_files, pval, feature_registry, similarity_rows, classification_results):
     # adjust the p value cutoff based on number of input amplicons
     if pval is None:
         pval = 0.05/(max(1, n_files-1))
@@ -1115,20 +1330,14 @@ def filter_similar_amplicons(n_files, pval, feature_registry, similarity_rows):
 
     # now do the filtering
     '''
-    The following are updated during similarity filtering
-    ftgd_list = []  # store list of feature gene classifications   -- removes from dictionary
-    ftci_list = []  # store list of cycles file info               -- adds invalid tag to relevant cycles
-    bpgi_list = []  # store list of bpg                            -- set feature of edge to "None"
-    fd_list = []  # store list of feature_dicts                    -- delete feature from feature_dict
-    prop_list = [] # store list of basic amplicon properties       -- delete feature from prop_dict
-    featEntropyD = {}                                              -- delete feature from feature entropy dict
-    AMP_classifications = []                                       -- apply amplicon de-classification logic
-    samp_to_ec_count = defaultdict(int)                            -- decrement the count as needed
+    The following ClassificationResults fields are updated during similarity filtering:
+    ftgd_list, ftci_list, bpgi_list, fd_list, prop_list, featEntropyD,
+    AMP_classifications, chromoauxesis_results, and samp_to_ec_count.
     '''
 
     # map amplicon to the false regions
 
-    for sname, anum, ag_dict, nc_dict in ftgd_list:
+    for sname, anum, ag_dict, nc_dict in classification_results.ftgd_list:
         if sname + "_" + anum in samp_amp_filt_set:
             filter_whole_amplicon = (sname, anum) in amps_to_filter
             for feat_name in sorted(ag_dict.keys()):
@@ -1141,7 +1350,7 @@ def filter_similar_amplicons(n_files, pval, feature_registry, similarity_rows):
                 if filter_whole_amplicon or (sname, anum, fname, fnum) in feats_to_filter:
                     nc_dict[feat_name].clear()
 
-    for ind, x in enumerate(ftci_list):
+    for ind, x in enumerate(classification_results.ftci_list):
         # annotated_cycle_outname = os.path.basename(cyclesFile).rsplit("_cycles")[0] + "_annotated_cycles.txt"
         # outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds, rearrCycleInds = x
         outname = x[0]
@@ -1157,10 +1366,12 @@ def filter_similar_amplicons(n_files, pval, feature_registry, similarity_rows):
                         invalidInds.append(cind)
                         break
 
-            ftci_list[ind][6] = invalidInds
+            classification_results.ftci_list[ind][6] = invalidInds
 
-    for ind, (sname, bpg_linelist, feature_dict, prop_dict) in enumerate(zip(sampNames, bpgi_list, fd_list, prop_list)):
-        ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
+    for ind, (sname, bpg_linelist, feature_dict, prop_dict) in enumerate(zip(
+            classification_results.sampNames, classification_results.bpgi_list,
+            classification_results.fd_list, classification_results.prop_list)):
+        ampN = classification_results.cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
         samp_amp = sname + "_" + ampN
         if samp_amp in samp_amp_filt_set:
             filter_whole_amplicon = (sname, ampN) in amps_to_filter
@@ -1181,30 +1392,30 @@ def filter_similar_amplicons(n_files, pval, feature_registry, similarity_rows):
 
     for sname, ampN, fname, fnum in feats_to_filter:
         try:
-            del featEntropyD[(sname, ampN, fname + "_" + fnum)]
+            del classification_results.featEntropyD[(sname, ampN, fname + "_" + fnum)]
 
         except KeyError:
             pass
 
     for sname, ampN in amps_to_filter:
-        keys_to_del = [x for x in featEntropyD if x[0] == sname and x[1] == ampN]
+        keys_to_del = [x for x in classification_results.featEntropyD if x[0] == sname and x[1] == ampN]
         for key in keys_to_del:
-            del featEntropyD[key]
+            del classification_results.featEntropyD[key]
 
-    for ind, sname in enumerate(sampNames):
-        ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
+    for ind, sname in enumerate(classification_results.sampNames):
+        ampN = classification_results.cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
         samp_amp = sname + "_" + ampN
         if samp_amp in samp_amp_filt_set:
-            ampClass, ecStat, bfbStat, ecAmpliconCount = AMP_classifications[ind]
+            ampClass, ecStat, bfbStat, ecAmpliconCount = classification_results.AMP_classifications[ind]
             if (sname, ampN) in amps_to_filter:
                 if ecAmpliconCount:
-                    samp_to_ec_count[sname] -= ecAmpliconCount
+                    classification_results.samp_to_ec_count[sname] -= ecAmpliconCount
 
-                AMP_classifications[ind] = (NO_FSCNA_CLASS, False, False, 0)
-                if ind < len(chromoauxesis_results):
-                    chromoauxesis_results[ind]["decision"] = "not_chromoauxesis"
-                    chromoauxesis_results[ind]["probability"] = 0.0
-                    chromoauxesis_results[ind]["filtered_by_similarity"] = True
+                classification_results.AMP_classifications[ind] = (NO_FSCNA_CLASS, False, False, 0)
+                if ind < len(classification_results.chromoauxesis_results):
+                    classification_results.chromoauxesis_results[ind]["decision"] = "not_chromoauxesis"
+                    classification_results.chromoauxesis_results[ind]["probability"] = 0.0
+                    classification_results.chromoauxesis_results[ind]["filtered_by_similarity"] = True
                 continue
 
             feats_to_remove = [x[0] for x in samp_amp_to_feat[samp_amp]]
@@ -1216,7 +1427,7 @@ def filter_similar_amplicons(n_files, pval, feature_registry, similarity_rows):
             for x in feats_to_remove:
                 if "ecDNA" in x:
                     ecAmpliconCount-=1
-                    samp_to_ec_count[sname]-=1
+                    classification_results.samp_to_ec_count[sname]-=1
 
             if ecAmpliconCount == 0 and ecStat:
                 ecStat = False
@@ -1230,7 +1441,7 @@ def filter_similar_amplicons(n_files, pval, feature_registry, similarity_rows):
                     # TODO: Update this based on reclassification or "layered" classification.
                     ampClass = NO_FSCNA_CLASS
 
-            AMP_classifications[ind] = (ampClass, ecStat, bfbStat, ecAmpliconCount)
+            classification_results.AMP_classifications[ind] = (ampClass, ecStat, bfbStat, ecAmpliconCount)
 
 
 def _run_chromoauxesis_from_edges(seq_edges, sv_edges):
@@ -1274,7 +1485,7 @@ def find_chromoauxesis_ecdna_cycles(cycleList, cycleCNs, segSeqD, graph_cns, inv
     return qualifying
 
 
-def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn, graph_cns):
+def get_raw_cycle_props(cycleList, cycleCNs, segSeqD, maxCN, rearr_e, tot_over_min_cn, graph_cns):
     cycleTypes = []
     cycleWeights = []
     rearrCycleInds = set()
@@ -1328,13 +1539,72 @@ def get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn, graph_cns):
     return totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights, rearrCycleInds
 
 
-def run_classification(segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count=0):
+def make_amplicon_input(fpair):
+    if len(fpair) <= 2:
+        raise ValueError("File list not properly formatted")
+
+    orig_sName, cyclesFile, graphFile = fpair[:3]
+    sName = re.split("_amplicon[0-9]*", orig_sName)[0]
+    ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
+    return AmpliconInput(orig_sName, sName, ampN, cyclesFile, graphFile)
+
+
+def warn_if_chrom_names_mismatch(amplicon_input, segSeqD, context):
+    if context.args.ref == "hg19" or context.args.ref == "GRCh37":
+        chroms = set([x[0] for k, x in segSeqD.items() if k != 0])
+        if context.args.ref == "hg19" and not any([x.startswith("chr") for x in chroms]):
+            logger.warning("chrom names: " + str(chroms))
+            logger.warning("Warning! --ref hg19 was set, but chromosome naming is not consistent with hg19 ('chr1', 'chr2', etc.)\n")
+        elif context.args.ref == "GRCh37" and any([x.startswith("chr") for x in chroms]) and not context.add_chr_tag:
+            logger.warning("chrom names: " + str(chroms))
+            logger.warning("Warning! --ref GRCh37 was set, but chromosome naming is not consistent with GRCh37 ('1', '2', etc.)\n")
+
+
+def process_amplicon(amplicon_input, context):
+    segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count = parseCycle(
+        amplicon_input.cycles_file, amplicon_input.graph_file, context.add_chr_tag, context.lcD,
+        context.patch_links
+    )
+    warn_if_chrom_names_mismatch(amplicon_input, segSeqD, context)
+    return run_classification(
+        amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count,
+        context.lcD, context.gene_lookup, context.ncRNA_lookup
+    )
+
+
+def init_worker_context(context):
+    global WORKER_CONTEXT, args, add_chr_tag, decomposition_strictness
+    WORKER_CONTEXT = context
+    args = context.args
+    add_chr_tag = context.add_chr_tag
+    decomposition_strictness = context.decomposition_strictness
+
+
+def process_amplicon_worker(amplicon_input):
+    if WORKER_CONTEXT is None:
+        raise RuntimeError("Worker context was not initialized")
+
+    return process_amplicon(amplicon_input, WORKER_CONTEXT)
+
+
+def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count,
+                       lcD, gene_lookup, ncRNA_lookup):
+    sName = amplicon_input.sample_name
+    ampN = amplicon_input.amplicon_number
+    cyclesFile = amplicon_input.cycles_file
+    graphFile = amplicon_input.graph_file
+
+    feature_entropy = {}
+    feature_registry = {}
+    full_featname_to_graph = {}
+    full_featname_to_intervals = {}
+
     graph_cns = get_graph_cns(graphFile, args.add_chr_tag)
     # first compute some properties about the foldbacks and copy numbers
-    fb_edges, fb_readcount, fb_read_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile)
+    fb_edges, fb_readcount, fb_read_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, lcD)
     rearr_e = tot_rearr_edges(graphFile)
     (totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights,
-     rearrCycleInds) = get_raw_cycle_props(cycleList, maxCN, rearr_e, tot_over_min_cn, graph_cns)
+     rearrCycleInds) = get_raw_cycle_props(cycleList, cycleCNs, segSeqD, maxCN, rearr_e, tot_over_min_cn, graph_cns)
 
     # decomposition/amplicon complexity
     totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD, range(len(cycleList)),
@@ -1354,9 +1624,11 @@ def run_classification(segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count=0):
     bfbClass = classifyBFB(fb_read_prop, fb_bwp, nfb_bwp, bfb_cwp, maxCN, tot_over_min_cn)
 
     non_fb_rearr_e = rearr_e - fb_edges
+    bfb_suppressed_as_artifact = False
     # heuristics to catch sequencing artifact samples
     if fb_edges > 15 and fb_read_prop > 0.8:
         bfbClass = False
+        bfb_suppressed_as_artifact = True
         if non_fb_rearr_e >= 4 and tot_over_min_cn > ConfigVars.compCycContCut and maxCN > ConfigVars.sig_amp:
             ampClass = "Complex-non-cyclic"
         elif tot_over_min_cn > ConfigVars.compCycContCut and maxCN > ConfigVars.sig_amp:
@@ -1380,13 +1652,27 @@ def run_classification(segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count=0):
             )
         )
 
-    bfbarchitect_summaries.append(run_bfbarchitect(graphFile, fb_edges, "{}_amplicon{}".format(sName, ampN)))
+    if bfb_suppressed_as_artifact:
+        bfbarchitect_summary = empty_bfbarchitect_summary()
+    else:
+        bfbarchitect_summary = run_bfbarchitect(graphFile, fb_edges, "{}_{}".format(sName, ampN))
+
+    native_bfb_cycle_inds = list(bfb_cycle_inds) if bfbClass else []
+    bfb_features = build_bfb_features(
+        native_bfb_cycle_inds, bfbarchitect_summary, cycleList, segSeqD, invalidInds, graphFile, graph_cns
+    )
+    bfb_cycle_inds = sorted(set().union(*[feature.cycle_indices for feature in bfb_features])) if bfb_features else []
+    bfb_sources = sorted(set().union(*[feature.sources for feature in bfb_features])) if bfb_features else []
+    if bfbClass and AC_SOURCE not in bfb_sources:
+        bfb_sources.append(AC_SOURCE)
+    bfbarchitect_summary["bfb_sources"] = "|".join(sorted(bfb_sources)) if bfb_sources else "NA"
+    bfb_detected = bool(bfbClass) or bool(bfb_features)
+    bfbarchitect_detected = BFBARCHITECT_SOURCE in bfb_sources
 
     # Chromoauxesis classification (graph already read once by parse_graph_edges_raw)
     _ca_seq_edges, _ca_sv_edges = parse_graph_edges_raw(graphFile, args.add_chr_tag)
     ca_result = _run_chromoauxesis_from_edges(_ca_seq_edges, _ca_sv_edges)
     ca_result["amplicon_intervals"] = _get_intervals_from_seq_edges(_ca_seq_edges)
-    chromoauxesis_results.append(ca_result)
     is_chromoauxesis = (ca_result["decision"] == "chromoauxesis")
 
     ecStat = False
@@ -1395,7 +1681,7 @@ def run_classification(segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count=0):
 
     if is_chromoauxesis:
         # BFB detection is unchanged; ecDNA requires strict high-CN criterion
-        if bfbClass and not is_non_feature_amplicon_class(ampClass):
+        if bfb_detected and not is_non_feature_amplicon_class(ampClass):
             bfbStat = True
         else:
             bfb_cycle_inds = []
@@ -1407,17 +1693,18 @@ def run_classification(segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count=0):
                 ecStat = True
 
     else:
-        if ampClass == "Cyclic" and not bfbClass:
+        if ampClass == "Cyclic" and not bfb_detected:
             ecStat = True
             bfb_cycle_inds = []
 
-        elif bfbClass and not is_non_feature_amplicon_class(ampClass):
+        elif bfb_detected and not is_non_feature_amplicon_class(ampClass):
             bfbStat = True
-            if bfbHasEC:
+            if bfbHasEC or (bfbarchitect_detected and ampClass == "Cyclic"):
                 ecStat = True
 
         else:
             bfb_cycle_inds = []
+            bfb_features = []
 
     # determine number of ecDNA present (excluding BFB cycles)
     ecIndexClusters = []
@@ -1444,7 +1731,14 @@ def run_classification(segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count=0):
         ecStat = False
         ecAmpliconCount = 0
 
-    samp_to_ec_count[sName] += ecAmpliconCount
+    if bfbStat:
+        final_bfb_sources = sorted(set().union(*[feature.sources for feature in bfb_features])) if bfb_features else []
+        if bfbClass and AC_SOURCE not in final_bfb_sources:
+            final_bfb_sources.append(AC_SOURCE)
+        bfbarchitect_summary["bfb_sources"] = "|".join(sorted(final_bfb_sources)) if final_bfb_sources else "AC"
+    else:
+        bfbarchitect_summary["bfb_sources"] = "NA"
+
     # write entropy for each feature
     ecEntropies = []
     if ecAmpliconCount == 1 and not ecIndexClusters:
@@ -1456,27 +1750,25 @@ def run_classification(segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count=0):
         ecEntropies.append((totalEnt, decompEnt, nEnt))
 
     for ind, etup in enumerate(ecEntropies):
-        featEntropyD[(sName, ampN, "ecDNA_" + str(ind + 1))] = etup
+        feature_entropy[(sName, ampN, "ecDNA_" + str(ind + 1))] = etup
 
     if bfbStat:
+        bfb_entropy_cycle_inds = bfb_cycle_inds if bfb_cycle_inds else range(len(cycleList))
         bfb_totalEnt, bfb_decompEnt, bfb_nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
-                                                                        bfb_cycle_inds, set())
-        featEntropyD[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
+                                                                        bfb_entropy_cycle_inds, set())
+        feature_entropy[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
 
     if is_chromoauxesis:
         chromoauxesis_cycle_inds = set(range(len(cycleList))) - set(invalidInds)
         ca_totalEnt, ca_decompEnt, ca_nEnt = decompositionComplexity(
             graphFile, cycleList, cycleCNs, segSeqD, chromoauxesis_cycle_inds, set()
         )
-        featEntropyD[(sName, ampN, "chromoauxesis_1")] = (ca_totalEnt, ca_decompEnt, ca_nEnt)
+        feature_entropy[(sName, ampN, "chromoauxesis_1")] = (ca_totalEnt, ca_decompEnt, ca_nEnt)
 
     bpg_linelist, gseg_cn_d, other_class_c_inds, feature_dict, prop_dict, ampClass = amplicon_annotation(cycleList, segSeqD,
         bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass, graphFile, args.add_chr_tag, lcD,
-        args.ref, ca_result.get("amplicon_intervals") if is_chromoauxesis else None)
+        args.ref, ca_result.get("amplicon_intervals") if is_chromoauxesis else None, bfb_features)
 
-    bpgi_list.append(bpg_linelist)
-    fd_list.append(feature_dict)
-    prop_list.append(prop_dict)
     trim_sname = sName.rsplit("/")[-1].rsplit("_amplicon")[0]
     for feat_name, curr_fd in feature_dict.items():
         if curr_fd:
@@ -1486,21 +1778,42 @@ def run_classification(segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count=0):
             register_feature(feature_registry, full_fname, trim_sname, ampN, feat_name, graphFile, cyclesFile, curr_fd)
 
     if not bfbStat and not ecStat and not is_non_feature_amplicon_class(ampClass):
-        featEntropyD[(sName, ampN, ampClass + "_1")] = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
+        feature_entropy[(sName, ampN, ampClass + "_1")] = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
             other_class_c_inds, set())
 
     feat_to_amped_genes = get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d)
     feat_to_amped_ncrna = get_genes_from_intervals(ncRNA_lookup, feature_dict, gseg_cn_d)
-    ftgd_list.append([sName, ampN, feat_to_amped_genes, feat_to_amped_ncrna])
+    feature_gene_entry = [sName, ampN, feat_to_amped_genes, feat_to_amped_ncrna]
 
     # store this additional information
-    AMP_classifications.append((ampClass, ecStat, bfbStat, ecAmpliconCount))
+    classification = (ampClass, ecStat, bfbStat, ecAmpliconCount)
     dvalues = [AMP_dvaluesDict[x] for x in categories]
-    AMP_dvaluesList.append(dvalues)
 
     annotated_cycle_outname = os.path.basename(cyclesFile).rsplit("_cycles")[0] + "_annotated_cycles.txt"
-    ftci_list.append([annotated_cycle_outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters,
-                      invalidInds, rearrCycleInds])
+    annotated_cycles_entry = [annotated_cycle_outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters,
+                              invalidInds, rearrCycleInds]
+
+    return AmpliconRecord(
+        sample_name=sName,
+        amplicon_number=ampN,
+        cycles_file=cyclesFile,
+        graph_file=graphFile,
+        feature_gene_entry=feature_gene_entry,
+        annotated_cycles_entry=annotated_cycles_entry,
+        breakpoint_graph_lines=bpg_linelist,
+        feature_dict=feature_dict,
+        prop_dict=prop_dict,
+        classification=classification,
+        dvalues=dvalues,
+        bfbarchitect_summary=bfbarchitect_summary,
+        chromoauxesis_result=ca_result,
+        feature_entropy=feature_entropy,
+        ec_count=ecAmpliconCount,
+        samp_amp_to_graph={sName + "_" + ampN: graphFile},
+        feature_registry=feature_registry,
+        full_featname_to_graph=full_featname_to_graph,
+        full_featname_to_intervals=full_featname_to_intervals,
+    )
 
 
 # ------------------------------------------------------------
@@ -1563,11 +1876,13 @@ if __name__ == "__main__":
                         "uses default config in ampclasslib directory.")
     parser.add_argument("--make_results_table", help="Create summary results table after classification completes. "
                         "Only works when using --AA_results or --input (not with -c/-g single amplicon mode).", action='store_true')
-    parser.add_argument("--bfbarchitect", help="Enable BFBArchitect score annotation. Results are reported in verbose "
-                        "classification profiles and do not change classifications.", action='store_true')
+    parser.add_argument("--no_bfbarchitect", help="Disable BFBArchitect integration. By default, AmpliconClassifier "
+                        "uses BFBArchitect when it is installed and available.", action='store_true')
     parser.add_argument("--bfb_threads", help="Number of threads for BFBArchitect ILP solver.", type=int, default=1)
+    parser.add_argument("--jobs", help="Number of amplicons to classify in parallel.", type=int, default=1)
     parser.add_argument("-v", "--version", action='version', version=__ampliconclassifier_version__)
     args = parser.parse_args()
+    args.bfbarchitect = False
 
     # print("AmpliconClassifier " + __ampliconclassifier_version__)
     # print(" ".join(sys.argv))
@@ -1614,6 +1929,10 @@ if __name__ == "__main__":
             "--make_results_table can only be used with --AA_results or --input, not with single amplicon mode (-c/-g)")
         sys.exit(1)
 
+    if args.jobs < 1:
+        logger.error("--jobs must be >= 1")
+        sys.exit(1)
+
     if args.add_chr_tag:
         if args.ref == "GRCh38_viral":
             logger.warning("Warning: \'--add_chr_tag\' is not supported for \'GRCh38_viral\' reference.")
@@ -1627,12 +1946,12 @@ if __name__ == "__main__":
         import ampclasslib
         src_dir = os.path.dirname(ampclasslib.__file__)
         input_file = os.path.join(outdir_loc, "AC.input")
-        cmd = "{}/make_input.sh {} {}".format(src_dir, args.AA_results, outdir_loc + "/AC")
+        cmd = [os.path.join(src_dir, "make_input.sh"), args.AA_results, outdir_loc + "/AC"]
         logger.info("Generating .input file...")
-        logger.info(cmd)
+        logger.info(" ".join(shlex.quote(x) for x in cmd))
 
         # Capture stdout and stderr
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True)
 
         # Log stdout as info if there's any output
         if result.stdout.strip():
@@ -1669,8 +1988,8 @@ if __name__ == "__main__":
     elif args.ref == "GRCm38":
         args.ref = "mm10"
 
-    if args.bfbarchitect and args.ref == "hg19" and args.add_chr_tag:
-        logger.error("--bfbarchitect cannot be used with --ref hg19 --add_chr_tag because BFBArchitect reads raw "
+    if not args.no_bfbarchitect and args.ref == "hg19" and args.add_chr_tag:
+        logger.error("BFBArchitect cannot be used with --ref hg19 --add_chr_tag because BFBArchitect reads raw "
                      "graph chromosome names and the matching hg19/GRCh37 centromere source is ambiguous.")
         sys.exit(1)
 
@@ -1706,7 +2025,7 @@ if __name__ == "__main__":
         logger.error("$AA_DATA_REPO not set. Please see AA installation instructions.")
         sys.exit(1)
 
-    if args.bfbarchitect:
+    if not args.no_bfbarchitect:
         try:
             from bfbarchitect import reconstruct_bfb_from_graph, write_bfb_graph, write_bfb_cycles, visualize_BFB
             BFBARCHITECT_RECONSTRUCT = reconstruct_bfb_from_graph
@@ -1715,10 +2034,14 @@ if __name__ == "__main__":
             BFBARCHITECT_VISUALIZE = visualize_BFB
             BFBARCHITECT_CENTROMERES = load_bfbarchitect_centromeres(AA_DATA_REPO_BASE, args.ref)
             if BFBARCHITECT_CENTROMERES:
+                args.bfbarchitect = True
                 logger.info("BFBArchitect integration enabled.")
+            else:
+                logger.warning("BFBArchitect is installed but centromeres could not be loaded. Skipping BFBArchitect.")
 
         except ImportError:
-            logger.warning("BFBArchitect is not installed. Skipping BFBArchitect annotation.")
+            logger.warning("BFBArchitect is not installed. Skipping BFBArchitect integration. Use --no_bfbarchitect "
+                           "to suppress this warning.")
 
     if args.exclude_bed:
         addtnl_lcD = buildLCDatabase(args.exclude_bed, filtsize=0)
@@ -1736,72 +2059,55 @@ if __name__ == "__main__":
     refGeneFileLoc = AA_DATA_REPO + fDict["gene_filename"]
     gene_lookup = parse_genes(refGeneFileLoc, add_chr_tag=add_chr_tag)
     ncRNA_lookup = parse_genes(ncRNAFileLoc, add_chr_tag=add_chr_tag, strip_chr_tag=(args.ref == "GRCh37"), keep_all=True)
+    classification_context = ClassificationContext(
+        args, add_chr_tag, decomposition_strictness, lcD, patch_links, gene_lookup, ncRNA_lookup
+    )
 
-    # GLOBAL STORAGE VARIABLES
-    ftgd_list = []  # store list of feature gene classifications
-    ftci_list = []  # store list of cycles file info
-    bpgi_list = []  # store list of bpg
-    fd_list = []  # store list of feature_dicts
-    prop_list = [] # store list of basic amplicon properties
-    AMP_dvaluesList = []
-    # EDGE_dvaluesList = []
-    AMP_classifications = []
-    bfbarchitect_summaries = []
-    chromoauxesis_results = []
-    sampNames = []
-    cyclesFiles = []
-    featEntropyD = {}
-    samp_to_ec_count = defaultdict(int)
-    samp_amp_to_graph = {}
-    full_featname_to_graph = {}
-    full_featname_to_intervals = {}
-    feature_registry = {}
-
-    # ITERATE OVER FILES CONDUCT THE CLASSIFICATION
+    amplicon_inputs = []
     for i, fpair in enumerate(flist, 1):
-        if len(fpair) > 2:
-            orig_sName, cyclesFile, graphFile = fpair[:3]
-            #sName = orig_sName.rsplit("_amplicon")[0]
-            sName = re.split("_amplicon[0-9]*", orig_sName)[0]
-            sampNames.append(sName)
-            cyclesFiles.append(cyclesFile)
-            ampN = cyclesFile.rstrip("_cycles.txt").rsplit("_")[-1]
-            samp_amp_to_graph[sName + "_" + ampN] = graphFile
-            logger.info("[{}/{}] {} {}".format(i, len(flist), sName, ampN))
-            segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count = parseCycle(cyclesFile, graphFile, add_chr_tag, lcD,
-                                                                               patch_links)
-            if args.ref == "hg19" or args.ref == "GRCh37":
-                chroms = set([x[0] for k,x in segSeqD.items() if k != 0])
-                if args.ref == "hg19" and not any([x.startswith("chr") for x in chroms]):
-                    logger.warning("chrom names: " + str(chroms))
-                    logger.warning("Warning! --ref hg19 was set, but chromosome naming is not consistent with hg19 ('chr1', 'chr2', etc.)\n")
-                elif args.ref == "GRCh37" and any([x.startswith("chr") for x in chroms]) and not add_chr_tag:
-                    logger.warning("chrom names: " + str(chroms))
-                    logger.warning("Warning! --ref GRCh37 was set, but chromosome naming is not consistent with GRCh37 ('1', '2', etc.)\n")
-
-        else:
+        try:
+            amplicon_input = make_amplicon_input(fpair)
+        except ValueError:
             logger.info(str(fpair))
             logger.error("File list not properly formatted\n")
             sys.exit(1)
 
-        run_classification(segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count)
+        logger.info("[{}/{}] {} {}".format(
+            i, len(flist), amplicon_input.sample_name, amplicon_input.amplicon_number
+        ))
+        amplicon_inputs.append(amplicon_input)
+
+    jobs = min(args.jobs, max(1, len(amplicon_inputs)))
+    if jobs > 1:
+        logger.info("Classifying {} amplicons with {} worker processes".format(len(amplicon_inputs), jobs))
+        if args.bfbarchitect:
+            logger.info("BFBArchitect thread budget can reach {} workers * {} BFB threads = {} solver threads".format(
+                jobs, args.bfb_threads, jobs * args.bfb_threads
+            ))
+        with ProcessPoolExecutor(max_workers=jobs, initializer=init_worker_context,
+                                 initargs=(classification_context,)) as executor:
+            amplicon_records = list(executor.map(process_amplicon_worker, amplicon_inputs))
+    else:
+        amplicon_records = [process_amplicon(x, classification_context) for x in amplicon_inputs]
 
     logger.info("Classification stage completed")
+    classification_results = collect_amplicon_records(amplicon_records)
+
     logger.info("Computing feature similarity scores...")
-    feature_similarity_rows = compute_feature_similarity_scores(feature_registry)
+    feature_similarity_rows = compute_feature_similarity_scores(classification_results.feature_registry)
     write_feature_similarity_scores(feature_similarity_rows, args.o)
     if args.filter_similar:
         logger.info("Filtering similar amplicons...")
-        filter_similar_amplicons(len(flist), args.filter_pval, feature_registry, feature_similarity_rows)
+        filter_similar_amplicons(
+            len(flist), args.filter_pval, classification_results.feature_registry,
+            feature_similarity_rows, classification_results
+        )
 
     # make any requested visualizations
-    plotting()
+    plotting(classification_results)
 
     logger.info("Writing outputs...")
-    # OUTPUT FILE WRITING
-    write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
-                  AMP_classifications, AMP_dvaluesList, samp_to_ec_count, fd_list, samp_amp_to_graph, prop_list,
-                  summary_map, bfbarchitect_summaries, chromoauxesis_results)
+    write_classification_results(args, classification_results, categories, summary_map)
 
     if args.make_results_table:
         logger.info("Creating results table...")
