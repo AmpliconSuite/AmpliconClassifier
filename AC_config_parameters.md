@@ -154,7 +154,7 @@ BFB is a specific type of genomic amplification mechanism characterized by inver
 ### `bfbarchitect_cycle_overlap_threshold`
 - **Default:** 0.95
 - **Description:** Minimum fraction of a cycle's genomic span that must overlap snapped BFBArchitect-positive intervals before the cycle is marked as BFB.
-- **Usage:** BFBArchitect-positive intervals are snapped to the nearest AA graph segment endpoints, then cycles meeting this overlap threshold are marked as BFB cycles for annotation and ecDNA exclusion.
+- **Usage:** BFBArchitect-positive intervals are snapped to the nearest AA graph segment endpoints, then cycles meeting this overlap threshold are marked as BFB cycles for native-style BFB annotation and feature reporting.
 
 ---
 

@@ -127,7 +127,7 @@ Note that amplicons receiving a "Cyclic" classification may be ecDNA+, BFB+ or b
 | `chromoauxesis+`                | Prediction about whether the AA amplicon has chromoauxesis-like graph structure. Either `Positive` or `None detected`                                                                   |
 | `ecDNA_amplicons`              | Predicted number of distinct (non-overlapping) ecDNA which are represented in a single AA amplicon. This estimate is experimental.                                               |
 
-When `--verbose_classification` is set and BFBArchitect is available, the profile also includes BFBArchitect score summaries and `BFB_source`, which reports `AC`, `BFBArchitect`, or `AC|BFBArchitect` for positive BFB calls.
+When `--verbose_classification` is set, the profile also includes `BFB_source`, which reports `AC`, `BFBArchitect`, or `AC|BFBArchitect` for positive BFB calls. If BFBArchitect is available and enabled, verbose profiles also include BFBArchitect score summaries.
 
 The `amplicon_decomposition_class` is an abstract label and can be one of six classes:
 

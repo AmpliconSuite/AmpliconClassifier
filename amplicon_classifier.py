@@ -3,8 +3,11 @@
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 import argparse
-from concurrent.futures import ProcessPoolExecutor
+from collections import Counter
+import contextlib
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import copy
+import io
 import logging
 from math import log
 import operator
@@ -771,6 +774,19 @@ def should_retry_bfbarchitect_whole_graph(results):
     return not all_scores or all(score > ConfigVars.bfbarchitect_max_score for score in all_scores)
 
 
+@contextlib.contextmanager
+def suppress_bfbarchitect_chatter():
+    previous_disable_level = logging.root.manager.disable
+    stdout_buffer = io.StringIO()
+    stderr_buffer = io.StringIO()
+    try:
+        logging.disable(logging.INFO)
+        with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
+            yield
+    finally:
+        logging.disable(previous_disable_level)
+
+
 def write_bfbarchitect_outputs(results, output_prefix, whole_graph_used):
     if not args.verbose_classification:
         return
@@ -795,12 +811,13 @@ def write_bfbarchitect_outputs(results, output_prefix, whole_graph_used):
         cycles_out = "{}_BFB_cycles.txt".format(region_prefix)
 
         try:
-            BFBARCHITECT_WRITE_GRAPH(graph_out, res["new_segments"], res["svs"], res["sv_info"])
-            BFBARCHITECT_WRITE_CYCLES(cycles_out, res["new_segments"], res["bfb_strings"], res["scores"],
-                                      res["multiplicity"])
-            BFBARCHITECT_VISUALIZE(cycle_file=cycles_out, graph_file=graph_out, cnr_file=None,
-                                   output_prefix="{}_BFB".format(region_prefix), multiple=False,
-                                   centromere_dict=BFBARCHITECT_CENTROMERES)
+            with suppress_bfbarchitect_chatter():
+                BFBARCHITECT_WRITE_GRAPH(graph_out, res["new_segments"], res["svs"], res["sv_info"])
+                BFBARCHITECT_WRITE_CYCLES(cycles_out, res["new_segments"], res["bfb_strings"], res["scores"],
+                                          res["multiplicity"])
+                BFBARCHITECT_VISUALIZE(cycle_file=cycles_out, graph_file=graph_out, cnr_file=None,
+                                       output_prefix="{}_BFB".format(region_prefix), multiple=False,
+                                       centromere_dict=BFBARCHITECT_CENTROMERES)
         except Exception as e:
             logger.warning("Could not write BFBArchitect outputs for {}: {}".format(region_prefix, str(e)))
 
@@ -819,12 +836,14 @@ def run_bfbarchitect(graphf, fb_edges, output_prefix):
         return empty_bfbarchitect_summary()
 
     try:
-        results = BFBARCHITECT_RECONSTRUCT(graphf, centromere_dict=BFBARCHITECT_CENTROMERES, solver=None,
-                                           multiple=False, whole_graph=False, threads=args.bfb_threads)
+        with suppress_bfbarchitect_chatter():
+            results = BFBARCHITECT_RECONSTRUCT(graphf, centromere_dict=BFBARCHITECT_CENTROMERES, solver=None,
+                                               multiple=False, whole_graph=False, threads=args.bfb_threads)
         whole_graph_used = False
         if should_retry_bfbarchitect_whole_graph(results):
-            results = BFBARCHITECT_RECONSTRUCT(graphf, centromere_dict=BFBARCHITECT_CENTROMERES, solver=None,
-                                               multiple=False, whole_graph=True, threads=args.bfb_threads)
+            with suppress_bfbarchitect_chatter():
+                results = BFBARCHITECT_RECONSTRUCT(graphf, centromere_dict=BFBARCHITECT_CENTROMERES, solver=None,
+                                                   multiple=False, whole_graph=True, threads=args.bfb_threads)
             whole_graph_used = True
 
         summary = summarize_bfbarchitect_results(results, whole_graph_used)
@@ -1587,6 +1606,52 @@ def process_amplicon_worker(amplicon_input):
     return process_amplicon(amplicon_input, WORKER_CONTEXT)
 
 
+def log_classification_progress(completed_samples, total_samples, sample_name):
+    logger.info(
+        "Classification progress: {}/{} samples completed (latest: {})".format(
+            completed_samples, total_samples, sample_name
+        )
+    )
+
+
+def classify_amplicons(amplicon_inputs, classification_context, jobs):
+    total_amplicons = len(amplicon_inputs)
+    if total_amplicons == 0:
+        return []
+
+    sample_remaining = Counter([x.sample_name for x in amplicon_inputs])
+    total_samples = len(sample_remaining)
+    completed_samples = 0
+    completed_amplicons = 0
+    amplicon_records = [None] * total_amplicons
+
+    def record_completed(index, record):
+        nonlocal completed_amplicons, completed_samples
+        amplicon_input = amplicon_inputs[index]
+        amplicon_records[index] = record
+        completed_amplicons += 1
+        sample_remaining[amplicon_input.sample_name] -= 1
+        if sample_remaining[amplicon_input.sample_name] == 0:
+            completed_samples += 1
+            log_classification_progress(completed_samples, total_samples, amplicon_input.sample_name)
+
+    if jobs > 1:
+        with ProcessPoolExecutor(max_workers=jobs, initializer=init_worker_context,
+                                 initargs=(classification_context,)) as executor:
+            future_to_index = {
+                executor.submit(process_amplicon_worker, amplicon_input): index
+                for index, amplicon_input in enumerate(amplicon_inputs)
+            }
+            for future in as_completed(future_to_index):
+                index = future_to_index[future]
+                record_completed(index, future.result())
+    else:
+        for index, amplicon_input in enumerate(amplicon_inputs):
+            record_completed(index, process_amplicon(amplicon_input, classification_context))
+
+    return amplicon_records
+
+
 def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count,
                        lcD, gene_lookup, ncRNA_lookup):
     sName = amplicon_input.sample_name
@@ -2072,10 +2137,21 @@ if __name__ == "__main__":
             logger.error("File list not properly formatted\n")
             sys.exit(1)
 
-        logger.info("[{}/{}] {} {}".format(
-            i, len(flist), amplicon_input.sample_name, amplicon_input.amplicon_number
-        ))
         amplicon_inputs.append(amplicon_input)
+
+    if amplicon_inputs:
+        first_amplicon = amplicon_inputs[0]
+        last_amplicon = amplicon_inputs[-1]
+        if len(amplicon_inputs) == 1:
+            logger.info("Prepared 1 amplicon input: {} {}".format(
+                first_amplicon.sample_name, first_amplicon.amplicon_number
+            ))
+        else:
+            logger.info("Prepared {} amplicon inputs; first={} {}, last={} {}".format(
+                len(amplicon_inputs),
+                first_amplicon.sample_name, first_amplicon.amplicon_number,
+                last_amplicon.sample_name, last_amplicon.amplicon_number
+            ))
 
     jobs = min(args.jobs, max(1, len(amplicon_inputs)))
     if jobs > 1:
@@ -2084,11 +2160,10 @@ if __name__ == "__main__":
             logger.info("BFBArchitect thread budget can reach {} workers * {} BFB threads = {} solver threads".format(
                 jobs, args.bfb_threads, jobs * args.bfb_threads
             ))
-        with ProcessPoolExecutor(max_workers=jobs, initializer=init_worker_context,
-                                 initargs=(classification_context,)) as executor:
-            amplicon_records = list(executor.map(process_amplicon_worker, amplicon_inputs))
     else:
-        amplicon_records = [process_amplicon(x, classification_context) for x in amplicon_inputs]
+        logger.info("Classifying {} amplicons with 1 worker process".format(len(amplicon_inputs)))
+
+    amplicon_records = classify_amplicons(amplicon_inputs, classification_context, jobs)
 
     logger.info("Classification stage completed")
     classification_results = collect_amplicon_records(amplicon_records)
