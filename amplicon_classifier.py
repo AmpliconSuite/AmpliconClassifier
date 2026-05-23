@@ -8,6 +8,7 @@ import contextlib
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import copy
 import io
+import inspect
 import logging
 from math import log
 import operator
@@ -675,6 +676,13 @@ def classifyBFB(fb_read_prop, fb_bwp, nonbfb_sig, bfb_cyc_ratio, maxCN, tot_over
     return "BFB"
 
 
+def is_foldback_qc_artifact(fb_edges, fb_read_prop):
+    return (
+        fb_edges > ConfigVars.max_foldback_edges_qc or
+        (fb_edges > 15 and fb_read_prop > 0.8)
+    )
+
+
 def empty_bfbarchitect_summary():
     return {
         "min_score": "NA",
@@ -774,6 +782,64 @@ def should_retry_bfbarchitect_whole_graph(results):
     return not all_scores or all(score > ConfigVars.bfbarchitect_max_score for score in all_scores)
 
 
+def bfbarchitect_whole_graph_preflight(graphf):
+    sequence_edges = 0
+    discordant_edges = 0
+    foldback_edges = 0
+    chrom_bp = defaultdict(int)
+
+    with open(graphf) as infile:
+        for line in infile:
+            if line.startswith("sequence"):
+                sequence_edges += 1
+                fields = line.rstrip().rsplit()
+                if len(fields) >= 3:
+                    try:
+                        lchrom, lpd = fields[1].rsplit(":", 1)
+                        _rchrom, rpd = fields[2].rsplit(":", 1)
+                        lpos = int(lpd[:-1])
+                        rpos = int(rpd[:-1])
+                        chrom_bp[lchrom] += max(0, rpos - lpos)
+                    except (IndexError, ValueError):
+                        pass
+            elif line.startswith("discordant"):
+                fields = line.rstrip().rsplit()
+                if len(fields) < 2:
+                    continue
+
+                discordant_edges += 1
+                try:
+                    lbp, rbp = fields[1].split("->")
+                    lchrom, lpd = lbp.rsplit(":", 1)
+                    rchrom, rpd = rbp.rsplit(":", 1)
+                    lpos, ldir = int(lpd[:-1]), lpd[-1]
+                    rpos, rdir = int(rpd[:-1]), rpd[-1]
+                except (IndexError, ValueError):
+                    continue
+                if ldir == rdir and lchrom == rchrom and abs(rpos - lpos) <= 50000:
+                    foldback_edges += 1
+
+    foldback_fraction = foldback_edges / float(discordant_edges) if discordant_edges else 0.0
+    complex_graph = (
+        sequence_edges > ConfigVars.bfbarchitect_whole_graph_max_sequence_edges or
+        discordant_edges > ConfigVars.bfbarchitect_whole_graph_max_discordant_edges
+    )
+    weak_foldback_signal = foldback_fraction < ConfigVars.bfbarchitect_whole_graph_min_foldback_fraction
+    large_chrom_count = sum(
+        1 for bp in chrom_bp.values() if bp >= ConfigVars.bfbarchitect_whole_graph_min_large_chrom_bp
+    )
+    multichromosomal_graph = large_chrom_count >= ConfigVars.bfbarchitect_whole_graph_max_large_chrom_count
+    should_run = not ((complex_graph and weak_foldback_signal) or multichromosomal_graph)
+
+    return should_run, {
+        "sequence_edges": sequence_edges,
+        "discordant_edges": discordant_edges,
+        "foldback_edges": foldback_edges,
+        "foldback_fraction": foldback_fraction,
+        "large_chrom_count": large_chrom_count
+    }
+
+
 @contextlib.contextmanager
 def suppress_bfbarchitect_chatter():
     previous_disable_level = logging.root.manager.disable
@@ -822,6 +888,32 @@ def write_bfbarchitect_outputs(results, output_prefix, whole_graph_used):
             logger.warning("Could not write BFBArchitect outputs for {}: {}".format(region_prefix, str(e)))
 
 
+def run_bfbarchitect_reconstruct(graphf, whole_graph):
+    kwargs = {
+        "centromere_dict": BFBARCHITECT_CENTROMERES,
+        "solver": None,
+        "multiple": False,
+        "whole_graph": whole_graph,
+        "threads": args.bfb_threads
+    }
+
+    if ConfigVars.bfbarchitect_min_lp_bound is not None:
+        try:
+            signature = inspect.signature(BFBARCHITECT_RECONSTRUCT)
+            if "min_lp_bound" in signature.parameters:
+                kwargs["min_lp_bound"] = ConfigVars.bfbarchitect_min_lp_bound
+        except (TypeError, ValueError):
+            kwargs["min_lp_bound"] = ConfigVars.bfbarchitect_min_lp_bound
+
+    try:
+        return BFBARCHITECT_RECONSTRUCT(graphf, **kwargs)
+    except TypeError as e:
+        if "min_lp_bound" in kwargs and "min_lp_bound" in str(e):
+            kwargs.pop("min_lp_bound")
+            return BFBARCHITECT_RECONSTRUCT(graphf, **kwargs)
+        raise
+
+
 def run_bfbarchitect(graphf, fb_edges, output_prefix):
     if args.no_bfbarchitect:
         return empty_bfbarchitect_summary()
@@ -837,16 +929,32 @@ def run_bfbarchitect(graphf, fb_edges, output_prefix):
 
     try:
         with suppress_bfbarchitect_chatter():
-            results = BFBARCHITECT_RECONSTRUCT(graphf, centromere_dict=BFBARCHITECT_CENTROMERES, solver=None,
-                                               multiple=False, whole_graph=False, threads=args.bfb_threads)
+            results = run_bfbarchitect_reconstruct(graphf, whole_graph=False)
         whole_graph_used = False
+        whole_graph_skipped = False
         if should_retry_bfbarchitect_whole_graph(results):
-            with suppress_bfbarchitect_chatter():
-                results = BFBARCHITECT_RECONSTRUCT(graphf, centromere_dict=BFBARCHITECT_CENTROMERES, solver=None,
-                                                   multiple=False, whole_graph=True, threads=args.bfb_threads)
-            whole_graph_used = True
+            should_run_whole_graph, graph_stats = bfbarchitect_whole_graph_preflight(graphf)
+            if should_run_whole_graph:
+                with suppress_bfbarchitect_chatter():
+                    results = run_bfbarchitect_reconstruct(graphf, whole_graph=True)
+                whole_graph_used = True
+            else:
+                whole_graph_skipped = True
+                logger.info(
+                    "Skipping BFBArchitect whole-graph retry for {} because graph preflight failed "
+                    "(sequence_edges={}, discordant_edges={}, foldback_edges={}, foldback_fraction={:.3f}, "
+                    "large_chrom_count={}).".format(
+                        graphf, graph_stats["sequence_edges"], graph_stats["discordant_edges"],
+                        graph_stats["foldback_edges"], graph_stats["foldback_fraction"],
+                        graph_stats["large_chrom_count"]
+                    )
+                )
 
         summary = summarize_bfbarchitect_results(results, whole_graph_used)
+        if whole_graph_skipped and not results:
+            summary["passing_region_count"] = "0"
+            summary["regions"] = "whole_graph_skipped_complex_weak_foldback"
+            summary["whole_graph_used"] = "False"
         write_bfbarchitect_outputs(results, output_prefix, whole_graph_used)
         return summary
 
@@ -1176,37 +1284,27 @@ def get_cross_sample_feature_pairs(feat_to_ivald, feature_registry, amps_overlap
     return pairs
 
 
-def compute_feature_similarity_scores(feature_registry):
-    from feature_similarity import amps_overlap, parse_bpg, compute_similarity, cn_cut
+def compute_feature_similarity_scores(feature_registry, threads=1):
+    from feature_similarity import amps_overlap, compute_pairwise_feature_similarity, cn_cut
 
     feat_to_ivald = {}
+    feat_to_graph = {}
     for feature_id, feature_info in feature_registry.items():
         if feature_info["feature_type"] not in FEATURE_SIMILARITY_TYPES:
             continue
 
         feat_to_ivald[feature_id] = (None, interval_dict_to_tree(feature_info["intervals"]))
+        feat_to_graph[feature_id] = feature_info["graph_path"]
 
     candidate_pairs = get_cross_sample_feature_pairs(feat_to_ivald, feature_registry, amps_overlap)
     logger.info("Total of {} cross-sample pairs of features to compare for similarity.".format(len(candidate_pairs)))
+    if threads > 1 and len(candidate_pairs) > 1:
+        logger.info("Computing feature similarity with {} worker processes.".format(min(threads, len(candidate_pairs))))
 
-    outdata = []
-    for feature_id_1, feature_id_2 in candidate_pairs:
-        graph_path_1 = feature_registry[feature_id_1]["graph_path"]
-        graph_path_2 = feature_registry[feature_id_2]["graph_path"]
-        if graph_path_1 == graph_path_2:
-            continue
-
-        graph1 = parse_bpg(graph_path_1, add_chr_tag, lcD, subset_ivald=feat_to_ivald[feature_id_1][1],
-                           cn_cut=cn_cut, cg5D=None, min_de=0)
-        graph2 = parse_bpg(graph_path_2, add_chr_tag, lcD, subset_ivald=feat_to_ivald[feature_id_2][1],
-                           cn_cut=cn_cut, cg5D=None, min_de=0)
-        if not graph1[1] or not graph2[1]:
-            continue
-
-        compute_similarity({feature_id_1: graph1, feature_id_2: graph2}, [(feature_id_1, feature_id_2)], outdata)
-
-    outdata.sort(key=lambda x: (x[2], x[1], x[0]), reverse=True)
-    return outdata
+    return compute_pairwise_feature_similarity(
+        feat_to_graph, feat_to_ivald, candidate_pairs, add_chr_tag=add_chr_tag, lcD=lcD, cg5D=None,
+        cn_cut_value=cn_cut, min_de_value=0, threads=threads
+    )
 
 
 def write_feature_similarity_scores(similarity_rows, output_prefix):
@@ -1580,6 +1678,9 @@ def warn_if_chrom_names_mismatch(amplicon_input, segSeqD, context):
 
 
 def process_amplicon(amplicon_input, context):
+    logger.info("Classification started: {} {}".format(
+        amplicon_input.sample_name, amplicon_input.amplicon_number
+    ))
     segSeqD, cycleList, cycleCNs, lc_filtered_cycle_count = parseCycle(
         amplicon_input.cycles_file, amplicon_input.graph_file, context.add_chr_tag, context.lcD,
         context.patch_links
@@ -1691,7 +1792,7 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
     non_fb_rearr_e = rearr_e - fb_edges
     bfb_suppressed_as_artifact = False
     # heuristics to catch sequencing artifact samples
-    if fb_edges > 15 and fb_read_prop > 0.8:
+    if is_foldback_qc_artifact(fb_edges, fb_read_prop):
         bfbClass = False
         bfb_suppressed_as_artifact = True
         if non_fb_rearr_e >= 4 and tot_over_min_cn > ConfigVars.compCycContCut and maxCN > ConfigVars.sig_amp:
@@ -1700,13 +1801,15 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
             ampClass = "Linear"
         else:
             ampClass = INVALID_CLASS
-            logger.warning(
-                "{} has high foldback edge count ({}) and foldback read fraction ({:.3f}), "
-                "suggesting read-orientation artifacts. Marking amplicon Invalid. Re-run the sample with "
-                "AmpliconSuite-pipeline --foldback_pair_support_min 3 or higher if artifacts persist.".format(
-                    amplicon_log_id(sName, ampN), fb_edges, fb_read_prop
-                )
+
+        logger.warning(
+            "{} has high foldback edge count ({}) and foldback read fraction ({:.3f}), suggesting "
+            "read-orientation artifacts. Suppressing BFB calls and BFBArchitect for this amplicon. "
+            "Re-run the sample with AmpliconSuite-pipeline --foldback_pair_support_min 3 or higher if "
+            "artifacts persist.".format(
+                amplicon_log_id(sName, ampN), fb_edges, fb_read_prop
             )
+        )
 
     pre_finalize_ampClass = ampClass
     ampClass = finalize_no_amp_invalid_class(ampClass, lc_filtered_cycle_count)
@@ -1842,7 +1945,7 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
             full_featname_to_intervals[full_fname] = curr_fd
             register_feature(feature_registry, full_fname, trim_sname, ampN, feat_name, graphFile, cyclesFile, curr_fd)
 
-    if not bfbStat and not ecStat and not is_non_feature_amplicon_class(ampClass):
+    if not bfbStat and not ecStat and ampClass in {"Linear", "Complex-non-cyclic", "Virus"}:
         feature_entropy[(sName, ampN, ampClass + "_1")] = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
             other_class_c_inds, set())
 
@@ -2168,8 +2271,11 @@ if __name__ == "__main__":
     logger.info("Classification stage completed")
     classification_results = collect_amplicon_records(amplicon_records)
 
+    feature_similarity_threads = jobs * max(1, args.bfb_threads) if args.bfbarchitect else jobs
     logger.info("Computing feature similarity scores...")
-    feature_similarity_rows = compute_feature_similarity_scores(classification_results.feature_registry)
+    feature_similarity_rows = compute_feature_similarity_scores(
+        classification_results.feature_registry, threads=feature_similarity_threads
+    )
     write_feature_similarity_scores(feature_similarity_rows, args.o)
     if args.filter_similar:
         logger.info("Filtering similar amplicons...")

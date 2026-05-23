@@ -136,6 +136,11 @@ BFB is a specific type of genomic amplification mechanism characterized by inver
   - In `compute_f_from_AA_graph()`, inversions are only counted as foldbacks if they are on the same chromosome and within this distance
   - In `cycles_file_bfb_props()`, used to distinguish foldback breaks from distal breaks
 
+### `max_foldback_edges_qc`
+- **Default:** 100
+- **Description:** Maximum number of foldback discordant edges allowed before the amplicon is treated as a foldback-orientation QC artifact.
+- **Usage:** If `compute_f_from_AA_graph()` finds more than this many foldback edges, AmpliconClassifier suppresses native BFB calls and skips BFBArchitect for that amplicon regardless of foldback read fraction. This catches cases with many low-support foldback-like edges where non-foldback read support keeps `foldback_read_prop` below the artifact threshold.
+
 ### `max_nonbfb_break_weight`
 - **Default:** 0.5
 - **Description:** Maximum proportion of utilized path/cycle structural variants that can support non-foldback SV connections while still calling BFB, where each SV is weighted by the path/cycle's assigned CN. If too many SVs are non-foldback, the amplicon likely isn't a pure BFB.
@@ -155,6 +160,36 @@ BFB is a specific type of genomic amplification mechanism characterized by inver
 - **Default:** 0.95
 - **Description:** Minimum fraction of a cycle's genomic span that must overlap snapped BFBArchitect-positive intervals before the cycle is marked as BFB.
 - **Usage:** BFBArchitect-positive intervals are snapped to the nearest AA graph segment endpoints, then cycles meeting this overlap threshold are marked as BFB cycles for native-style BFB annotation and feature reporting.
+
+### `bfbarchitect_min_lp_bound`
+- **Default:** 25
+- **Description:** Optional Gurobi-only early-stop threshold for BFBArchitect. When the root LP relaxation bound exceeds this value, BFBArchitect returns no reconstruction for that region.
+- **Usage:** Passed to BFBArchitect's `reconstruct_bfb_from_graph()` as `min_lp_bound`. This is ignored by non-Gurobi solvers and by older BFBArchitect versions that do not expose the parameter.
+
+### `bfbarchitect_whole_graph_max_sequence_edges`
+- **Default:** 250
+- **Description:** Maximum AA graph sequence-edge count allowed for BFBArchitect whole-graph fallback when foldback signal is weak.
+- **Usage:** If the first-pass BFBArchitect graph-region call has no passing reconstruction, AmpliconClassifier checks graph complexity before retrying with `whole_graph=True`. The whole-graph retry is skipped when this sequence-edge threshold or `bfbarchitect_whole_graph_max_discordant_edges` is exceeded and the foldback edge fraction is below `bfbarchitect_whole_graph_min_foldback_fraction`.
+
+### `bfbarchitect_whole_graph_max_discordant_edges`
+- **Default:** 50
+- **Description:** Maximum AA graph discordant-edge count allowed for BFBArchitect whole-graph fallback when foldback signal is weak.
+- **Usage:** Used with `bfbarchitect_whole_graph_max_sequence_edges` and `bfbarchitect_whole_graph_min_foldback_fraction` to avoid sending highly rearranged, weakly foldback-like graphs to the expensive BFBArchitect whole-graph solver.
+
+### `bfbarchitect_whole_graph_min_foldback_fraction`
+- **Default:** 0.1
+- **Description:** Minimum fraction of discordant AA graph edges that must be BFBArchitect-style foldbacks for a complex graph to receive whole-graph fallback.
+- **Usage:** Foldbacks are counted as same-strand intrachromosomal discordant edges with endpoints within 50 kbp, matching the BFBArchitect graph-region convention. Graphs below this fraction are still allowed through if they are below both whole-graph complexity thresholds.
+
+### `bfbarchitect_whole_graph_max_large_chrom_count`
+- **Default:** 3
+- **Description:** Number of chromosomes with substantial sequence-edge span that causes BFBArchitect whole-graph fallback to be skipped.
+- **Usage:** If at least this many chromosomes each contribute at least `bfbarchitect_whole_graph_min_large_chrom_bp` sequence-edge base pairs, AmpliconClassifier skips the BFBArchitect `whole_graph=True` retry because the graph is unlikely to represent a single-arm BFB.
+
+### `bfbarchitect_whole_graph_min_large_chrom_bp`
+- **Default:** 250000
+- **Description:** Minimum sequence-edge span on one chromosome for that chromosome to count toward the multichromosomal whole-graph skip.
+- **Usage:** Used with `bfbarchitect_whole_graph_max_large_chrom_count`; sequence-edge spans are summed per chromosome from the AA graph.
 
 ---
 

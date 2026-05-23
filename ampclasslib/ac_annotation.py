@@ -1,3 +1,5 @@
+import logging
+
 from ampclasslib.ac_util import *
 from ampclasslib.ac_io import parse_bpg
 
@@ -327,8 +329,16 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                 else:
                     ampClass = "No-FSCNA"
             else:
-                if other_interval_dict:
+                if other_interval_dict and ampClass in {"Linear", "Complex-non-cyclic", "Virus"}:
                     feature_dict[ampClass + "_1"] = other_interval_dict
+                elif other_interval_dict and ampClass == "Cyclic" and not chromoauxesis_intervals:
+                    logging.warning(
+                        "Amplicon classified as Cyclic but no ecDNA, BFB, chromoauxesis, or Virus mechanism "
+                        "was detected. Marking as Invalid instead of reporting a Cyclic feature."
+                    )
+                    ampClass = "Invalid"
+                elif other_interval_dict and ampClass == "Cyclic":
+                    pass
                 else:
                     ampClass = "No-FSCNA"
         else:

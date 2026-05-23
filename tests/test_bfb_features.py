@@ -1,11 +1,17 @@
+import logging
 import unittest
 from collections import defaultdict
+from types import SimpleNamespace
+from tempfile import NamedTemporaryFile
 
+import amplicon_classifier as ac
 from ampclasslib.classification_records import Feature
 from amplicon_classifier import (
     BFBARCHITECT_SOURCE,
     AC_SOURCE,
+    bfbarchitect_whole_graph_preflight,
     cycle_indices_overlapping_bfb_intervals,
+    is_foldback_qc_artifact,
     interval_dict_from_intervals,
     merge_bfb_features,
     snap_bfbarchitect_intervals,
@@ -13,6 +19,12 @@ from amplicon_classifier import (
 
 
 class BFBFeatureTests(unittest.TestCase):
+    def test_foldback_qc_artifact_detects_extreme_edge_count(self):
+        self.assertTrue(is_foldback_qc_artifact(101, 0.1))
+        self.assertTrue(is_foldback_qc_artifact(16, 0.81))
+        self.assertFalse(is_foldback_qc_artifact(100, 0.1))
+        self.assertFalse(is_foldback_qc_artifact(16, 0.8))
+
     def test_snap_bfbarchitect_interval_to_nearest_graph_segment_endpoints(self):
         seq_edges = [
             {"chrom": "chr1", "start": 100, "end": 200},
@@ -63,6 +75,121 @@ class BFBFeatureTests(unittest.TestCase):
         self.assertEqual(merged[0].cycle_indices, {0, 1})
         self.assertEqual(merged[0].sources, {AC_SOURCE, BFBARCHITECT_SOURCE})
         self.assertEqual(merged[0].score, 1.5)
+
+    def test_whole_graph_preflight_skips_complex_weak_foldback_graph(self):
+        with NamedTemporaryFile(mode="w", delete=True) as graph:
+            for i in range(251):
+                graph.write("sequence\tchr1:{}+\tchr1:{}-\t6\t100\t60\n".format(i * 1000, i * 1000 + 999))
+            for i in range(60):
+                graph.write("discordant\tchr1:{}+->chr1:{}-\t0\t5\t0\n".format(i * 1000, i * 1000 + 100000))
+            graph.flush()
+
+            should_run, stats = bfbarchitect_whole_graph_preflight(graph.name)
+
+        self.assertFalse(should_run)
+        self.assertEqual(stats["sequence_edges"], 251)
+        self.assertEqual(stats["discordant_edges"], 60)
+        self.assertEqual(stats["foldback_edges"], 0)
+
+    def test_whole_graph_preflight_skips_multichromosomal_graph(self):
+        with NamedTemporaryFile(mode="w", delete=True) as graph:
+            for chrom in ["chr1", "chr2", "chr3"]:
+                graph.write("sequence\t{}:1+\t{}:300001-\t12\t100\t60\n".format(chrom, chrom))
+            for i in range(6):
+                graph.write("discordant\tchr1:{}+->chr1:{}+\t0\t5\t0\n".format(i * 1000, i * 1000 + 1000))
+            graph.flush()
+
+            should_run, stats = bfbarchitect_whole_graph_preflight(graph.name)
+
+        self.assertFalse(should_run)
+        self.assertEqual(stats["large_chrom_count"], 3)
+
+    def test_whole_graph_preflight_allows_complex_foldback_enriched_graph(self):
+        with NamedTemporaryFile(mode="w", delete=True) as graph:
+            for i in range(251):
+                graph.write("sequence\tchr1:{}+\tchr1:{}-\t6\t100\t60\n".format(i * 1000, i * 1000 + 999))
+            for i in range(54):
+                graph.write("discordant\tchr1:{}+->chr1:{}-\t0\t5\t0\n".format(i * 1000, i * 1000 + 100000))
+            for i in range(6):
+                graph.write("discordant\tchr1:{}+->chr1:{}+\t0\t5\t0\n".format(i * 1000, i * 1000 + 1000))
+            graph.flush()
+
+            should_run, stats = bfbarchitect_whole_graph_preflight(graph.name)
+
+        self.assertTrue(should_run)
+        self.assertEqual(stats["foldback_edges"], 6)
+
+    def test_run_bfbarchitect_skips_whole_graph_retry_for_complex_weak_foldback_graph(self):
+        calls = []
+
+        def fake_reconstruct(_graphf, centromere_dict=None, solver=None, multiple=False, whole_graph=False,
+                             threads=1, min_lp_bound=None):
+            calls.append((whole_graph, min_lp_bound))
+            return []
+
+        with NamedTemporaryFile(mode="w", delete=True) as graph:
+            for i in range(251):
+                graph.write("sequence\tchr1:{}+\tchr1:{}-\t6\t100\t60\n".format(i * 1000, i * 1000 + 999))
+            for i in range(60):
+                graph.write("discordant\tchr1:{}+->chr1:{}-\t0\t5\t0\n".format(i * 1000, i * 1000 + 100000))
+            graph.flush()
+
+            had_args = hasattr(ac, "args")
+            old_args = getattr(ac, "args", None)
+            old_reconstruct = ac.BFBARCHITECT_RECONSTRUCT
+            old_centromeres = ac.BFBARCHITECT_CENTROMERES
+            had_logger = hasattr(ac, "logger")
+            old_logger = getattr(ac, "logger", None)
+            try:
+                ac.args = SimpleNamespace(no_bfbarchitect=False, bfb_threads=1, verbose_classification=False, o="/tmp/ac")
+                ac.BFBARCHITECT_RECONSTRUCT = fake_reconstruct
+                ac.BFBARCHITECT_CENTROMERES = {"chr1": 100000000}
+                ac.logger = logging.getLogger("test_bfb_features")
+
+                summary = ac.run_bfbarchitect(graph.name, fb_edges=2, output_prefix="test_amplicon")
+            finally:
+                if had_args:
+                    ac.args = old_args
+                else:
+                    del ac.args
+                ac.BFBARCHITECT_RECONSTRUCT = old_reconstruct
+                ac.BFBARCHITECT_CENTROMERES = old_centromeres
+                if had_logger:
+                    ac.logger = old_logger
+                else:
+                    del ac.logger
+
+        self.assertEqual(calls, [(False, 25)])
+        self.assertEqual(summary["whole_graph_used"], "False")
+        self.assertEqual(summary["regions"], "whole_graph_skipped_complex_weak_foldback")
+
+    def test_run_bfbarchitect_reconstruct_supports_older_bfbarchitect_signature(self):
+        calls = []
+
+        def fake_reconstruct(_graphf, centromere_dict=None, solver=None, multiple=False, whole_graph=False, threads=1):
+            calls.append(whole_graph)
+            return []
+
+        had_args = hasattr(ac, "args")
+        old_args = getattr(ac, "args", None)
+        old_reconstruct = ac.BFBARCHITECT_RECONSTRUCT
+        old_centromeres = ac.BFBARCHITECT_CENTROMERES
+        try:
+            ac.args = SimpleNamespace(bfb_threads=1)
+            ac.BFBARCHITECT_RECONSTRUCT = fake_reconstruct
+            ac.BFBARCHITECT_CENTROMERES = {"chr1": 100000000}
+
+            result = ac.run_bfbarchitect_reconstruct("graph.txt", whole_graph=True)
+        finally:
+            if had_args:
+                ac.args = old_args
+            else:
+                del ac.args
+            ac.BFBARCHITECT_RECONSTRUCT = old_reconstruct
+            ac.BFBARCHITECT_CENTROMERES = old_centromeres
+
+        self.assertEqual(result, [])
+        self.assertEqual(calls, [True])
 
 
 if __name__ == "__main__":

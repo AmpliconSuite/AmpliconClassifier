@@ -86,7 +86,9 @@ You can provide the directory containing multiple AA amplicons or multiple uniqu
 AC will crawl the given location and find all relevant AA files and perform classification on them.
 Amplicons can be classified in parallel with `--jobs N`; output order follows the input file order.
 When BFBArchitect is enabled, the approximate BFBArchitect solver thread budget is
-`--jobs * --bfb_threads`.
+`--jobs * --bfb_threads`. For multi-amplicon runs, `--bfb_threads 2` is usually
+the most efficient per-amplicon setting; prefer increasing `--jobs` rather than
+assigning many solver threads to each individual amplicon.
 
 **To classify a single amplicon**:
 
@@ -238,7 +240,7 @@ Else if running on multiple amplicons, use argument
 | `--filter_similar`                              | Permits filtering of false-positive amps arising in multiple independent samples based on similarity calculation. Only use if all samples are of independent origins (not replicates and not multi-region biopsies). |
 | `--make_results_table`                          | Creates summary results table (_results_table.tsv) after classification completes.                                                                                                                                   |
 | `--no_bfbarchitect`                             | Disable BFBArchitect integration. By default, AmpliconClassifier uses BFBArchitect when it is installed and warns when it is unavailable.                                                                               |
-| `--bfb_threads`                                 | Number of BFBArchitect ILP solver threads per amplicon. When using `--jobs`, approximate total BFBArchitect solver threads are `--jobs * --bfb_threads`.                                                              |
+| `--bfb_threads`                                 | Number of BFBArchitect ILP solver threads per amplicon. For multi-amplicon runs, `2` is generally the best efficiency setting. When using `--jobs`, approximate total BFBArchitect solver threads are `--jobs * --bfb_threads`. |
 | `--jobs`                                        | Number of amplicons to classify in parallel. Default is 1. Output rows are collected in input order.                                                                                                                   |
 | `-i/--input`                                    | If you have already run `make_input.sh`, you can give the resulting .input file instead of setting `--AA_results`                                                                                                    | 
 

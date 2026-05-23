@@ -3,12 +3,15 @@
 import argparse
 from collections import defaultdict
 import json
+import logging
 import os
 import shutil
 import sys
 
 
 NON_FEATURE_CLASSES = {"No amp/Invalid", "No-FSCNA", "Invalid"}
+FALLBACK_FEATURE_CLASSES = {"Linear", "Complex-non-cyclic"}
+MECHANISM_DECOMPOSITION_CLASSES = {"Virus"}
 OUTPUT_HEAD = ["Sample name", "AA amplicon number", "Feature ID", "Classification",
                "Chromoauxesis probability", "Location", "Oncogenes", "All genes", "NCBI Gene IDs",
                "Complexity score", "ecDNA context", "Captured interval length", "Feature median copy number",
@@ -246,14 +249,23 @@ def discover_feature_specs(classD, amplicon_id, class_bed_dir):
         feature_id = "_".join([amplicon_id, "BFB", "1"])
         feature_specs.append((feature_id, "BFB", os.path.join(class_bed_dir, feature_id + "_intervals.bed")))
 
-    if (not feature_specs and classD["amplicon_decomposition_class"] not in NON_FEATURE_CLASSES):
-        feature = classD["amplicon_decomposition_class"]
-        feature_id = "_".join([amplicon_id, feature, "1"])
-        feature_specs.append((feature_id, feature, os.path.join(class_bed_dir, feature_id + "_intervals.bed")))
-
     if classD.get("chromoauxesis+", "None detected") == "Positive":
         feature_id = "_".join([amplicon_id, "chromoauxesis", "1"])
         feature_specs.append((feature_id, "chromoauxesis", os.path.join(class_bed_dir, feature_id + "_intervals.bed")))
+
+    feature = classD["amplicon_decomposition_class"]
+    if feature in MECHANISM_DECOMPOSITION_CLASSES:
+        feature_id = "_".join([amplicon_id, feature, "1"])
+        feature_specs.append((feature_id, feature, os.path.join(class_bed_dir, feature_id + "_intervals.bed")))
+    elif not feature_specs and feature in FALLBACK_FEATURE_CLASSES:
+        feature_id = "_".join([amplicon_id, feature, "1"])
+        feature_specs.append((feature_id, feature, os.path.join(class_bed_dir, feature_id + "_intervals.bed")))
+    elif not feature_specs and feature == "Cyclic":
+        logging.warning(
+            "Amplicon %s has decomposition class Cyclic but no ecDNA, BFB, chromoauxesis, or Virus mechanism; "
+            "not reporting a Cyclic feature row.",
+            amplicon_id,
+        )
 
     return feature_specs
 

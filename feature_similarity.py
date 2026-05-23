@@ -3,8 +3,10 @@
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 from ampclasslib.amplicon_similarity import *
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 cn_cut = 4.5
+FEATURE_SIMILARITY_WORKER_CONTEXT = None
 
 
 # union of intervaltrees for each chromosome
@@ -15,6 +17,74 @@ def join_ivalds(ivald1, ivald2):
         joined_ivald[c] = ivald1[c].union(ivald2[c])
 
     return joined_ivald
+
+
+def _init_feature_similarity_worker(feat_to_graph, feat_to_bed, add_chr_tag, lcD, cg5D, cn_cut_value, min_de_value):
+    global FEATURE_SIMILARITY_WORKER_CONTEXT
+    FEATURE_SIMILARITY_WORKER_CONTEXT = {
+        "feat_to_graph": feat_to_graph,
+        "feat_to_bed": feat_to_bed,
+        "add_chr_tag": add_chr_tag,
+        "lcD": lcD,
+        "cg5D": cg5D,
+        "cn_cut": cn_cut_value,
+        "min_de": min_de_value,
+    }
+
+
+def _compute_feature_pair_similarity(pair):
+    context = FEATURE_SIMILARITY_WORKER_CONTEXT
+    feat_to_graph = context["feat_to_graph"]
+    feat_to_bed = context["feat_to_bed"]
+    feature_id_1, feature_id_2 = pair
+    graph_path_1 = feat_to_graph[feature_id_1]
+    graph_path_2 = feat_to_graph[feature_id_2]
+    if graph_path_1 == graph_path_2:
+        return []
+
+    graph1 = parse_bpg(
+        graph_path_1, context["add_chr_tag"], context["lcD"], subset_ivald=feat_to_bed[feature_id_1][1],
+        cn_cut=context["cn_cut"], cg5D=context["cg5D"], min_de=context["min_de"], min_de_size=min_de_size
+    )
+    graph2 = parse_bpg(
+        graph_path_2, context["add_chr_tag"], context["lcD"], subset_ivald=feat_to_bed[feature_id_2][1],
+        cn_cut=context["cn_cut"], cg5D=context["cg5D"], min_de=context["min_de"], min_de_size=min_de_size
+    )
+    if (not graph1[0] and context["min_de"] > 0) or not graph1[1]:
+        return []
+    if (not graph2[0] and context["min_de"] > 0) or not graph2[1]:
+        return []
+
+    outdata = []
+    compute_similarity({feature_id_1: graph1, feature_id_2: graph2}, [(feature_id_1, feature_id_2)], outdata)
+    return outdata
+
+
+def compute_pairwise_feature_similarity(feat_to_graph, feat_to_bed, pairs, add_chr_tag=False, lcD=None, cg5D=None,
+                                        cn_cut_value=0, min_de_value=0, threads=1):
+    if lcD is None:
+        lcD = defaultdict(IntervalTree)
+
+    worker_count = max(1, int(threads or 1))
+    outdata = []
+    if worker_count == 1 or len(pairs) <= 1:
+        _init_feature_similarity_worker(feat_to_graph, feat_to_bed, add_chr_tag, lcD, cg5D, cn_cut_value,
+                                        min_de_value)
+        for pair in pairs:
+            outdata.extend(_compute_feature_pair_similarity(pair))
+    else:
+        worker_count = min(worker_count, len(pairs))
+        with ProcessPoolExecutor(
+            max_workers=worker_count,
+            initializer=_init_feature_similarity_worker,
+            initargs=(feat_to_graph, feat_to_bed, add_chr_tag, lcD, cg5D, cn_cut_value, min_de_value)
+        ) as executor:
+            futures = [executor.submit(_compute_feature_pair_similarity, pair) for pair in pairs]
+            for future in as_completed(futures):
+                outdata.extend(future.result())
+
+    outdata.sort(key=lambda x: (x[2], x[1], x[0]), reverse=True)
+    return outdata
 
 
 if __name__ == "__main__":
@@ -38,8 +108,14 @@ if __name__ == "__main__":
                         "(useful for comparing against runs with similar names", action='store_true', default=False)
     parser.add_argument("--required_classifications", help="Which features to consider in the similarity calculation. "
                         "(default 'any')", choices=["ecDNA", "BFB", "CNC", "Linear", "any"], nargs='+', default="any")
+    parser.add_argument("--threads", help="Number of worker processes for pairwise similarity scoring (default 1).",
+                        type=int, default=1)
 
     args = parser.parse_args()
+
+    if args.threads < 1:
+        sys.stderr.write("--threads must be >= 1\n")
+        sys.exit(1)
 
     if args.ref == "hg38": args.ref = "GRCh38"
     elif args.ref == "GRCm38": args.ref = "mm10"
@@ -109,37 +185,17 @@ if __name__ == "__main__":
     # get pairs
     pairs = get_pairs(feat_to_bed)
     print("Total of " + str(len(pairs)) + " pairs of features to compare.")
+    if args.threads > 1 and len(pairs) > 1:
+        print("Computing feature similarity with " + str(min(args.threads, len(pairs))) + " worker processes.")
 
     with open(args.o + "_feature_similarity_scores.tsv", 'w') as outfile:
         outfile.write("Amp1\tAmp2\tSimilarityScore\tSimScorePercentile\tSimScorePvalue\tAsymmetricScore1\t"
                       "AsymmetricScore2\tGenomicSegmentScore1\tGenomicSegmentScore2\tBreakpointScore1\t"
                       "BreakpointScore2\tJaccardGenomicSegment\tJaccardBreakpoint\tNumSharedBPs\tAmp1NumBPs\t"
                       "Amp2NumBPs\tAmpOverlapLen\tAmp1AmpLen\tAmp2AmpLen\n")
-        # for each pair, make the union bed
-        outdata = []
-        for x in pairs:
-            s2a_graph = {}
-            # rel_regions = join_ivalds(feat_to_bed[x[0]][1], feat_to_bed[x[1]][1])
-            # read the two graph files and classify.
-            graph0 = parse_bpg(feat_to_graph[x[0]], add_chr_tag, lcD, subset_ivald=feat_to_bed[x[0]][1], cn_cut=cn_cut,
-                               cg5D=cg5D, min_de=args.min_de, min_de_size=min_de_size)
-            graph1 = parse_bpg(feat_to_graph[x[1]], add_chr_tag, lcD, subset_ivald=feat_to_bed[x[1]][1], cn_cut=cn_cut,
-                               cg5D=cg5D, min_de=args.min_de, min_de_size=min_de_size)
-            if feat_to_graph[x[0]] == feat_to_graph[x[1]]:
-                print("skipping", x)
-                continue
-
-            if (not graph0[0] and args.min_de > 0) or not graph0[1] or (not graph1[0] and args.min_de > 0) or not graph1[1]:
-                print("skipping", x)
-                continue
-
-            s2a_graph[x[0]] = graph0
-            s2a_graph[x[1]] = graph1
-            # for y,z in s2a_graph.items():
-            #     print(y,z)
-
-            compute_similarity(s2a_graph, [x], outdata)
-
-        outdata.sort(key=lambda x: (x[2], x[1], x[0]), reverse=True)
+        outdata = compute_pairwise_feature_similarity(
+            feat_to_graph, feat_to_bed, pairs, add_chr_tag=add_chr_tag, lcD=lcD, cg5D=cg5D,
+            cn_cut_value=cn_cut, min_de_value=args.min_de, threads=args.threads
+        )
         for l in outdata:
             outfile.write("\t".join([str(x) for x in l]) + "\n")

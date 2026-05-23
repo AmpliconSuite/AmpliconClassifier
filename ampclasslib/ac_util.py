@@ -28,10 +28,17 @@ class ConfigVars:
         fb_break_weight_prop = 0.3
         fb_dist_cut = 25000
         min_flow = 1.0
+        max_foldback_edges_qc = 100
         max_nonbfb_break_weight = 0.5
         min_bfb_cycle_weight_ratio = 0.6
         bfbarchitect_max_score = 2.8
         bfbarchitect_cycle_overlap_threshold = 0.95
+        bfbarchitect_min_lp_bound = 25
+        bfbarchitect_whole_graph_max_sequence_edges = 250
+        bfbarchitect_whole_graph_max_discordant_edges = 50
+        bfbarchitect_whole_graph_min_foldback_fraction = 0.1
+        bfbarchitect_whole_graph_max_large_chrom_count = 3
+        bfbarchitect_whole_graph_min_large_chrom_bp = 250000
 
         # chromoauxesis-related items
         chromoauxesis_ecDNA_min_cn = 60
