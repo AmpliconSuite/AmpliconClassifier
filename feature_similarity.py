@@ -3,10 +3,11 @@
 __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 from ampclasslib.amplicon_similarity import *
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 
 cn_cut = 4.5
 FEATURE_SIMILARITY_WORKER_CONTEXT = None
+FEATURE_SIMILARITY_CHUNK_SIZE = 1000
 
 
 # union of intervaltrees for each chromosome
@@ -60,6 +61,19 @@ def _compute_feature_pair_similarity(pair):
     return outdata
 
 
+def _compute_feature_pair_similarity_chunk(pair_chunk):
+    outdata = []
+    for pair in pair_chunk:
+        outdata.extend(_compute_feature_pair_similarity(pair))
+
+    return outdata
+
+
+def _pair_chunks(pairs, chunk_size):
+    for start in range(0, len(pairs), chunk_size):
+        yield pairs[start:start + chunk_size]
+
+
 def compute_pairwise_feature_similarity(feat_to_graph, feat_to_bed, pairs, add_chr_tag=False, lcD=None, cg5D=None,
                                         cn_cut_value=0, min_de_value=0, threads=1):
     if lcD is None:
@@ -74,14 +88,29 @@ def compute_pairwise_feature_similarity(feat_to_graph, feat_to_bed, pairs, add_c
             outdata.extend(_compute_feature_pair_similarity(pair))
     else:
         worker_count = min(worker_count, len(pairs))
+        chunk_size = max(1, min(FEATURE_SIMILARITY_CHUNK_SIZE, len(pairs) // (worker_count * 20) or 1))
+        max_pending = worker_count * 2
         with ProcessPoolExecutor(
             max_workers=worker_count,
             initializer=_init_feature_similarity_worker,
             initargs=(feat_to_graph, feat_to_bed, add_chr_tag, lcD, cg5D, cn_cut_value, min_de_value)
         ) as executor:
-            futures = [executor.submit(_compute_feature_pair_similarity, pair) for pair in pairs]
-            for future in as_completed(futures):
-                outdata.extend(future.result())
+            chunk_iter = _pair_chunks(pairs, chunk_size)
+            pending = set()
+            for _ in range(max_pending):
+                try:
+                    pending.add(executor.submit(_compute_feature_pair_similarity_chunk, next(chunk_iter)))
+                except StopIteration:
+                    break
+
+            while pending:
+                completed, pending = wait(pending, return_when=FIRST_COMPLETED)
+                for future in completed:
+                    outdata.extend(future.result())
+                    try:
+                        pending.add(executor.submit(_compute_feature_pair_similarity_chunk, next(chunk_iter)))
+                    except StopIteration:
+                        pass
 
     outdata.sort(key=lambda x: (x[2], x[1], x[0]), reverse=True)
     return outdata
