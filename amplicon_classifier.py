@@ -15,6 +15,7 @@ import operator
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 
@@ -22,7 +23,7 @@ from intervaltree import IntervalTree, Interval
 
 from ampclasslib.ac_annotation import *
 from ampclasslib.ac_io import *
-from ampclasslib.ac_util import ConfigVars, is_human_viral_hybrid
+from ampclasslib.ac_util import ConfigVars, is_human_viral_hybrid, write_patched_graph
 from ampclasslib.classification_records import (
     AmpliconInput, AmpliconRecord, ClassificationContext, Feature, collect_amplicon_records
 )
@@ -30,6 +31,7 @@ from ampclasslib.config_params import load_config
 from ampclasslib.radar_plotting import *
 from ampclasslib._version import __ampliconclassifier_version__
 from ampclasslib.chromoauxesis_ml import classify_from_edges as _chromoauxesis_classify_from_edges
+from ampclasslib.tid_filter import check_tid as _check_tid
 
 
 add_chr_tag = False
@@ -1693,11 +1695,12 @@ def process_amplicon(amplicon_input, context):
 
 
 def init_worker_context(context):
-    global WORKER_CONTEXT, args, add_chr_tag, decomposition_strictness
+    global WORKER_CONTEXT, args, add_chr_tag, decomposition_strictness, patch_links
     WORKER_CONTEXT = context
     args = context.args
     add_chr_tag = context.add_chr_tag
     decomposition_strictness = context.decomposition_strictness
+    patch_links = context.patch_links
 
 
 def process_amplicon_worker(amplicon_input):
@@ -1823,7 +1826,14 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
     if bfb_suppressed_as_artifact:
         bfbarchitect_summary = empty_bfbarchitect_summary()
     else:
-        bfbarchitect_summary = run_bfbarchitect(graphFile, fb_edges, "{}_{}".format(sName, ampN))
+        bfb_graphFile = graphFile
+        if patch_links and not args.no_bfbarchitect:
+            tmp_dir = os.path.join(os.path.dirname(args.o), "tmp_patched_graphs")
+            os.makedirs(tmp_dir, exist_ok=True)
+            tmp_gf = os.path.join(tmp_dir, os.path.basename(graphFile))
+            if write_patched_graph(graphFile, patch_links, tmp_gf):
+                bfb_graphFile = tmp_gf
+        bfbarchitect_summary = run_bfbarchitect(bfb_graphFile, fb_edges, "{}_{}".format(sName, ampN))
 
     native_bfb_cycle_inds = list(bfb_cycle_inds) if bfbClass else []
     bfb_features = build_bfb_features(
@@ -1873,6 +1883,22 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
         else:
             bfb_cycle_inds = []
             bfb_features = []
+
+    # TID suppression: a tandem inverted duplication (one -- + one ++ SV, no other SVs,
+    # modest inner CN) can produce a Cyclic decomposition that looks like ecDNA.
+    if ecStat and not is_chromoauxesis and not bfb_detected:
+        tid_result = _check_tid(_ca_seq_edges, _ca_sv_edges, cycleList, segSeqD)
+        if tid_result.get('pass'):
+            ecStat = False
+            ampClass = "Linear"
+            logger.warning(
+                "{} matches tandem inverted duplication (TID) criteria — suppressing ecDNA call "
+                "(span={:.1f}kb, inner/bg CN ratio={:.2f}x).".format(
+                    amplicon_log_id(sName, ampN),
+                    tid_result['tid_span_kb'],
+                    tid_result['ratio']
+                )
+            )
 
     # determine number of ecDNA present (excluding BFB cycles)
     ecIndexClusters = []
@@ -2306,6 +2332,10 @@ if __name__ == "__main__":
             logger.warning("Could not import make_results_table.py. Skipping results table creation.")
         except Exception as e:
             logger.warning("Failed to create results table: {}".format(str(e)))
+
+    tmp_patched_dir = os.path.join(os.path.dirname(args.o), "tmp_patched_graphs")
+    if os.path.isdir(tmp_patched_dir):
+        shutil.rmtree(tmp_patched_dir)
 
     logger.info("")
     logger.info("Complete")

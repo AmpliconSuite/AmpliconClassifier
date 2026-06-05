@@ -547,6 +547,92 @@ def read_patch_regions(ref):
     return patch_links
 
 
+def write_patched_graph(gfile, patch_links, outpath):
+    """
+    Write a copy of gfile to outpath with patch-region sequence edge CNs replaced by the
+    mean of their genomic neighbors. Flanking concordant edge CNs are updated to match.
+    Returns True if any patches were applied, False otherwise.
+    """
+    if not patch_links:
+        return False
+
+    with open(gfile) as f:
+        lines = f.readlines()
+
+    # Pass 1: collect sequence edges and identify patch segments
+    segs = []  # (chrom, s, e, cn, line_index)
+    in_seq = False
+    for i, line in enumerate(lines):
+        t = line.rstrip()
+        p = t.split('\t')
+        if t.startswith('SequenceEdge:'):   in_seq = True;  continue
+        if t.startswith('BreakpointEdge:'): in_seq = False; continue
+        if in_seq and len(p) >= 4 and p[0] == 'sequence':
+            try:
+                c = p[1].split(':')[0]
+                pl = int(p[1].split(':')[1][:-1]); pr = int(p[2].split(':')[1][:-1])
+                segs.append((c, min(pl, pr), max(pl, pr), float(p[3]), i))
+            except:
+                pass
+
+    by_chrom = defaultdict(list)
+    for rec in segs:
+        by_chrom[rec[0]].append(rec)
+    for c in by_chrom:
+        by_chrom[c].sort(key=lambda x: x[1])
+
+    cn_replacements = {}    # line_index -> imputed cn
+    patch_boundary_pos = {} # (chrom, pos) -> imputed cn, for concordant edge correction
+
+    for chrom, csegs in by_chrom.items():
+        for i in range(1, len(csegs) - 1):
+            c, s, e, cn, li = csegs[i]
+            for x in patch_links:
+                if x[0] == chrom and x[2] == chrom and x[1].overlaps(s - 1) and x[3].overlaps(e + 1):
+                    imputed = (csegs[i - 1][3] + csegs[i + 1][3]) / 2.0
+                    cn_replacements[li] = imputed
+                    for pos in (s - 1, s, e, e + 1):
+                        patch_boundary_pos[(chrom, pos)] = imputed
+                    logging.info("patching graph {}:{}-{} CN {:.2f} -> {:.2f}".format(
+                        chrom, s, e, cn, imputed))
+                    break
+
+    if not cn_replacements:
+        return False
+
+    # Pass 2: write corrected graph
+    in_seq = in_bp = False
+    with open(outpath, 'w') as out:
+        for i, line in enumerate(lines):
+            t = line.rstrip()
+            p = t.split('\t')
+            if t.startswith('SequenceEdge:'):   in_seq = True;  in_bp = False
+            elif t.startswith('BreakpointEdge:'): in_seq = False; in_bp = True
+
+            if in_seq and i in cn_replacements:
+                p[3] = repr(cn_replacements[i])
+                out.write('\t'.join(p) + '\n')
+            elif in_bp and p[0] == 'concordant' and len(p) >= 3:
+                try:
+                    v1, v2 = p[1].split('->')
+                    c1 = v1.split(':')[0]; pos1 = int(v1.split(':')[1][:-1])
+                    new_cn = patch_boundary_pos.get((c1, pos1))
+                    if new_cn is None:
+                        c2 = v2.split(':')[0]; pos2 = int(v2.split(':')[1][:-1])
+                        new_cn = patch_boundary_pos.get((c2, pos2))
+                    if new_cn is not None:
+                        p[2] = repr(new_cn)
+                        out.write('\t'.join(p) + '\n')
+                        continue
+                except:
+                    pass
+                out.write(line)
+            else:
+                out.write(line)
+
+    return True
+
+
 def get_ncrna_file_loc(ref):
     dp = os.path.dirname(os.path.abspath(__file__)) + "/resources/"
     simple_rname = ref
