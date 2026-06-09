@@ -44,7 +44,13 @@ DEFAULT_CONFIG = {
     "bfbarchitect_whole_graph_min_large_chrom_bp": 250000,  # min chromosome contribution counted by the multichromosomal skip
 
     # chromoauxesis-related items
-    "chromoauxesis_ecDNA_min_cn": 60   # minimum graph CN required for all segments in an ecDNA cycle when chromoauxesis is detected
+    "chromoauxesis_ecDNA_min_cn": 60,  # minimum graph CN required for all segments in an ecDNA cycle when chromoauxesis is detected
+
+    # TID-related items
+    "tid_cn_ratio_max": 2.5,             # maximum inner/background CN ratio for TID (C3)
+    "tid_cn_ratio_max_tight_fb": 4.0,    # relaxed C3 cap when the shorter foldback is < tid_tight_fb_size
+    "tid_tight_fb_size": 50000,          # foldback span (bp) below which the relaxed ratio cap applies
+    "tid_max_foldback_span": 1000000     # maximum allowed span (bp) for either selected foldback (C1b)
 }
 
 

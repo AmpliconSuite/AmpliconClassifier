@@ -1887,7 +1887,13 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
     # TID suppression: a tandem inverted duplication (one -- + one ++ SV, no other SVs,
     # modest inner CN) can produce a Cyclic decomposition that looks like ecDNA.
     if ecStat and not is_chromoauxesis and not bfb_detected:
-        tid_result = _check_tid(_ca_seq_edges, _ca_sv_edges, cycleList, segSeqD)
+        tid_result = _check_tid(
+            _ca_seq_edges, _ca_sv_edges, cycleList, segSeqD,
+            cn_ratio_max=ConfigVars.tid_cn_ratio_max,
+            cn_ratio_max_tight_fb=ConfigVars.tid_cn_ratio_max_tight_fb,
+            tight_fb_size=ConfigVars.tid_tight_fb_size,
+            max_foldback_span=ConfigVars.tid_max_foldback_span,
+        )
         if tid_result.get('pass'):
             ecStat = False
             ampClass = "Linear"

@@ -43,6 +43,12 @@ class ConfigVars:
         # chromoauxesis-related items
         chromoauxesis_ecDNA_min_cn = 60
 
+        # TID-related items
+        tid_cn_ratio_max = 2.5
+        tid_cn_ratio_max_tight_fb = 4.0
+        tid_tight_fb_size = 50000
+        tid_max_foldback_span = 1000000
+
 
 class breakpoint(object):
     def __init__(self, lchrom, lpos, rchrom, rpos, cn=None, support=None, ldir=None, rdir=None, homlen="NA", homseq="NA"):
