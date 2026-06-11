@@ -279,7 +279,7 @@ def compute_f_from_AA_graph(graphf, lcD):
                             tot_over_min_cn += seglen
 
     # just return 0 if there isn't enough support
-    if fbEdges < 2:
+    if fbEdges < 1:
         return 0, 0, 0, maxCN, tot_over_min_cn
 
     return fbEdges, fb_readcount, fb_readcount / max(1.0, float(fb_readcount + nonFbCount)), maxCN, tot_over_min_cn
@@ -302,6 +302,27 @@ def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs, gr
 
         elif args.ref == "GRCh38_viral" and is_human_viral_hybrid(args.ref, cycle, segSeqD):
             return True
+
+    return False
+
+
+def cycle_contains_foldback(cycle, segSeqD):
+    # True if the cycle has a same-chromosome, opposite-orientation junction within fb_dist_cut
+    # (a foldback). Mirrors the foldback test in cycles_file_bfb_props. Used to keep
+    # foldback-containing cycles out of the ecDNA pool in BFB+ amplicons.
+    segs = [x for x in cycle if x != 0]
+    if len(segs) < 2:
+        return False
+
+    pairs = list(zip(segs, segs[1:]))
+    if isCircular(cycle):
+        pairs.append((segs[-1], segs[0]))
+
+    for a, b in pairs:
+        if a * b < 0 and segSeqD[abs(a)][0] == segSeqD[abs(b)][0]:
+            d = get_diff(a, b, segSeqD)
+            if d is not None and d < ConfigVars.fb_dist_cut:
+                return True
 
     return False
 
@@ -334,7 +355,24 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, gra
 
         cycle = removed_zero_one_len_cycle
 
-        hit_inversion = False
+        # elide tiny (<1 kb) out-and-back excursions: a short segment whose cycle neighbors
+        # reconnect on the same chromosome within fb_dist_cut (e.g. a small insertion sitting
+        # at a foldback). Dropping it lets the underlying foldback be recognized as BFB-like.
+        is_closed = len(cycle) > 1 and cycle[0] == cycle[-1]
+        core = cycle[:-1] if is_closed else cycle
+        if len(core) > 2:
+            kept = []
+            for i, x in enumerate(core):
+                prev_x, next_x = core[i - 1], core[(i + 1) % len(core)]
+                d = get_diff(prev_x, next_x, segSeqD)
+                if segSeqD[abs(x)][2] - segSeqD[abs(x)][1] < 1000 and d is not None and d < ConfigVars.fb_dist_cut:
+                    continue
+                kept.append(x)
+
+            if kept and len(kept) < len(core):
+                cycle = (kept + [kept[0]]) if is_closed else kept
+
+        hit_valid_sv = False
         isBFBelem = False
         illegalBFB = False
         for a, b in zip(cycle[:-1], cycle[1:]):
@@ -349,11 +387,12 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, gra
             front_to_back_connection = amp_encompassed(cycle, segSeqD, graphf, add_chr_tag)
             if front_to_back_connection:
                 illegalBFB = True
+                hit_valid_sv = True
 
             else:
                 if a * b < 0 and segSeqD[abs(a)][0] == segSeqD[abs(b)][0]:
-                    hit_inversion = True
-                    if diff is not None and diff < 50000:
+                    hit_valid_sv = True
+                    if diff is not None and diff < ConfigVars.fb_dist_cut:
                         isBFBelem = True
                         FB_breaks += cycleCNs[ind]
 
@@ -361,7 +400,7 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, gra
                         distal_breaks += cycleCNs[ind]
 
                 elif diff is None or diff > ConfigVars.tot_min_del:
-                    hit_inversion = True
+                    hit_valid_sv = True
                     distal_breaks += cycleCNs[ind]
 
                 if segSeqD[abs(a)][0] != segSeqD[abs(b)][0] and not (a == 0 or b == 0):
@@ -370,7 +409,9 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, gra
         if illegalBFB:
             isBFBelem = False
 
-        if cycle[0] == 0 and not hit_inversion and get_size(cycle, segSeqD) > 10000:
+        ocsize = get_size(ocycle, segSeqD)
+        # trivial path
+        if ocycle[0] == 0 and not hit_valid_sv and ocsize > 100000:
             lin_breaks += cycleCNs[ind]
 
         if isBFBelem:
@@ -378,7 +419,7 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, gra
             bfb_weight += cycleCNs[ind]
             bfb_cycle_inds.append(ind)
 
-        elif cycle[0] != 0 and get_size(cycle[:-1], segSeqD) > 30000:
+        elif ocycle[0] != 0 and ocsize > 30000:
             non_bfb_cycle_weight += cycleCNs[ind]
             non_bfb_cycle_inds.append(ind)
 
@@ -386,14 +427,14 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, gra
     minBFBCyclesRequired = 2
 
     if set(bfb_cycle_inds).issubset(set(invalidInds)):
-        return 0, 0, 0, False, [], []
+        return 0, 0, 0, False, non_bfb_cycle_inds, []
 
     if FB_breaks > 1.5 and tot_bfb_supp_cycles >= minBFBCyclesRequired:
         tot = float(FB_breaks + distal_breaks + lin_breaks)
         return FB_breaks / tot, distal_breaks / tot, bfb_weight / (non_bfb_cycle_weight + bfb_weight), hasEC, \
                non_bfb_cycle_inds, bfb_cycle_inds
 
-    return 0, 0, 0, False, [], []
+    return 0, 0, 0, False, non_bfb_cycle_inds, bfb_cycle_inds
 
 
 def check_max_cn(ec_cycle_inds, cycleList, segSeqD, graph_cns):
@@ -692,6 +733,7 @@ def empty_bfbarchitect_summary():
         "multiplicities": "NA",
         "regions": "NA",
         "whole_graph_used": "NA",
+        "reverse_polarity_used": "NA",
         "passing_intervals": [],
         "passing_scores": [],
         "bfb_sources": "NA"
@@ -702,10 +744,10 @@ def format_bfbarchitect_score(score):
     if score is None:
         return "NA"
 
-    return "{:.6g}".format(score)
+    return "{:.2f}".format(score)
 
 
-def summarize_bfbarchitect_results(results, whole_graph_used):
+def summarize_bfbarchitect_results(results, whole_graph_used, reverse_polarity_used=False):
     all_scores = []
     passing_regions = 0
     multiplicities = []
@@ -757,31 +799,48 @@ def summarize_bfbarchitect_results(results, whole_graph_used):
         "multiplicities": ";".join(multiplicities) if multiplicities else "NA",
         "regions": ";".join(region_strings) if region_strings else "NA",
         "whole_graph_used": str(whole_graph_used),
+        "reverse_polarity_used": str(reverse_polarity_used),
         "passing_intervals": passing_intervals,
         "passing_scores": passing_scores,
         "bfb_sources": "NA"
     }
 
 
-def should_retry_bfbarchitect_whole_graph(results):
-    if not results:
-        return True
-
-    all_scores = []
-    for res in results:
-        raw_scores = res.get("scores", [])
-        if raw_scores is None:
-            continue
-        elif not isinstance(raw_scores, (list, tuple)):
+def _bfbarchitect_passing_results(results):
+    passing = []
+    for res in results or []:
+        raw_scores = res.get("scores") or []
+        if not isinstance(raw_scores, (list, tuple)):
             raw_scores = [raw_scores]
-
-        for score in raw_scores:
+        valid = []
+        for s in raw_scores:
             try:
-                all_scores.append(float(score))
+                valid.append(float(s))
             except (TypeError, ValueError):
-                continue
+                pass
+        if valid and min(valid) <= ConfigVars.bfbarchitect_max_score:
+            passing.append(res)
+    return passing
 
-    return not all_scores or all(score > ConfigVars.bfbarchitect_max_score for score in all_scores)
+
+def _bfbarchitect_failing_regions(results):
+    """Return region tuples for results that did not pass the score threshold."""
+    failing = []
+    for res in results or []:
+        raw_scores = res.get("scores") or []
+        if not isinstance(raw_scores, (list, tuple)):
+            raw_scores = [raw_scores]
+        valid = []
+        for s in raw_scores:
+            try:
+                valid.append(float(s))
+            except (TypeError, ValueError):
+                pass
+        if not valid or min(valid) > ConfigVars.bfbarchitect_max_score:
+            region = res.get("region")
+            if isinstance(region, (list, tuple)) and len(region) >= 3:
+                failing.append(tuple(region))
+    return failing
 
 
 def bfbarchitect_whole_graph_preflight(graphf):
@@ -818,7 +877,7 @@ def bfbarchitect_whole_graph_preflight(graphf):
                     rpos, rdir = int(rpd[:-1]), rpd[-1]
                 except (IndexError, ValueError):
                     continue
-                if ldir == rdir and lchrom == rchrom and abs(rpos - lpos) <= 50000:
+                if ldir == rdir and lchrom == rchrom and abs(rpos - lpos) <= ConfigVars.fb_dist_cut:
                     foldback_edges += 1
 
     foldback_fraction = foldback_edges / float(discordant_edges) if discordant_edges else 0.0
@@ -890,29 +949,53 @@ def write_bfbarchitect_outputs(results, output_prefix, whole_graph_used):
             logger.warning("Could not write BFBArchitect outputs for {}: {}".format(region_prefix, str(e)))
 
 
-def run_bfbarchitect_reconstruct(graphf, whole_graph):
+def run_bfbarchitect_reconstruct(graphf, whole_graph, reverse_polarity=False, region=None):
     kwargs = {
         "centromere_dict": BFBARCHITECT_CENTROMERES,
         "solver": None,
         "multiple": False,
         "whole_graph": whole_graph,
-        "threads": args.bfb_threads
+        "threads": args.bfb_threads,
     }
 
-    if ConfigVars.bfbarchitect_min_lp_bound is not None:
-        try:
-            signature = inspect.signature(BFBARCHITECT_RECONSTRUCT)
-            if "min_lp_bound" in signature.parameters:
-                kwargs["min_lp_bound"] = ConfigVars.bfbarchitect_min_lp_bound
-        except (TypeError, ValueError):
-            kwargs["min_lp_bound"] = ConfigVars.bfbarchitect_min_lp_bound
+    if region is not None:
+        kwargs["region"] = region
+
+    if not whole_graph:
+        kwargs["max_graph_segments"] = ConfigVars.bfbarchitect_max_region_segments
 
     try:
-        return BFBARCHITECT_RECONSTRUCT(graphf, **kwargs)
+        sig = inspect.signature(BFBARCHITECT_RECONSTRUCT)
+        sig_params = sig.parameters
+    except (TypeError, ValueError):
+        sig_params = {}
+
+    if ConfigVars.bfbarchitect_min_lp_bound is not None:
+        if not sig_params or "min_lp_bound" in sig_params:
+            kwargs["min_lp_bound"] = ConfigVars.bfbarchitect_min_lp_bound
+
+    if reverse_polarity:
+        if not sig_params or "reverse_polarity" in sig_params:
+            kwargs["reverse_polarity"] = True
+
+    def _round_scores(results):
+        for res in results or []:
+            raw = res.get("scores")
+            if raw is None:
+                res["scores"] = []
+            else:
+                if not isinstance(raw, (list, tuple)):
+                    raw = [raw]
+                res["scores"] = [round(float(s), 2) for s in raw if s is not None]
+        return results
+
+    try:
+        return _round_scores(BFBARCHITECT_RECONSTRUCT(graphf, **kwargs))
     except TypeError as e:
-        if "min_lp_bound" in kwargs and "min_lp_bound" in str(e):
+        err = str(e)
+        if "min_lp_bound" in kwargs and "min_lp_bound" in err:
             kwargs.pop("min_lp_bound")
-            return BFBARCHITECT_RECONSTRUCT(graphf, **kwargs)
+            return _round_scores(BFBARCHITECT_RECONSTRUCT(graphf, **kwargs))
         raise
 
 
@@ -930,16 +1013,29 @@ def run_bfbarchitect(graphf, fb_edges, output_prefix):
         return empty_bfbarchitect_summary()
 
     try:
+        # Step 1: region mode, normal polarity
         with suppress_bfbarchitect_chatter():
-            results = run_bfbarchitect_reconstruct(graphf, whole_graph=False)
-        whole_graph_used = False
+            results = run_bfbarchitect_reconstruct(graphf, whole_graph=False, reverse_polarity=False)
+
+        passing = _bfbarchitect_passing_results(results)
+        failing_regions = _bfbarchitect_failing_regions(results)
+
+        preflight_ok = None
+        graph_stats = None
         whole_graph_skipped = False
-        if should_retry_bfbarchitect_whole_graph(results):
-            should_run_whole_graph, graph_stats = bfbarchitect_whole_graph_preflight(graphf)
-            if should_run_whole_graph:
+
+        # Step 2: if nothing passed, try whole graph with normal polarity
+        if not passing:
+            preflight_ok, graph_stats = bfbarchitect_whole_graph_preflight(graphf)
+            if preflight_ok:
                 with suppress_bfbarchitect_chatter():
-                    results = run_bfbarchitect_reconstruct(graphf, whole_graph=True)
-                whole_graph_used = True
+                    wg_results = run_bfbarchitect_reconstruct(graphf, whole_graph=True, reverse_polarity=False)
+                wg_passing = _bfbarchitect_passing_results(wg_results)
+                if wg_passing:
+                    summary = summarize_bfbarchitect_results(wg_passing, whole_graph_used=True,
+                                                             reverse_polarity_used=False)
+                    write_bfbarchitect_outputs(wg_passing, output_prefix, whole_graph_used=True)
+                    return summary
             else:
                 whole_graph_skipped = True
                 logger.info(
@@ -952,12 +1048,45 @@ def run_bfbarchitect(graphf, fb_edges, output_prefix):
                     )
                 )
 
-        summary = summarize_bfbarchitect_results(results, whole_graph_used)
-        if whole_graph_skipped and not results:
+        # Step 3: reverse polarity region mode for regions that failed
+        rp_results = []
+        if not results:
+            # no candidates were found at all; let BFBArchitect re-discover with reversed polarity
+            with suppress_bfbarchitect_chatter():
+                rp_results = run_bfbarchitect_reconstruct(graphf, whole_graph=False, reverse_polarity=True)
+        else:
+            for region in failing_regions:
+                with suppress_bfbarchitect_chatter():
+                    rp = run_bfbarchitect_reconstruct(graphf, whole_graph=False, reverse_polarity=True,
+                                                      region=region)
+                rp_results.extend(rp)
+
+        rp_passing = _bfbarchitect_passing_results(rp_results)
+        combined_passing = passing + rp_passing
+        reverse_polarity_used = bool(rp_passing)
+
+        # Step 4: if still nothing, try whole graph with reverse polarity
+        if not combined_passing:
+            if preflight_ok is None:
+                preflight_ok, graph_stats = bfbarchitect_whole_graph_preflight(graphf)
+            if preflight_ok:
+                with suppress_bfbarchitect_chatter():
+                    rp_wg_results = run_bfbarchitect_reconstruct(graphf, whole_graph=True, reverse_polarity=True)
+                rp_wg_passing = _bfbarchitect_passing_results(rp_wg_results)
+                if rp_wg_passing:
+                    summary = summarize_bfbarchitect_results(rp_wg_passing, whole_graph_used=True,
+                                                             reverse_polarity_used=True)
+                    write_bfbarchitect_outputs(rp_wg_passing, output_prefix, whole_graph_used=True)
+                    return summary
+
+        display_results = combined_passing if combined_passing else (results + rp_results)
+        summary = summarize_bfbarchitect_results(display_results, whole_graph_used=False,
+                                                  reverse_polarity_used=reverse_polarity_used)
+        if whole_graph_skipped and not combined_passing:
             summary["passing_region_count"] = "0"
             summary["regions"] = "whole_graph_skipped_complex_weak_foldback"
             summary["whole_graph_used"] = "False"
-        write_bfbarchitect_outputs(results, output_prefix, whole_graph_used)
+        write_bfbarchitect_outputs(combined_passing, output_prefix, whole_graph_used=False)
         return summary
 
     except Exception as e:
@@ -1114,7 +1243,13 @@ def merge_bfb_features(features):
     return merged
 
 
-def build_bfb_features(bfb_cycle_inds, bfbarchitect_summary, cycleList, segSeqD, invalidInds, graphFile, graph_cns):
+def build_bfb_features(bfb_cycle_inds, bfbarchitect_summary, cycleList, segSeqD, invalidInds, graphFile, graph_cns,
+                       native_non_bfb_inds=None):
+    # Cycles that native scoring placed in the non-BFB (ecDNA-candidate) pool must not be absorbed
+    # by a BFBArchitect region just because they overlap it. Native only attributes true foldback
+    # cycles to BFB; mirroring that here keeps the ecDNA call independent of which method made the
+    # BFB call. BFBArchitect's reported interval is unaffected (it comes from the snapped region).
+    native_non_bfb_set = set(native_non_bfb_inds) if native_non_bfb_inds else set()
     features = []
     if bfb_cycle_inds:
         native_intervals = bfb_intervals_from_cycles(
@@ -1139,6 +1274,7 @@ def build_bfb_features(bfb_cycle_inds, bfbarchitect_summary, cycleList, segSeqD,
             cycle_indices = cycle_indices_overlapping_bfb_intervals(
                 cycleList, segSeqD, interval_dict, ConfigVars.bfbarchitect_cycle_overlap_threshold
             )
+            cycle_indices -= native_non_bfb_set
             score = None
             passing_scores = bfbarchitect_summary.get("passing_scores", [])
             if ind - 1 < len(passing_scores):
@@ -1790,7 +1926,7 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
     AMP_dvaluesDict["BFB_bwp"] = fb_bwp
     AMP_dvaluesDict["Distal_bwp"] = nfb_bwp
     AMP_dvaluesDict["BFB_cwp"] = bfb_cwp
-    bfbClass = classifyBFB(fb_read_prop, fb_bwp, nfb_bwp, bfb_cwp, maxCN, tot_over_min_cn)
+    bfbClass = classifyBFB(fb_read_prop, fb_bwp, nfb_bwp, bfb_cwp, maxCN, tot_over_min_cn) if fb_edges >= 2 else None
 
     non_fb_rearr_e = rearr_e - fb_edges
     bfb_suppressed_as_artifact = False
@@ -1823,21 +1959,46 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
             )
         )
 
+    # Parse graph edges once here; used for TID pre-gate, chromoauxesis, and the post-ecStat TID check.
+    _ca_seq_edges, _ca_sv_edges = parse_graph_edges_raw(graphFile, args.add_chr_tag)
+
     if bfb_suppressed_as_artifact:
         bfbarchitect_summary = empty_bfbarchitect_summary()
     else:
-        bfb_graphFile = graphFile
-        if patch_links and not args.no_bfbarchitect:
-            tmp_dir = os.path.join(os.path.dirname(args.o), "tmp_patched_graphs")
-            os.makedirs(tmp_dir, exist_ok=True)
-            tmp_gf = os.path.join(tmp_dir, os.path.basename(graphFile))
-            if write_patched_graph(graphFile, patch_links, tmp_gf):
-                bfb_graphFile = tmp_gf
-        bfbarchitect_summary = run_bfbarchitect(bfb_graphFile, fb_edges, "{}_{}".format(sName, ampN))
+        _pre_tid = _check_tid(
+            _ca_seq_edges, _ca_sv_edges, cycleList, segSeqD,
+            cn_ratio_max=ConfigVars.tid_cn_ratio_max,
+            cn_ratio_max_tight_fb=ConfigVars.tid_cn_ratio_max_tight_fb,
+            tight_fb_size=ConfigVars.tid_tight_fb_size,
+            max_foldback_span=ConfigVars.tid_max_foldback_span,
+            close_endpoint_dist=ConfigVars.tid_close_endpoint_dist,
+            tid_max_inner_cn=ConfigVars.tid_max_inner_cn,
+        )
+        if _pre_tid.get('pass'):
+            bfbarchitect_summary = empty_bfbarchitect_summary()
+            logger.info(
+                "{} matches TID criteria — skipping BFBArchitect "
+                "(span={:.1f}kb, inner/bg CN ratio={:.2f}x, max inner CN={:.2f}).".format(
+                    amplicon_log_id(sName, ampN),
+                    _pre_tid['tid_span_kb'],
+                    _pre_tid['ratio'],
+                    _pre_tid.get('max_inner_cn', float('nan')),
+                )
+            )
+        else:
+            bfb_graphFile = graphFile
+            if patch_links and not args.no_bfbarchitect:
+                tmp_dir = os.path.join(os.path.dirname(args.o), "tmp_patched_graphs")
+                os.makedirs(tmp_dir, exist_ok=True)
+                tmp_gf = os.path.join(tmp_dir, os.path.basename(graphFile))
+                if write_patched_graph(graphFile, patch_links, tmp_gf):
+                    bfb_graphFile = tmp_gf
+            bfbarchitect_summary = run_bfbarchitect(bfb_graphFile, fb_edges, "{}_{}".format(sName, ampN))
 
     native_bfb_cycle_inds = list(bfb_cycle_inds) if bfbClass else []
     bfb_features = build_bfb_features(
-        native_bfb_cycle_inds, bfbarchitect_summary, cycleList, segSeqD, invalidInds, graphFile, graph_cns
+        native_bfb_cycle_inds, bfbarchitect_summary, cycleList, segSeqD, invalidInds, graphFile, graph_cns,
+        native_non_bfb_inds=non_bfb_cycle_inds
     )
     bfb_cycle_inds = sorted(set().union(*[feature.cycle_indices for feature in bfb_features])) if bfb_features else []
     bfb_sources = sorted(set().union(*[feature.sources for feature in bfb_features])) if bfb_features else []
@@ -1847,8 +2008,6 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
     bfb_detected = bool(bfbClass) or bool(bfb_features)
     bfbarchitect_detected = BFBARCHITECT_SOURCE in bfb_sources
 
-    # Chromoauxesis classification (graph already read once by parse_graph_edges_raw)
-    _ca_seq_edges, _ca_sv_edges = parse_graph_edges_raw(graphFile, args.add_chr_tag)
     ca_result = _run_chromoauxesis_from_edges(_ca_seq_edges, _ca_sv_edges)
     ca_result["amplicon_intervals"] = _get_intervals_from_seq_edges(_ca_seq_edges)
     is_chromoauxesis = (ca_result["decision"] == "chromoauxesis")
@@ -1877,7 +2036,14 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
 
         elif bfb_detected and not is_non_feature_amplicon_class(ampClass):
             bfbStat = True
-            if bfbHasEC or (bfbarchitect_detected and ampClass == "Cyclic"):
+            # An ecDNA call in a BFB+ amplicon can only rest on cycles outside the BFB set
+            # (bfb_cycle_inds, which BFBArchitect may have added to) that do not themselves
+            # contain a foldback — a foldback-containing cycle is BFB-explained, not ecDNA.
+            final_bfb_set = set(bfb_cycle_inds)
+            updated_non_bfb_inds = [i for i in non_bfb_cycle_inds
+                                    if i not in final_bfb_set
+                                    and not cycle_contains_foldback(cycleList[i], segSeqD)]
+            if nonbfb_cycles_are_ecdna(updated_non_bfb_inds, cycleList, segSeqD, cycleCNs, graph_cns):
                 ecStat = True
 
         else:
@@ -1893,6 +2059,8 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
             cn_ratio_max_tight_fb=ConfigVars.tid_cn_ratio_max_tight_fb,
             tight_fb_size=ConfigVars.tid_tight_fb_size,
             max_foldback_span=ConfigVars.tid_max_foldback_span,
+            close_endpoint_dist=ConfigVars.tid_close_endpoint_dist,
+            tid_max_inner_cn=ConfigVars.tid_max_inner_cn,
         )
         if tid_result.get('pass'):
             ecStat = False
@@ -1914,6 +2082,10 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
             excludableCycleIndices = non_qualifying | set(bfb_cycle_inds) | set(invalidInds)
         else:
             excludableCycleIndices = set(bfb_cycle_inds + invalidInds)
+            if bfbStat:
+                # foldback-containing cycles belong to the BFB, never to a co-called ecDNA
+                excludableCycleIndices |= {i for i in range(len(cycleList))
+                                           if cycle_contains_foldback(cycleList[i], segSeqD)}
         ecIndexClusters = clusterECCycles(cycleList, cycleCNs, segSeqD, graph_cns, excludableCycleIndices)
         ecAmpliconCount = max(len(ecIndexClusters), 1)
 

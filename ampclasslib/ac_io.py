@@ -459,7 +459,7 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
             if args.bfbarchitect:
                 oh += ["BFBArchitect_min_score", "BFBArchitect_passing_region_count",
                        "BFBArchitect_multiplicities", "BFBArchitect_regions",
-                       "BFBArchitect_whole_graph_used"]
+                       "BFBArchitect_whole_graph_used", "BFBArchitect_reverse_polarity_used"]
             oh += ["BFB_source"]
 
         outfile.write("\t".join(oh) + "\n")
@@ -485,7 +485,8 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
                         str(curr_summary.get("passing_region_count", "NA")),
                         curr_summary.get("multiplicities", "NA"),
                         curr_summary.get("regions", "NA"),
-                        str(curr_summary.get("whole_graph_used", "NA"))
+                        str(curr_summary.get("whole_graph_used", "NA")),
+                        str(curr_summary.get("reverse_polarity_used", "NA"))
                     ]
                 curr_summary = {}
                 if bfbarchitect_summaries and ind < len(bfbarchitect_summaries):

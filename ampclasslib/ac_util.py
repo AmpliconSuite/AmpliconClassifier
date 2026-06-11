@@ -26,7 +26,7 @@ class ConfigVars:
         # bfb-related items
         min_fb_read_prop = 0.25
         fb_break_weight_prop = 0.3
-        fb_dist_cut = 25000
+        fb_dist_cut = 50000
         min_flow = 1.0
         max_foldback_edges_qc = 100
         max_nonbfb_break_weight = 0.5
@@ -34,7 +34,8 @@ class ConfigVars:
         bfbarchitect_max_score = 2.8
         bfbarchitect_cycle_overlap_threshold = 0.95
         bfbarchitect_min_lp_bound = 25
-        bfbarchitect_whole_graph_max_sequence_edges = 250
+        bfbarchitect_max_region_segments = 50
+        bfbarchitect_whole_graph_max_sequence_edges = 150
         bfbarchitect_whole_graph_max_discordant_edges = 50
         bfbarchitect_whole_graph_min_foldback_fraction = 0.1
         bfbarchitect_whole_graph_max_large_chrom_count = 3
@@ -48,6 +49,8 @@ class ConfigVars:
         tid_cn_ratio_max_tight_fb = 4.0
         tid_tight_fb_size = 50000
         tid_max_foldback_span = 1000000
+        tid_close_endpoint_dist = 25000
+        tid_max_inner_cn = 12
 
 
 class breakpoint(object):

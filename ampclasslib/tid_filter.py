@@ -23,15 +23,20 @@ MAX_EDGE_OVERLAP        = 0.10
 MIN_SMALL_EDGE          = 5_000
 C2_AMP_CN_FLOOR         = 4.0     # SV endpoint with CN below this is escaping the amplicon; ignore for C2
 C2_MIN_BP_CN_DELTA      = 2.0     # if neither endpoint of an other-SV shows a CN step >= this, treat as noise
+C2_NEUTRAL_DEL_MAX_BP   = 15_000  # combined span of CN-neutral internal DELs (skipped near-zero segment) to tolerate
+C2_NEUTRAL_DEL_INNER_CN = 1.0     # inner segment CN at or below this is considered near-deleted
 C4_MIN_NONINV_CYCLE_SIZE = 50_000  # non-inversion circular cycles smaller than this are ignored in C4
 MAX_FOLDBACK_SPAN       = 1_000_000  # reject if either selected foldback spans more than this
+CLOSE_ENDPOINT_DIST     = 25_000  # C1b carve-out: waive span limit if a foldback endpoint is within this distance of the other foldback
 
 
 def check_tid(seq_edges, sv_edges, cycleList, segSeqD,
               cn_ratio_max=CN_RATIO_MAX,
               cn_ratio_max_tight_fb=CN_RATIO_MAX_TIGHT_FB,
               tight_fb_size=TIGHT_FB_SIZE,
-              max_foldback_span=MAX_FOLDBACK_SPAN):
+              max_foldback_span=MAX_FOLDBACK_SPAN,
+              close_endpoint_dist=CLOSE_ENDPOINT_DIST,
+              tid_max_inner_cn=float('inf')):
     """
     Returns a dict with 'pass': True on success, or 'fail': <reason> on failure,
     plus diagnostic fields (ratio, max_inner, background, tid_span_kb, etc.).
@@ -189,16 +194,39 @@ def check_tid(seq_edges, sv_edges, cycleList, segSeqD,
         info['fail'] = "C1: {} -- edge(s), {} ++ edge(s) (need 1 each)".format(len(mm), len(pp))
         return info
 
+    def _neutral_del_span(d):
+        """Return the span of a CN-neutral DEL (skipped near-zero inner segment), else 0.
+
+        A neutral DEL has same-chrom + strand, skips a single inner segment whose CN
+        is at or below C2_NEUTRAL_DEL_INNER_CN.  These arise from genuine small deletions
+        within an otherwise intact TID region and should not disqualify C2.
+        """
+        if d[0] != d[3] or d[2] != '+' or d[5] != '-' or d[4] <= d[1]:
+            return 0
+        inner_start, inner_end = d[1] + 1, d[4] - 1
+        for e in seq_edges:
+            if e['chrom'] == d[0] and e['start'] == inner_start and e['end'] == inner_end:
+                if e['cn'] <= C2_NEUTRAL_DEL_INNER_CN:
+                    return inner_end - inner_start + 1
+        return 0
+
     # C2: SVs where either endpoint lands in unamplified sequence (CN < C2_AMP_CN_FLOOR)
     # are escaping the amplicon and don't affect the internal CN structure — ignore them.
     other_internal = [d for d in other
                       if _in_amplicon(d[0], d[1], d[2]) and _in_amplicon(d[3], d[4], d[5])
                       and _creates_cn_change(d)]
-    info['other_internal_str'] = [fmt(d) for d in other_internal]
 
-    if other_internal:
+    # Exempt CN-neutral internal DELs (skipped near-deleted segment) up to combined 15 kb.
+    neutral_del_bp = sum(_neutral_del_span(d) for d in other_internal)
+    other_internal_real = [d for d in other_internal if _neutral_del_span(d) == 0]
+    if neutral_del_bp > C2_NEUTRAL_DEL_MAX_BP:
+        other_internal_real = other_internal  # combined span too large; treat as real SVs
+
+    info['other_internal_str'] = [fmt(d) for d in other_internal_real]
+
+    if other_internal_real:
         info['fail'] = "C2: {} internal large SV(s): {}".format(
-            len(other_internal), [fmt(d) for d in other_internal])
+            len(other_internal_real), [fmt(d) for d in other_internal_real])
         return info
 
     mm_e, pp_e = mm[0], pp[0]
@@ -207,27 +235,24 @@ def check_tid(seq_edges, sv_edges, cycleList, segSeqD,
         info['fail'] = "C1: -- and ++ on different chromosomes"
         return info
 
-    # C1b: neither foldback may span more than max_foldback_span.
-    # Multi-Mb foldbacks are not biologically consistent with a simple TID.
+    # C1b / C5 share the min pairwise endpoint distance between the two foldbacks.
+    # Carve-out: if one endpoint of a large foldback lands within close_endpoint_dist of any
+    # endpoint of the other foldback, the foldbacks share a tight junction and the large span
+    # reflects the amplified-region size rather than a biologically implausible SV.  When the
+    # carve-out applies we also skip C5, because a small nominal overlap at the shared junction
+    # is geometrically inevitable and does not indicate the edges are the same structural element.
     mm_span = abs(mm_e[4] - mm_e[1])
     pp_span = abs(pp_e[4] - pp_e[1])
-    if mm_span > max_foldback_span or pp_span > max_foldback_span:
+    mm_pts = [mm_e[1], mm_e[4]]
+    pp_pts = [pp_e[1], pp_e[4]]
+    min_ep_dist = min(abs(mp - pp) for mp in mm_pts for pp in pp_pts)
+    info['min_endpoint_dist'] = min_ep_dist
+    close_junction = min_ep_dist <= close_endpoint_dist
+
+    both_oversized = mm_span > max_foldback_span and pp_span > max_foldback_span
+    if (mm_span > max_foldback_span or pp_span > max_foldback_span) and (both_oversized or not close_junction):
         info['fail'] = "C1b: foldback span exceeds {}kb (-- {:.0f}kb, ++ {:.0f}kb)".format(
             max_foldback_span // 1000, mm_span / 1000, pp_span / 1000)
-        return info
-
-    # C5: -- and ++ spans must not significantly overlap
-    def edge_overlap_frac(e1, e2):
-        a, b = sorted([e1[1], e1[4]])
-        c, d = sorted([e2[1], e2[4]])
-        overlap = max(0, min(b, d) - max(a, c))
-        shorter = min(b - a, d - c)
-        return overlap / shorter if shorter > 0 else 0.0
-
-    min_frac = min(edge_overlap_frac(me, pe) for me in mm_raw for pe in pp_raw)
-    if min_frac > MAX_EDGE_OVERLAP:
-        info['fail'] = "C5: edges cross (min overlap fraction {:.2f} > {})".format(
-            min_frac, MAX_EDGE_OVERLAP)
         return info
 
     # Outermost breakpoints across all raw same-orientation edges
@@ -283,9 +308,60 @@ def check_tid(seq_edges, sv_edges, cycleList, segSeqD,
             ', tight_fb' if tight_fb else '')
         return info
 
-    # C3b: the sequence segment immediately inside each foldback endpoint must be amplified.
-    # For a real TID the amplified region starts at the foldback boundaries; if any inner face
-    # has CN < 0.5 * inner_cn the foldback is not sitting at the edge of the amplified region.
+    # C3c: absolute cap on the maximum CN of any inner segment.
+    max_inner_cn_val = max(e['cn'] for e in inner)
+    info['max_inner_cn'] = max_inner_cn_val
+    if max_inner_cn_val > tid_max_inner_cn:
+        info['fail'] = "C3c: max inner CN {:.2f} > {:.1f} limit".format(
+            max_inner_cn_val, tid_max_inner_cn)
+        return info
+
+    # C5: -- and ++ spans must not significantly overlap.
+    # A geometric overlap up to MAX_EDGE_OVERLAP is tolerated unconditionally.  For larger
+    # overlaps, check whether the overlapping region is at background CN: in a tightly-spaced
+    # TID the geometric overlap of the two foldback spans corresponds to the inter-copy gap,
+    # which sits at background CN.  If the overlap region is amplified (CN > background) the
+    # two foldbacks are pointing at the same element — that is a genuine crossing.
+    # The check is skipped entirely when the close-junction carve-out is active.
+    def _edge_overlap_frac(e1, e2):
+        a, b = sorted([e1[1], e1[4]])
+        c, d = sorted([e2[1], e2[4]])
+        overlap = max(0, min(b, d) - max(a, c))
+        shorter = min(b - a, d - c)
+        return overlap / shorter if shorter > 0 else 0.0
+
+    if both_oversized or not close_junction:
+        min_frac = min(_edge_overlap_frac(me, pe) for me in mm_raw for pe in pp_raw)
+        if min_frac > MAX_EDGE_OVERLAP:
+            a, b = sorted([mm_e[1], mm_e[4]])
+            c, d = sorted([pp_e[1], pp_e[4]])
+            ol_start, ol_end = max(a, c), min(b, d)
+            ol_size = ol_cn_sum = 0
+            for e in seq_edges:
+                if e['chrom'] != chrom:
+                    continue
+                seg_s = max(e['start'], ol_start)
+                seg_e = min(e['end'],   ol_end)
+                if seg_s >= seg_e:
+                    continue
+                sz = seg_e - seg_s
+                ol_size    += sz
+                ol_cn_sum  += e['cn'] * sz
+            ol_cn = ol_cn_sum / ol_size if ol_size else None
+            if ol_cn is None or ol_cn > background:
+                info['fail'] = (
+                    "C5: edges cross (overlap {:.0f}% of shorter span; overlap CN {})".format(
+                        min_frac * 100,
+                        "n/a" if ol_cn is None
+                        else "{:.2f} > bg {:.2f}".format(ol_cn, background))
+                )
+                return info
+
+    # C3b: the sequence segment immediately inside each foldback endpoint must sit at the edge
+    # of the amplified region — not below it (foldback is outside the amp) and not far above it
+    # (foldback is embedded in a hyper-amplified core inconsistent with a simple TID boundary).
+    # Lower bound: face_cn >= 0.5 * inner_cn.
+    # Upper bound: face_cn / background <= ratio_max (same cap as C3).
     def _inner_face_cn(pos, strand):
         """CN of the seq segment on the inner (TID-region) side of a foldback endpoint."""
         for e in seq_edges:
@@ -311,6 +387,15 @@ def check_tid(seq_edges, sv_edges, cycleList, segSeqD,
             "C3b: foldback inner face(s) below {:.2f} (0.5x inner_cn={:.2f}): {}".format(
                 face_threshold, inner_cn,
                 ", ".join("{}={:.2f}".format(k, v) for k, v in low_faces.items()))
+        )
+        return info
+    high_faces = {k: v for k, v in face_cns.items()
+                  if v is not None and v / background > ratio_max}
+    if high_faces:
+        info['fail'] = (
+            "C3b: foldback inner face(s) exceed {:.1f}x background ({:.2f}): {}".format(
+                ratio_max, background,
+                ", ".join("{}={:.2f}".format(k, v) for k, v in high_faces.items()))
         )
         return info
 

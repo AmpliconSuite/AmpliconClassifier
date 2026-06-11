@@ -30,14 +30,15 @@ DEFAULT_CONFIG = {
     # bfb-related items
     "min_fb_read_prop": 0.25,          # min proportion of SV reads in foldbacks to call BFB
     "fb_break_weight_prop": 0.3,       # min proportion of utilized path/cycle SVs supporting BFB foldbacks (weighted by flow)
-    "fb_dist_cut": 25000,              # max distance between ends for inversion to be foldback
+    "fb_dist_cut": 50000,              # max distance between ends for inversion to be foldback
     "max_foldback_edges_qc": 100,      # max foldback edge count before treating the amplicon as a QC artifact
     "max_nonbfb_break_weight": 0.5,    # max proportion of utilized path/cycle SVs supporting non-foldback connections
     "min_bfb_cycle_weight_ratio": 0.6,  # minimum flow*length weighted proportion of BFB-like paths/cycles for BFB
     "bfbarchitect_max_score": 2.8,     # maximum BFBArchitect score considered passing
     "bfbarchitect_cycle_overlap_threshold": 0.95,  # min cycle overlap with BFBArchitect intervals to mark BFB
     "bfbarchitect_min_lp_bound": 25,  # stop Gurobi early when the root LP relaxation bound exceeds this value
-    "bfbarchitect_whole_graph_max_sequence_edges": 250,  # skip whole-graph fallback above this graph size if foldback signal is weak
+    "bfbarchitect_max_region_segments": 50,              # max segments in a BFB candidate region before skipping it
+    "bfbarchitect_whole_graph_max_sequence_edges": 150,  # skip whole-graph fallback above this graph size if foldback signal is weak
     "bfbarchitect_whole_graph_max_discordant_edges": 50,  # skip whole-graph fallback above this SV count if foldback signal is weak
     "bfbarchitect_whole_graph_min_foldback_fraction": 0.1,  # min foldback/discordant edge fraction for complex whole-graph retry
     "bfbarchitect_whole_graph_max_large_chrom_count": 3,  # skip whole-graph fallback when this many chromosomes have large spans
@@ -50,7 +51,9 @@ DEFAULT_CONFIG = {
     "tid_cn_ratio_max": 2.5,             # maximum inner/background CN ratio for TID (C3)
     "tid_cn_ratio_max_tight_fb": 4.0,    # relaxed C3 cap when the shorter foldback is < tid_tight_fb_size
     "tid_tight_fb_size": 50000,          # foldback span (bp) below which the relaxed ratio cap applies
-    "tid_max_foldback_span": 1000000     # maximum allowed span (bp) for either selected foldback (C1b)
+    "tid_max_foldback_span": 1000000,    # maximum allowed span (bp) for either selected foldback (C1b)
+    "tid_close_endpoint_dist": 25000,    # C1b carve-out: waive span limit if foldback endpoints are within this distance
+    "tid_max_inner_cn": 12              # maximum CN of any inner segment for TID (C3c); reuses high_amp scale
 }
 
 
