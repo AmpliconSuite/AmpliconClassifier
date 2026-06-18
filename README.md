@@ -116,7 +116,7 @@ If combining data from both GRCh37 and hg19 in the same classification run, you 
 
 #### ****`[prefix]_amplicon_classification_profiles.tsv`**** 
 
-Contains an abstract classification of the amplicon, and also indicates in separate columns "BFB+", "ecDNA+", and "chromoauxesis+" status.
+Contains an abstract classification of the amplicon, and also indicates in separate columns "BFB+", "ecDNA+", and "FAN+" (Focal amplification in neochromosome) status.
 Note that amplicons receiving a "Cyclic" classification may be ecDNA+, BFB+ or both.
 
 | Column name                    | Contents                                                                                                                                                                                |
@@ -126,7 +126,7 @@ Note that amplicons receiving a "Cyclic" classification may be ecDNA+, BFB+ or b
 | `amplicon_decomposition_class` | Abstract description of the AA amplicon type.                                                                                   |
 | `ecDNA+`                       | Prediction about whether the AA amplicon contains ecDNA. Note, an AA amplicon may contain regions surrounding the ecDNA, or multiple linked ecDNA. Either `Positive` or `None detected` |
 | `BFB+`                         | Prediction about whether the AA amplicon is the result of a BFB. Either `Positive` or `None detected`                                                                                   |
-| `chromoauxesis+`                | Prediction about whether the AA amplicon has chromoauxesis-like graph structure. Either `Positive` or `None detected`                                                                   |
+| `FAN+`                          | Prediction about whether the AA amplicon has FAN (Focal amplification in neochromosome) graph structure. Either `Positive` or `None detected`                                           |
 | `ecDNA_amplicons`              | Predicted number of distinct (non-overlapping) ecDNA which are represented in a single AA amplicon. This estimate is experimental.                                               |
 
 When `--verbose_classification` is set, the profile also includes `BFB_source`, which reports `AC`, `BFBArchitect`, or `AC|BFBArchitect` for positive BFB calls. If BFBArchitect is available and enabled, verbose profiles also include BFBArchitect score summaries.
@@ -160,24 +160,24 @@ This file has a highly similar structure to the `gene_list.tsv` file and is base
 #### ****`[prefix]_feature_basic_properties.tsv`****
 Reports a table of basic properties such as size of captured regions, median and max CN, and a flag field to report if the call is "borderline" (ecDNA with CN < 8, other classes with CN < 5).
 
-#### ****`[prefix]_feature_entropy.tsv`****
-Reports amplicon complexity scores as measured by the number of genomic segments and the diversity of copy number among all the amplicon decompositions performed by AA. For more information please see the Supplementary Information file of [this study](https://www.nature.com/articles/s41586-023-05937-5).
+#### ****`[prefix]_feature_complexity.tsv`****
+Reports per-feature complexity scores as measured by the number of genomic segments and the diversity of copy number among all the amplicon decompositions performed by AA. For more information please see the Supplementary Information file of [this study](https://www.nature.com/articles/s41586-023-05937-5).
 
  | Column name                     | Contents   |
 |---------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `sample_name`                   | Sample name prefix |
 | `amplicon_number`               | AA amplicon index, e.g. `amplicon2` |
-| `feature`                       | Which feature inside the amplicon the gene is present on. May be `unknown` if cannot be confidently assigned to a feature. |
-| `total_feature_entropy`         | This is the amplicon complexity score. |
-| `decomp_entropy`                | Amount of entropy or diversity captured in the AA decompositions overlapping this feature. |
-| `Amp_nseg_entropy`              | Amount of entropy or diversity captured by the number of genomic segments overlapping this feature. |
+| `feature`                       | Which feature this score applies to, e.g. `ecDNA_1`. |
+| `feature_complexity`            | The feature complexity score. This is the value reported as "Complexity score" in the results table. |
+| `decomp_complexity`             | Amount of complexity or diversity captured in the AA decompositions overlapping this feature, without the segment-count term. |
+| `nseg_complexity`               | Complexity contribution from the number of genomic segments overlapping this feature. |
 
 
-#### ****`[output_prefix]_chromoauxesis_calls.tsv`****
-Reports the chromoauxesis classifier result for each AA amplicon. The file includes `sample_name`, `amplicon_number`, `chromoauxesis_call`, `chromoauxesis_probability`, and the model features used for the call.
+#### ****`[output_prefix]_fan_calls.tsv`****
+Reports the FAN (Focal amplification in neochromosome) classifier result for each AA amplicon. The file includes `sample_name`, `amplicon_number`, `fan_call`, `fan_probability`, and the model features used for the call.
 
 #### ****`[output_prefix]_feature_similarity_scores.tsv`****
-Reports pairwise feature similarity scores for cross-sample feature pairs with overlapping genomic intervals. Same-sample pairs are not compared. The score table includes ecDNA, BFB, Linear, Complex-non-cyclic, and chromoauxesis features, and is written by default for each AC run. These rows are also the audit trail used by `--filter_similar`; the table is written regardless of whether filtering is enabled.
+Reports pairwise feature similarity scores for cross-sample feature pairs with overlapping genomic intervals. Same-sample pairs are not compared. The score table includes ecDNA, BFB, Linear, Complex-non-cyclic, and FAN features, and is written by default for each AC run. These rows are also the audit trail used by `--filter_similar`; the table is written regardless of whether filtering is enabled.
 
 #### ****`[output_prefix]_ecDNA_counts.tsv`****
 This two-column file reports the `sample_name` and the number of ecDNA identified in the samples.
@@ -201,7 +201,7 @@ We suggest that `Simple circular simple background` and `Two-foldback` are most 
 #### Amplicon bed files, annotated cycles, and SV summaries
 Additionally, there are three directories  created by `amplicon_classifier.py`. They are
 - `[prefix]_classification_bed_files/`, which contains bed files of the regions classified into each feature. May contain bed files marked `unknown` if the region could not be confidently assigned.
-  - Chromoauxesis-positive amplicons are reported as a numbered feature, e.g. `sample_amplicon1_chromoauxesis_1_intervals.bed`.
+  - FAN-positive amplicons are reported as a numbered feature, e.g. `sample_amplicon1_FAN_1_intervals.bed`.
   - The bed files report genomic intervals using a [0-based, half-open counting system](https://genome-blog.soe.ucsc.edu/blog/2016/12/12/the-ucsc-genome-browser-coordinate-counting-systems/). This is the same system used by the UCSC genome browser.
   - By contrast, AmpliconArchitect's graph and cycles files report genomic coordinates using a 0-based, fully closed counting system. This means that intervals reported by AC will contain one additional base on the second coordinate, which is not part of the amplicon (half-open).
   - Intervals reported in these bed files do not represent the structure of ecDNA, and may face limitations related to missing SVs or inexactly refined amplicon endpoints (a limitation of short-reads).
@@ -210,7 +210,7 @@ Additionally, there are three directories  created by `amplicon_classifier.py`. 
 - `[prefix]_annotated_cycles_files/`, which contains AA cycles files with additional annotations about length of discovered paths/cycles and their classification status. Using these annotated cycles files is preferred over the unannotated cycles file produced by AA. These cycles are filtered to remove cycles overlapping low-complexity regions of the genome, patches reference genome issues, and filters duplicate cycle entries erroneously output by AA (uncommon).
 
 #### Results table
-When `--make_results_table` is used, AC creates `[prefix]_result_table.tsv` and `[prefix]_result_data.json`. The table has one row per reported feature, including ecDNA, BFB, decomposition features, and chromoauxesis features. Chromoauxesis rows use the numbered feature ID `chromoauxesis_1`; the `Chromoauxesis probability` column reports the model probability for each amplicon.
+When `--make_results_table` is used, AC creates `[prefix]_result_table.tsv` and `[prefix]_result_data.json`. The table has one row per reported feature, including ecDNA, BFB, decomposition features, and FAN features. FAN rows use the numbered feature ID `FAN_1`; the `FAN probability` column reports the model probability for each amplicon.
 
 
 ### 4. Command-Line Options
@@ -273,7 +273,7 @@ Where "[sample]_features_to_graph.txt" is one of the output files generated by `
 **How do I use this to perform similarity score-based filtering on my samples?**
 To remove potential false-positive focal amplification calls from a collection of samples, AC uses the similarity scores and p-value reported in `[output_prefix]_feature_similarity_scores.tsv`. The motivating idea is that in unrelated samples, precisely conserved CN boundaries and SVs should be exceptionally rare unless they are derived from issues with the reference genome. If all samples in the collection are from unrelated sources (no replicates, no multi-region or longitudinal samples, etc.) users can simply run AC on the batch of samples setting the `--filter_similar` flag. AC never compares features from the same sample during this filtering step.
 
-When `--filter_similar` is set, AC reuses the same feature similarity rows that it writes to `[output_prefix]_feature_similarity_scores.tsv`. ecDNA, BFB, Linear, and Complex-non-cyclic hits are filtered at feature scope. Chromoauxesis hits are filtered at amplicon scope: if a chromoauxesis feature is significantly similar to a feature from another sample, AC removes the whole amplicon from reported feature outputs and downgrades the amplicon to `No-FSCNA`. The chromoauxesis call for that amplicon is also cleared to `None detected`. The triggering similarity rows remain in the similarity score table for review.
+When `--filter_similar` is set, AC reuses the same feature similarity rows that it writes to `[output_prefix]_feature_similarity_scores.tsv`. ecDNA, BFB, Linear, and Complex-non-cyclic hits are filtered at feature scope. FAN hits are filtered at amplicon scope: if a FAN feature is significantly similar to a feature from another sample, AC removes the whole amplicon from reported feature outputs and downgrades the amplicon to `No-FSCNA`. The FAN call for that amplicon is also cleared to `None detected`. The triggering similarity rows remain in the similarity score table for review.
 
 If the collection contains a mixture of samples from related and unrelated sources, then some samples will likely have focal amplifications having a high degree of similarity due to being from related origins. In this case, users can run the `feature_similarity.py` script described above on the samples to produce a table of similarity scores and p-values. Users can then filter highly similar focal amplifications from unrelated samples using the p-value in the table. Since this involves multiple hypothesis testing, to control false positive rate, users can mirror what is done internally by AC and apply a slightly modified Bonferroni correction of `alpha/(n-1)` where alpha by default is 0.05 and `n` is the number of samples in the collection having a focal amplification.
 

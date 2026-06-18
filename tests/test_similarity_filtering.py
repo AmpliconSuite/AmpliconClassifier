@@ -32,16 +32,16 @@ class SimilarityFilteringTests(unittest.TestCase):
             for feature_id in feature_registry
         }
 
-        pairs = ac.get_cross_sample_feature_pairs(feat_to_ivald, feature_registry, lambda _a, _b: True)
+        pairs = list(ac.get_cross_sample_feature_pairs(feat_to_ivald, feature_registry, lambda _a, _b: True))
         self.assertNotIn(("sampleA_amplicon2_ecDNA_1", "sampleA_amplicon1_ecDNA_1"), pairs)
         self.assertEqual(len(pairs), 2)
 
-    def test_chromoauxesis_filters_amplicon_scope(self):
+    def test_fan_filters_amplicon_scope(self):
         feature_registry = {
-            "sampleA_amplicon1_chromoauxesis_1": registry_entry("sampleA", "amplicon1", "chromoauxesis"),
+            "sampleA_amplicon1_FAN_1": registry_entry("sampleA", "amplicon1", "FAN"),
             "sampleB_amplicon1_ecDNA_1": registry_entry("sampleB", "amplicon1", "ecDNA"),
         }
-        rows = [similarity_row("sampleA_amplicon1_chromoauxesis_1", "sampleB_amplicon1_ecDNA_1", pvalue=1e-10)]
+        rows = [similarity_row("sampleA_amplicon1_FAN_1", "sampleB_amplicon1_ecDNA_1", pvalue=1e-10)]
 
         feats_to_filter, amps_to_filter, filter_events = ac.choose_similarity_filter_targets(
             rows, feature_registry, pval=1e-5
@@ -88,14 +88,14 @@ class SimilarityFilteringTests(unittest.TestCase):
         self.assertEqual(amps_to_filter, set())
         self.assertEqual(filter_events, [])
 
-    def test_nonpassing_chromoauxesis_row_does_not_stop_legacy_filtering(self):
+    def test_nonpassing_fan_row_does_not_stop_legacy_filtering(self):
         feature_registry = {
-            "sampleA_amplicon1_chromoauxesis_1": registry_entry("sampleA", "amplicon1", "chromoauxesis"),
+            "sampleA_amplicon1_FAN_1": registry_entry("sampleA", "amplicon1", "FAN"),
             "sampleB_amplicon1_ecDNA_1": registry_entry("sampleB", "amplicon1", "ecDNA"),
             "sampleC_amplicon1_ecDNA_1": registry_entry("sampleC", "amplicon1", "ecDNA"),
         }
         rows = [
-            similarity_row("sampleA_amplicon1_chromoauxesis_1", "sampleB_amplicon1_ecDNA_1", pvalue=0.5),
+            similarity_row("sampleA_amplicon1_FAN_1", "sampleB_amplicon1_ecDNA_1", pvalue=0.5),
             similarity_row("sampleB_amplicon1_ecDNA_1", "sampleC_amplicon1_ecDNA_1", pvalue=1e-10),
         ]
 

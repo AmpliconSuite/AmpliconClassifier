@@ -14,13 +14,13 @@ def class_row(decomp, ecdna="None detected", bfb="None detected", chromo="None d
         "amplicon_decomposition_class": decomp,
         "ecDNA+": ecdna,
         "BFB+": bfb,
-        "chromoauxesis+": chromo,
+        "FAN+": chromo,
         "ecDNA_amplicons": ec_count,
     }
 
 
 class ResultsReportingTests(unittest.TestCase):
-    def test_chromoauxesis_prevents_cyclic_fallback_result_row(self):
+    def test_fan_prevents_cyclic_fallback_result_row(self):
         specs = discover_feature_specs(
             class_row("Cyclic", chromo="Positive"),
             "sample_amplicon1",
@@ -29,7 +29,7 @@ class ResultsReportingTests(unittest.TestCase):
 
         self.assertEqual(
             [(feature_id, feature) for feature_id, feature, _ in specs],
-            [("sample_amplicon1_chromoauxesis_1", "chromoauxesis")],
+            [("sample_amplicon1_FAN_1", "FAN")],
         )
 
     def test_bare_cyclic_is_not_reported_as_feature(self):
@@ -80,7 +80,7 @@ class ResultsReportingTests(unittest.TestCase):
         self.assertNotIn("Cyclic_1", feature_dict)
         self.assertIn("Marking as Invalid", "\n".join(logs.output))
 
-    def test_annotation_keeps_chromoauxesis_without_cyclic_feature(self):
+    def test_annotation_keeps_fan_without_cyclic_feature(self):
         with tempfile.TemporaryDirectory(prefix="ac-reporting-") as tmpdir:
             graph = Path(tmpdir) / "sample_amplicon1_graph.txt"
             graph.write_text("sequence chr1:100+ chr1:200- 10\n", encoding="utf-8")
@@ -98,12 +98,12 @@ class ResultsReportingTests(unittest.TestCase):
                 add_chr_tag=False,
                 lcD=defaultdict(IntervalTree),
                 ref="GRCh38",
-                chromoauxesis_intervals={"chr1": [(100, 200)]},
+                fan_intervals={"chr1": [(100, 200)]},
             )
 
         self.assertEqual(amp_class, "Cyclic")
         self.assertNotIn("Cyclic_1", feature_dict)
-        self.assertIn("chromoauxesis_1", feature_dict)
+        self.assertIn("FAN_1", feature_dict)
 
 
 if __name__ == "__main__":

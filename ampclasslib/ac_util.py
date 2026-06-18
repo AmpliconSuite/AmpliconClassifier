@@ -1,5 +1,7 @@
 from collections import defaultdict
 import logging
+
+logger = logging.getLogger(__name__)
 import os
 import warnings
 
@@ -41,8 +43,8 @@ class ConfigVars:
         bfbarchitect_whole_graph_max_large_chrom_count = 3
         bfbarchitect_whole_graph_min_large_chrom_bp = 250000
 
-        # chromoauxesis-related items
-        chromoauxesis_ecDNA_min_cn = 60
+        # FAN (Focal amplification in neochromosome) related items
+        fan_ecDNA_min_cn = 60
 
         # TID-related items
         tid_cn_ratio_max = 2.5
@@ -364,7 +366,7 @@ def repair_cycle(cycle, segSeqD, patch_links, xt, yt, ee_spans):
             if x[0] == spair[0][0] and x[2] == spair[1][0]:
                 if x[1].overlaps(spair[0][1]) and x[3].overlaps(spair[1][1]):
                     repCyc = repCyc[1:-1]
-                    logging.info("bridged a gap in cycle using known database: " + str(repCyc))
+                    logger.info("bridged a gap in cycle using known database: " + str(repCyc))
                     return repCyc
 
         # now check if amplicon entirely enclosed in everted edge with high CN (suggests missing interior edge).
@@ -376,7 +378,7 @@ def repair_cycle(cycle, segSeqD, patch_links, xt, yt, ee_spans):
                     chrj, posj = segSeqD[abs(j)][0], segSeqD[abs(j)][2]
                     if xt[0] == chri and abs(posi - xt[1]) < 1000 and yt[0] == chrj and abs(posj - yt[1]):
                         repCyc = repCyc[1:-1]
-                        logging.info("bridged a gap in cycle: " + str(repCyc))
+                        logger.info("bridged a gap in cycle: " + str(repCyc))
                         return repCyc
 
                 elif i > 0 and j > 0:
@@ -384,7 +386,7 @@ def repair_cycle(cycle, segSeqD, patch_links, xt, yt, ee_spans):
                     chrj, posj = segSeqD[abs(j)][0], segSeqD[abs(j)][1]
                     if xt[0] == chrj and abs(posj - xt[1]) < 1000 and yt[0] == chri and abs(posi - yt[1]):
                         repCyc = repCyc[1:-1]
-                        logging.info("bridged a gap in cycle: " + str(repCyc))
+                        logger.info("bridged a gap in cycle: " + str(repCyc))
                         return repCyc
 
     return repCyc
@@ -425,7 +427,7 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
                             continue
 
                         else:
-                            logging.info("Cycle was LC: {} | overlaps {}:{}-{}".format(line.rstrip(), str(t[0]), str(t[1]), str(t[2])))
+                            logger.info("Cycle was LC: {} | overlaps {}:{}-{}".format(line.rstrip(), str(t[0]), str(t[1]), str(t[2])))
                             lcCycle = True
                             break
 
@@ -441,7 +443,7 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
                 currCycle = rotate_cycle_to_largest_jump(initCycle, segSeqD)
                 uid = ss + "," + cd["Copy_count"]
                 if uid in seenCycs:
-                    logging.info(cyclef + " duplicate cycle encountered")
+                    logger.info(cyclef + " duplicate cycle encountered")
 
                 else:
                     cycleList.append(currCycle)
@@ -536,7 +538,7 @@ def readFlist(filelist):
             if line:
                 fields = line.rsplit("\t")
                 if len(fields) < 2:
-                    logging.warning("Bad formatting in: ", line)
+                    logger.warning("Bad formatting in: ", line)
                 else:
                     flist.append(fields)
 
@@ -602,7 +604,7 @@ def write_patched_graph(gfile, patch_links, outpath):
                     cn_replacements[li] = imputed
                     for pos in (s - 1, s, e, e + 1):
                         patch_boundary_pos[(chrom, pos)] = imputed
-                    logging.info("patching graph {}:{}-{} CN {:.2f} -> {:.2f}".format(
+                    logger.info("patching graph {}:{}-{} CN {:.2f} -> {:.2f}".format(
                         chrom, s, e, cn, imputed))
                     break
 

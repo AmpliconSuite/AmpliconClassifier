@@ -7,20 +7,7 @@ from ampclasslib.ac_util import *
 from ampclasslib.ecDNA_context import *
 
 
-def setup_logger(output_prefix):
-    """Set up logging configuration for the root logger"""
-    log_file = "{}.log".format(output_prefix)
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ]
-    )
-
-    return logging.getLogger()  # Return root logger (optional)
+logger = logging.getLogger(__name__)
 
 # getting genes from the genes .gff file
 # if both add_chr_tag and strip_chr_tag are given, will default to adding the tag
@@ -28,7 +15,7 @@ def parse_genes(gene_file, add_chr_tag=False, strip_chr_tag=False, keep_all=Fals
     t = defaultdict(IntervalTree)
 
     if not os.path.exists(gene_file):
-        logging.warning(f"filename {gene_file} does not exist.")
+        logger.warning(f"filename {gene_file} does not exist.")
         return t
 
     seenNames = set()
@@ -92,7 +79,7 @@ def parse_graph_edges_raw(graphf, add_chr_tag=False):
     """
     Read an AA graph file once and return raw sequence and discordant edges.
 
-    Used to feed the chromoauxesis classifier without re-reading the file.
+    Used to feed the FAN classifier without re-reading the file.
 
     Returns
     -------
@@ -367,7 +354,7 @@ def create_context_table(prefix, sname, ampN, feature_dict, samp_amp_to_graph, a
     for feat_name, curr_fd in feature_dict.items():
         if feat_name.startswith("ecDNA"):
             intervals_fname = bedfile_dir + trim_sname + "_" + ampN + "_" + feat_name + "_intervals.bed"
-            logging.info(trim_sname + "_" + ampN + "_" + feat_name)
+            logger.info(trim_sname + "_" + ampN + "_" + feat_name)
             if not curr_fd:
                 context = "Unknown"
 
@@ -428,10 +415,10 @@ def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, 
             outfile.write(l1 + "\n")
 
 
-def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categories, sampNames, cyclesFiles,
+def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featComplexityD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, samp_to_ec_count, fd_list,
                   samp_amp_to_graph, prop_list, summary_map, bfbarchitect_summaries=None,
-                  chromoauxesis_results=None):
+                  fan_results=None):
 
     # Genes and ncRNA
     gene_extraction_outname = args.o + "_gene_list.tsv"
@@ -440,20 +427,20 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
     ecDNA_count_outname = args.o + "_ecDNA_counts.tsv"
     write_ec_per_sample(ecDNA_count_outname, samp_to_ec_count, summary_map)
 
-    # Feature entropy
+    # Feature complexity
     if args.report_complexity:
-        with open(args.o + "_feature_entropy.tsv", 'w') as outfile:
-            outfile.write("sample\tamplicon\tfeature\ttotal_feature_entropy\tdecomp_entropy\tAmp_nseg_entropy\n")
-            sorted_keys = sorted(featEntropyD.keys())
+        with open(args.o + "_feature_complexity.tsv", 'w') as outfile:
+            outfile.write("sample\tamplicon\tfeature\tfeature_complexity\tdecomp_complexity\tnseg_complexity\n")
+            sorted_keys = sorted(featComplexityD.keys())
             for k in sorted_keys:
-                vt = featEntropyD[k]
+                vt = featComplexityD[k]
                 ol = map(str, k + vt)
                 outfile.write("\t".join(ol) + "\n")
 
     # Amplicon profiles
     with open(args.o + "_amplicon_classification_profiles.tsv", 'w') as outfile:
         oh = ["sample_name", "amplicon_number", "amplicon_decomposition_class", "ecDNA+", "BFB+",
-              "chromoauxesis+", "ecDNA_amplicons"]
+              "FAN+", "ecDNA_amplicons"]
         if args.verbose_classification:
             oh += categories
             if args.bfbarchitect:
@@ -468,8 +455,8 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
             ampClass, ecStat, bfbStat, ecAmpliconCount = AMP_classifications[ind]
             ecOut = "Positive" if ecStat else "None detected"
             bfbOut = "Positive" if bfbStat else "None detected"
-            if chromoauxesis_results and ind < len(chromoauxesis_results):
-                caOut = "Positive" if chromoauxesis_results[ind]["decision"] == "chromoauxesis" else "None detected"
+            if fan_results and ind < len(fan_results):
+                caOut = "Positive" if fan_results[ind]["decision"] == "FAN" else "None detected"
             else:
                 caOut = "NA"
             ov = [sname.rsplit("_amplicon")[0], ampN, ampClass, ecOut, bfbOut, caOut, str(ecAmpliconCount)]
@@ -495,17 +482,17 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
 
             outfile.write("\t".join(ov) + "\n")
 
-    # Chromoauxesis calls TSV
+    # FAN calls TSV
     _ca_feat_cols = ["amplified_span_mb", "sv_qualifying_inter_or_large", "chrom_dominant_frac",
                      "sv_crossing_frac", "amplified_cn40_span_mb"]
-    with open(args.o + "_chromoauxesis_calls.tsv", 'w') as cafile:
-        cafile.write("\t".join(["sample_name", "amplicon_number", "chromoauxesis_call",
-                                "chromoauxesis_probability"] + _ca_feat_cols) + "\n")
+    with open(args.o + "_fan_calls.tsv", 'w') as cafile:
+        cafile.write("\t".join(["sample_name", "amplicon_number", "fan_call",
+                                "fan_probability"] + _ca_feat_cols) + "\n")
         for ind, sname in enumerate(sampNames):
             ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
-            if chromoauxesis_results and ind < len(chromoauxesis_results):
-                ca = chromoauxesis_results[ind]
-                caCall = "Positive" if ca["decision"] == "chromoauxesis" else "None detected"
+            if fan_results and ind < len(fan_results):
+                ca = fan_results[ind]
+                caCall = "Positive" if ca["decision"] == "FAN" else "None detected"
                 caProb = "{:.4f}".format(ca["probability"])
                 feat_vals = [str(ca["features"].get(f, "NA")) for f in _ca_feat_cols]
             else:
@@ -536,31 +523,31 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featEntropyD, categorie
     f2gf.close()
 
     # Check if there are any feature types first
-    logging.info("Feature Type Counts:")
+    logger.info("Feature Type Counts:")
     if feat_type_counts:
         # Get max length of feature type names for nice alignment
         max_name_length = max(len(feat_type) for feat_type in feat_type_counts.keys())
 
         # Log header
-        logging.info("-" * (max_name_length + 10))  # Line separator
+        logger.info("-" * (max_name_length + 10))  # Line separator
 
         # Log each count with aligned formatting
         for feat_type, count in sorted(feat_type_counts.items()):
             if feat_type == "unknown":
                 continue
-            logging.info("{:<{width}} : {:>5}".format(feat_type, count, width=max_name_length))
+            logger.info("{:<{width}} : {:>5}".format(feat_type, count, width=max_name_length))
 
-        logging.info("-" * (max_name_length + 10))  # Line separator
+        logger.info("-" * (max_name_length + 10))  # Line separator
     else:
         # Handle empty feature case
-        logging.info("-" * 20)  # Default line separator
-        logging.info("No focal amp features identified")
-        logging.info("-" * 20)  # Default line separator
+        logger.info("-" * 20)  # Default line separator
+        logger.info("No focal amp features identified")
+        logger.info("-" * 20)  # Default line separator
 
     # report ecDNA context
     context_filename = args.o + "_ecDNA_context_calls.tsv"
     contexts = []
-    logging.info("Calling ecDNA context...")
+    logger.info("Calling ecDNA context...")
     for ind, (sname, feature_dict) in enumerate(zip(sampNames, fd_list)):
         ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
         curr_contexts = create_context_table(args.o, sname, ampN, feature_dict, samp_amp_to_graph, add_chr_tag=args.add_chr_tag)
@@ -586,7 +573,7 @@ def write_classification_results(args, classification_results, categories, summa
         classification_results.ftgd_list,
         classification_results.ftci_list,
         classification_results.bpgi_list,
-        classification_results.featEntropyD,
+        classification_results.featComplexityD,
         categories,
         classification_results.sampNames,
         classification_results.cyclesFiles,
@@ -598,5 +585,5 @@ def write_classification_results(args, classification_results, categories, summa
         classification_results.prop_list,
         summary_map,
         classification_results.bfbarchitect_summaries,
-        classification_results.chromoauxesis_results,
+        classification_results.fan_results,
     )

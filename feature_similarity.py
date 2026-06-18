@@ -4,6 +4,8 @@ __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 
 from ampclasslib.amplicon_similarity import *
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
+from multiprocessing import get_context
+import itertools
 
 cn_cut = 4.5
 FEATURE_SIMILARITY_WORKER_CONTEXT = None
@@ -69,51 +71,88 @@ def _compute_feature_pair_similarity_chunk(pair_chunk):
     return outdata
 
 
-def _pair_chunks(pairs, chunk_size):
-    for start in range(0, len(pairs), chunk_size):
-        yield pairs[start:start + chunk_size]
+def _run_similarity_pool(chunk_iter, worker_count, initargs, sorter):
+    """Drive the worker pool from a streaming chunk iterator, feeding results to
+    the spill sorter. Keeps at most worker_count*2 chunks in flight. Returns the
+    number of candidate pairs processed."""
+    pair_count = 0
+    max_pending = max(1, worker_count * 2)
+    with ProcessPoolExecutor(
+        max_workers=worker_count,
+        mp_context=get_context("spawn"),
+        initializer=_init_feature_similarity_worker,
+        initargs=initargs,
+    ) as executor:
+        pending = set()
+
+        def submit_next():
+            chunk = next(chunk_iter, None)
+            if chunk is None:
+                return 0
+            pending.add(executor.submit(_compute_feature_pair_similarity_chunk, chunk))
+            return len(chunk)
+
+        for _ in range(max_pending):
+            n = submit_next()
+            if not n:
+                break
+            pair_count += n
+
+        while pending:
+            completed, pending = wait(pending, return_when=FIRST_COMPLETED)
+            for future in completed:
+                sorter.extend(future.result())
+            for _ in completed:
+                pair_count += submit_next()
+
+    return pair_count
 
 
 def compute_pairwise_feature_similarity(feat_to_graph, feat_to_bed, pairs, add_chr_tag=False, lcD=None, cg5D=None,
-                                        cn_cut_value=0, min_de_value=0, threads=1):
+                                        cn_cut_value=0, min_de_value=0, threads=1, tmpdir=None):
     if lcD is None:
         lcD = defaultdict(IntervalTree)
 
     worker_count = max(1, int(threads or 1))
-    outdata = []
-    if worker_count == 1 or len(pairs) <= 1:
-        _init_feature_similarity_worker(feat_to_graph, feat_to_bed, add_chr_tag, lcD, cg5D, cn_cut_value,
-                                        min_de_value)
-        for pair in pairs:
-            outdata.extend(_compute_feature_pair_similarity(pair))
+    initargs = (feat_to_graph, feat_to_bed, add_chr_tag, lcD, cg5D, cn_cut_value, min_de_value)
+    sorter = SpillSorter(similarity_sort_key, reverse=True, threshold=SIMILARITY_SPILL_THRESHOLD, tmpdir=tmpdir)
+
+    # Decide serial vs. pooled execution without materializing all pairs. For
+    # sub-threshold inputs we buffer the (small) pair list so the original
+    # adaptive chunk sizing is preserved; above it we stream the rest with a
+    # fixed chunk size (which is what the adaptive formula converges to anyway).
+    serial_pairs = None
+    chunk_iter = None
+    effective_workers = worker_count
+    if worker_count == 1:
+        serial_pairs = pairs
     else:
-        worker_count = min(worker_count, len(pairs))
-        chunk_size = max(1, min(FEATURE_SIMILARITY_CHUNK_SIZE, len(pairs) // (worker_count * 20) or 1))
-        max_pending = worker_count * 2
-        with ProcessPoolExecutor(
-            max_workers=worker_count,
-            initializer=_init_feature_similarity_worker,
-            initargs=(feat_to_graph, feat_to_bed, add_chr_tag, lcD, cg5D, cn_cut_value, min_de_value)
-        ) as executor:
-            chunk_iter = _pair_chunks(pairs, chunk_size)
-            pending = set()
-            for _ in range(max_pending):
-                try:
-                    pending.add(executor.submit(_compute_feature_pair_similarity_chunk, next(chunk_iter)))
-                except StopIteration:
-                    break
+        pair_iter = iter(pairs)
+        buffer_cap = worker_count * 20 * FEATURE_SIMILARITY_CHUNK_SIZE
+        buffer = list(itertools.islice(pair_iter, buffer_cap + 1))
+        if len(buffer) <= buffer_cap:
+            if len(buffer) <= 1:
+                serial_pairs = buffer
+            else:
+                effective_workers = min(worker_count, len(buffer))
+                chunk_size = max(1, min(FEATURE_SIMILARITY_CHUNK_SIZE,
+                                        len(buffer) // (effective_workers * 20) or 1))
+                chunk_iter = iter_chunks(buffer, chunk_size)
+        else:
+            chunk_iter = iter_chunks(itertools.chain(buffer, pair_iter), FEATURE_SIMILARITY_CHUNK_SIZE)
 
-            while pending:
-                completed, pending = wait(pending, return_when=FIRST_COMPLETED)
-                for future in completed:
-                    outdata.extend(future.result())
-                    try:
-                        pending.add(executor.submit(_compute_feature_pair_similarity_chunk, next(chunk_iter)))
-                    except StopIteration:
-                        pass
+    if chunk_iter is not None:
+        logger.info("Computing feature similarity with {} worker processes.".format(effective_workers))
+        pair_count = _run_similarity_pool(chunk_iter, effective_workers, initargs, sorter)
+    else:
+        _init_feature_similarity_worker(*initargs)
+        pair_count = 0
+        for pair in serial_pairs:
+            pair_count += 1
+            sorter.extend(_compute_feature_pair_similarity(pair))
 
-    outdata.sort(key=lambda x: (x[2], x[1], x[0]), reverse=True)
-    return outdata
+    logger.info("Computed feature similarity over {} candidate pairs.".format(pair_count))
+    return sorter.sorted_iter()
 
 
 if __name__ == "__main__":
@@ -141,6 +180,8 @@ if __name__ == "__main__":
                         type=int, default=1)
 
     args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     if args.threads < 1:
         sys.stderr.write("--threads must be >= 1\n")
@@ -211,11 +252,8 @@ if __name__ == "__main__":
 
     print("Total of " + str(total_feats) + " features.")
 
-    # get pairs
+    # get pairs (streamed lazily to avoid materializing the full O(N^2) list)
     pairs = get_pairs(feat_to_bed)
-    print("Total of " + str(len(pairs)) + " pairs of features to compare.")
-    if args.threads > 1 and len(pairs) > 1:
-        print("Computing feature similarity with " + str(min(args.threads, len(pairs))) + " worker processes.")
 
     with open(args.o + "_feature_similarity_scores.tsv", 'w') as outfile:
         outfile.write("Amp1\tAmp2\tSimilarityScore\tSimScorePercentile\tSimScorePvalue\tAsymmetricScore1\t"

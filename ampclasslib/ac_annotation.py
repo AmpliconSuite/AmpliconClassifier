@@ -3,6 +3,8 @@ import logging
 from ampclasslib.ac_util import *
 from ampclasslib.ac_io import parse_bpg
 
+logger = logging.getLogger(__name__)
+
 
 # write a summary of the breakpoints
 def summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD):
@@ -171,7 +173,7 @@ def amplicon_len_and_cn(feature_dict, gseg_cn_d):
 
 
 def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, invalidInds, bfbStat, ecStat, ampClass,
-                        graphf, add_chr_tag, lcD, ref, chromoauxesis_intervals=None, bfb_features=None):
+                        graphf, add_chr_tag, lcD, ref, fan_intervals=None, bfb_features=None):
     feature_dict = {}
     gseg_cn_d = get_gseg_cns(graphf, add_chr_tag)
     invalidSet = set(invalidInds)
@@ -331,9 +333,9 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
             else:
                 if other_interval_dict and ampClass in {"Linear", "Complex-non-cyclic", "Virus"}:
                     feature_dict[ampClass + "_1"] = other_interval_dict
-                elif other_interval_dict and ampClass == "Cyclic" and not chromoauxesis_intervals:
-                    logging.warning(
-                        "Amplicon classified as Cyclic but no ecDNA, BFB, chromoauxesis, or Virus mechanism "
+                elif other_interval_dict and ampClass == "Cyclic" and not fan_intervals:
+                    logger.warning(
+                        "Amplicon classified as Cyclic but no ecDNA, BFB, FAN, or Virus mechanism "
                         "was detected. Marking as Invalid instead of reporting a Cyclic feature."
                     )
                     ampClass = "Invalid"
@@ -344,11 +346,11 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
         else:
             feature_dict["unknown_1"] = other_interval_dict
 
-    if chromoauxesis_intervals:
+    if fan_intervals:
         ca_interval_dict = defaultdict(list)
-        for chrom, ilist in chromoauxesis_intervals.items():
+        for chrom, ilist in fan_intervals.items():
             ca_interval_dict[chrom].extend(ilist)
-        feature_dict["chromoauxesis_1"] = ca_interval_dict
+        feature_dict["FAN_1"] = ca_interval_dict
 
     merge_intervals(feature_dict)
     bpg_linelist = summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD)

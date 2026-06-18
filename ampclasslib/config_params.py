@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import logging
 import os
 
 try:
@@ -44,8 +45,8 @@ DEFAULT_CONFIG = {
     "bfbarchitect_whole_graph_max_large_chrom_count": 3,  # skip whole-graph fallback when this many chromosomes have large spans
     "bfbarchitect_whole_graph_min_large_chrom_bp": 250000,  # min chromosome contribution counted by the multichromosomal skip
 
-    # chromoauxesis-related items
-    "chromoauxesis_ecDNA_min_cn": 60,  # minimum graph CN required for all segments in an ecDNA cycle when chromoauxesis is detected
+    # FAN (Focal amplification in neochromosome) related items
+    "fan_ecDNA_min_cn": 60,  # minimum graph CN required for all segments in an ecDNA cycle when FAN is detected
 
     # TID-related items
     "tid_cn_ratio_max": 2.5,             # maximum inner/background CN ratio for TID (C3)
@@ -97,7 +98,7 @@ def create_default_config_file():
         with open(config_path, 'w') as f:
             json.dump(DEFAULT_CONFIG, f, indent=4)
 
-        print("Updated default config file")
+        logging.info("Updated default config file")
 
     return config_path
 

@@ -36,8 +36,8 @@ class AmpliconRecord:
     classification: tuple
     dvalues: list
     bfbarchitect_summary: dict
-    chromoauxesis_result: dict
-    feature_entropy: dict = field(default_factory=dict)
+    fan_result: dict
+    feature_complexity: dict = field(default_factory=dict)
     ec_count: int = 0
     samp_amp_to_graph: dict = field(default_factory=dict)
     feature_registry: dict = field(default_factory=dict)
@@ -67,10 +67,10 @@ class ClassificationResults:
     AMP_dvaluesList: list = field(default_factory=list)
     AMP_classifications: list = field(default_factory=list)
     bfbarchitect_summaries: list = field(default_factory=list)
-    chromoauxesis_results: list = field(default_factory=list)
+    fan_results: list = field(default_factory=list)
     sampNames: list = field(default_factory=list)
     cyclesFiles: list = field(default_factory=list)
-    featEntropyD: dict = field(default_factory=dict)
+    featComplexityD: dict = field(default_factory=dict)
     samp_to_ec_count: dict = field(default_factory=lambda: defaultdict(int))
     samp_amp_to_graph: dict = field(default_factory=dict)
     full_featname_to_graph: dict = field(default_factory=dict)
@@ -89,10 +89,10 @@ def collect_amplicon_records(records):
         results.AMP_dvaluesList.append(record.dvalues)
         results.AMP_classifications.append(record.classification)
         results.bfbarchitect_summaries.append(record.bfbarchitect_summary)
-        results.chromoauxesis_results.append(record.chromoauxesis_result)
+        results.fan_results.append(record.fan_result)
         results.sampNames.append(record.sample_name)
         results.cyclesFiles.append(record.cycles_file)
-        results.featEntropyD.update(record.feature_entropy)
+        results.featComplexityD.update(record.feature_complexity)
         results.samp_to_ec_count[record.sample_name] += record.ec_count
         results.samp_amp_to_graph.update(record.samp_amp_to_graph)
         results.full_featname_to_graph.update(record.full_featname_to_graph)

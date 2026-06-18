@@ -13,7 +13,7 @@ NON_FEATURE_CLASSES = {"No amp/Invalid", "No-FSCNA", "Invalid"}
 FALLBACK_FEATURE_CLASSES = {"Linear", "Complex-non-cyclic"}
 MECHANISM_DECOMPOSITION_CLASSES = {"Virus"}
 OUTPUT_HEAD = ["Sample name", "AA amplicon number", "Feature ID", "Classification",
-               "Chromoauxesis probability", "Location", "Oncogenes", "All genes", "NCBI Gene IDs",
+               "FAN probability", "Location", "Oncogenes", "All genes", "NCBI Gene IDs",
                "Complexity score", "ecDNA context", "Captured interval length", "Feature median copy number",
                "Feature maximum copy number", "Filter flag", "Reference version", "Tissue of origin",
                "Sample type", "Feature BED file", "CNV BED file", "AS-p version", "AA version", "AC version",
@@ -95,15 +95,15 @@ def read_amplicon_gene_list(gene_file):
     return amplicon_gene_dict
 
 
-def read_complexity_scores(entropy_file):
+def read_complexity_scores(complexity_file):
     amplicon_complexity_dict = defaultdict(lambda: "NA")
-    with open(entropy_file) as infile:
+    with open(complexity_file) as infile:
         h = next(infile).rstrip().rsplit("\t")
         for line in infile:
             fields = line.rstrip().rsplit("\t")
-            # fd = dict(zip(h, fields))
+            fd = dict(zip(h, fields))
             featureID = "_".join(fields[:3])
-            amplicon_complexity_dict[featureID] = fields[4]
+            amplicon_complexity_dict[featureID] = fd["feature_complexity"]
 
     return amplicon_complexity_dict
 
@@ -135,26 +135,26 @@ def read_basic_stats(basic_stats_file):
     return basic_stats_dict
 
 
-def read_chromoauxesis_calls(chromoauxesis_file):
-    chromoauxesis_dict = defaultdict(lambda: {"call": "NA", "probability": "NA"})
-    if not os.path.exists(chromoauxesis_file):
-        return chromoauxesis_dict
+def read_fan_calls(fan_file):
+    fan_dict = defaultdict(lambda: {"call": "NA", "probability": "NA"})
+    if not os.path.exists(fan_file):
+        return fan_dict
 
-    with open(chromoauxesis_file) as infile:
+    with open(fan_file) as infile:
         try:
             h = next(infile).rstrip().rsplit("\t")
         except StopIteration:
-            return chromoauxesis_dict
+            return fan_dict
         for line in infile:
             fields = line.rstrip().rsplit("\t")
             fd = dict(zip(h, fields))
             amplicon_id = "_".join([fd["sample_name"], fd["amplicon_number"]])
-            chromoauxesis_dict[amplicon_id] = {
-                "call": fd.get("chromoauxesis_call", "NA"),
-                "probability": fd.get("chromoauxesis_probability", "NA"),
+            fan_dict[amplicon_id] = {
+                "call": fd.get("fan_call", "NA"),
+                "probability": fd.get("fan_probability", "NA"),
             }
 
-    return chromoauxesis_dict
+    return fan_dict
 
 
 def read_summary_list(summ_map_file):
@@ -249,9 +249,9 @@ def discover_feature_specs(classD, amplicon_id, class_bed_dir):
         feature_id = "_".join([amplicon_id, "BFB", "1"])
         feature_specs.append((feature_id, "BFB", os.path.join(class_bed_dir, feature_id + "_intervals.bed")))
 
-    if classD.get("chromoauxesis+", "None detected") == "Positive":
-        feature_id = "_".join([amplicon_id, "chromoauxesis", "1"])
-        feature_specs.append((feature_id, "chromoauxesis", os.path.join(class_bed_dir, feature_id + "_intervals.bed")))
+    if classD.get("FAN+", "None detected") == "Positive":
+        feature_id = "_".join([amplicon_id, "FAN", "1"])
+        feature_specs.append((feature_id, "FAN", os.path.join(class_bed_dir, feature_id + "_intervals.bed")))
 
     feature = classD["amplicon_decomposition_class"]
     if feature in MECHANISM_DECOMPOSITION_CLASSES:
@@ -262,7 +262,7 @@ def discover_feature_specs(classD, amplicon_id, class_bed_dir):
         feature_specs.append((feature_id, feature, os.path.join(class_bed_dir, feature_id + "_intervals.bed")))
     elif not feature_specs and feature == "Cyclic":
         logging.warning(
-            "Amplicon %s has decomposition class Cyclic but no ecDNA, BFB, chromoauxesis, or Virus mechanism; "
+            "Amplicon %s has decomposition class Cyclic but no ecDNA, BFB, FAN, or Virus mechanism; "
             "not reporting a Cyclic feature row.",
             amplicon_id,
         )
@@ -282,7 +282,7 @@ def build_feature_row(sample_name, amplicon_number, feature_id, feature, feature
         "AA amplicon number": amplicon_number,
         "Feature ID": feature_id,
         "Classification": feature,
-        "Chromoauxesis probability": chromo_prob,
+        "FAN probability": chromo_prob,
         "Location": intervals,
         "Oncogenes": str([g[0] for g in sorted_glist if g[2]]),
         "All genes": str([g[0] for g in sorted_glist]),
@@ -319,7 +319,7 @@ def build_no_feature_row(sample_name, sumf, sample_metadata, run_metadata, cnv_b
         "AA amplicon number": "NA",
         "Feature ID": feature_id,
         "Classification": "NA",
-        "Chromoauxesis probability": "NA",
+        "FAN probability": "NA",
         "Location": "[]",
         "Oncogenes": "[]",
         "All genes": "[]",
@@ -434,15 +434,15 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
     with open(classification_file) as classification_file_handle:
         classBedDir = classBase + "_classification_bed_files/"
         gene_file = classBase + "_gene_list.tsv"
-        entropy_file = classBase + "_feature_entropy.tsv"
+        complexity_file = classBase + "_feature_complexity.tsv"
         basic_stats_file = classBase + "_feature_basic_properties.tsv"
         context_file = classBase + "_ecDNA_context_calls.tsv"
-        chromoauxesis_file = classBase + "_chromoauxesis_calls.tsv"
+        fan_file = classBase + "_fan_calls.tsv"
         amplicon_gene_dict = read_amplicon_gene_list(gene_file)
-        amplicon_complexity_dict = read_complexity_scores(entropy_file)
+        amplicon_complexity_dict = read_complexity_scores(complexity_file)
         basic_stats_dict = read_basic_stats(basic_stats_file)
         context_dict = read_context(context_file)
-        chromoauxesis_dict = read_chromoauxesis_calls(chromoauxesis_file)
+        fan_dict = read_fan_calls(fan_file)
 
         if sample_metadata_file:
             init_sample_metadata = json.load(open(sample_metadata_file, 'r'))
@@ -525,7 +525,7 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
             feature_specs = discover_feature_specs(classD, ampliconID, classBedDir)
             if feature_specs:
                 sumf_used.add((sample_name, cfile_dir))
-            chromo_prob = chromoauxesis_dict[ampliconID]["probability"]
+            chromo_prob = fan_dict[ampliconID]["probability"]
             for featureID, feature, featureBed in feature_specs:
                 result_rows.append(build_feature_row(
                     sample_name, AA_amplicon_number, featureID, feature, featureBed, chromo_prob,

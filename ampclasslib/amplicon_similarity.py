@@ -5,14 +5,21 @@ __author__ = "Jens Luebeck (jluebeck [at] ucsd.edu)"
 import argparse
 import bisect
 from collections import defaultdict
+import heapq
+import itertools
+import logging
 import os
+import pickle
 import sys
+import tempfile
 
 from intervaltree import IntervalTree
 from scipy.stats import beta
 
 from ampclasslib.ac_io import parse_bpg, bed_to_interval_dict
 from ampclasslib.ac_util import set_lcd
+
+logger = logging.getLogger(__name__)
 
 add_chr_tag = False
 bpweight = 0.75
@@ -22,6 +29,8 @@ min_de = 1
 min_de_size = 2500
 # negative log likelihood model fit similarity score model parameters from null distribution
 alpha0, beta0 = 1.0394200524867749, 7.018186407386179
+# number of result rows held in memory before the sorter spills a sorted run to disk
+SIMILARITY_SPILL_THRESHOLD = 200000
 '''
 input:
 tab-separated file listing for each amplicon/sample 
@@ -142,25 +151,120 @@ def score_to_percentile(s, background_scores):
     return pval
 
 
-def get_pairs(s2a_graph, required_amplicon_ID=None):
-    pairs = []
-    graph_data = []
+def iter_chunks(iterable, chunk_size):
+    """Yield successive lists of up to chunk_size items from any iterable.
 
+    Works on generators (unlike slicing), so callers can stream pairs without
+    materializing the full O(N^2) list.
+    """
+    it = iter(iterable)
+    while True:
+        chunk = list(itertools.islice(it, chunk_size))
+        if not chunk:
+            return
+        yield chunk
+
+
+def similarity_sort_key(row):
+    # rows are [Amp1, Amp2, SimilarityScore, ...]; sort by score, then Amp2, then Amp1
+    return (row[2], row[1], row[0])
+
+
+def _iter_pickles(handle):
+    while True:
+        try:
+            yield pickle.load(handle)
+        except EOFError:
+            return
+
+
+class SpillSorter:
+    """Accumulate result rows and emit them globally sorted with bounded memory.
+
+    Rows are buffered in memory; once the buffer exceeds `threshold` rows it is
+    sorted and spilled to a temp file ("run"). On iteration the runs are k-way
+    merged. If the total stays under the threshold, no temp files are created and
+    behavior is identical to an in-memory sort. Exposes append/extend so it is a
+    drop-in for the list previously accumulated by compute_similarity().
+    """
+
+    def __init__(self, key, reverse=False, threshold=SIMILARITY_SPILL_THRESHOLD, tmpdir=None):
+        self.key = key
+        self.reverse = reverse
+        self.threshold = max(1, threshold)
+        self._buf = []
+        self._runs = []
+        self._tmpdir = None
+        self._base_tmpdir = tmpdir
+
+    def add(self, row):
+        self._buf.append(row)
+        if len(self._buf) >= self.threshold:
+            self._spill()
+
+    def append(self, row):
+        self.add(row)
+
+    def extend(self, rows):
+        for row in rows:
+            self.add(row)
+
+    def _spill(self):
+        if not self._buf:
+            return
+        if self._tmpdir is None:
+            self._tmpdir = tempfile.mkdtemp(prefix="ac_simsort_", dir=self._base_tmpdir)
+        self._buf.sort(key=self.key, reverse=self.reverse)
+        fd, path = tempfile.mkstemp(dir=self._tmpdir, suffix=".run")
+        with os.fdopen(fd, "wb") as runfile:
+            for row in self._buf:
+                pickle.dump(row, runfile)
+        self._runs.append(path)
+        self._buf = []
+
+    def sorted_iter(self):
+        if not self._runs:
+            self._buf.sort(key=self.key, reverse=self.reverse)
+            for row in self._buf:
+                yield row
+            self._buf = []
+            return
+
+        self._spill()
+        run_handles = [open(p, "rb") for p in self._runs]
+        try:
+            for row in heapq.merge(*[_iter_pickles(h) for h in run_handles],
+                                   key=self.key, reverse=self.reverse):
+                yield row
+        finally:
+            for h in run_handles:
+                h.close()
+            for p in self._runs:
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+            if self._tmpdir:
+                try:
+                    os.rmdir(self._tmpdir)
+                except OSError:
+                    pass
+            self._runs = []
+            self._tmpdir = None
+
+
+def get_pairs(s2a_graph, required_amplicon_ID=None):
     dat = list(s2a_graph.items())
+    seg_trees = [gpair[1] for _, gpair in dat]
     for i1 in range(len(dat)):
-        s1, gpair1 = dat[i1]
-        _, segTree = gpair1
-        graph_data.append(segTree)
+        s1 = dat[i1][0]
         for i2 in range(i1):
-            s2, _ = dat[i2]
+            s2 = dat[i2][0]
             if required_amplicon_ID and (not s1.endswith(required_amplicon_ID) and not s2.endswith(required_amplicon_ID)):
                 continue
 
-            if amps_overlap(graph_data[i1], graph_data[i2]):
-                pairs.append((s1, s2))
-
-    print(str(len(pairs)) + " overlapping pairs found.")
-    return pairs
+            if amps_overlap(seg_trees[i1], seg_trees[i2]):
+                yield (s1, s2)
 
 
 def readFlist(filelist, region_subset_ivald, lcD, cg5D, cn_cut=0, fullname=False, required_classes=None, a2class=None):
@@ -331,8 +435,7 @@ if __name__ == "__main__":
                       "AsymmetricScore2\tGenomicSegmentScore1\tGenomicSegmentScore2\tBreakpointScore1\t"
                       "BreakpointScore2\tJaccardGenomicSegment\tJaccardBreakpoint\tNumSharedBPs\tAmp1NumBPs\t"
                       "Amp2NumBPs\tAmpOverlapLen\tAmp1AmpLen\tAmp2AmpLen\n")
-        outdata = []
-        compute_similarity(s2a_graph, pairs, outdata)
-        outdata.sort(key=lambda x: (x[2], x[1], x[0]), reverse=True)
-        for l in outdata:
+        sorter = SpillSorter(similarity_sort_key, reverse=True, threshold=SIMILARITY_SPILL_THRESHOLD)
+        compute_similarity(s2a_graph, pairs, sorter)
+        for l in sorter.sorted_iter():
             outfile.write("\t".join([str(x) for x in l]) + "\n")

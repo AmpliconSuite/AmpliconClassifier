@@ -28,7 +28,7 @@
     "bfbarchitect_whole_graph_min_foldback_fraction": 0.1,
     "bfbarchitect_whole_graph_max_large_chrom_count": 3,
     "bfbarchitect_whole_graph_min_large_chrom_bp": 250000,
-    "chromoauxesis_ecDNA_min_cn": 60,
+    "fan_ecDNA_min_cn": 60,
     "tid_cn_ratio_max": 2.5,
     "tid_cn_ratio_max_tight_fb": 4.0,
     "tid_tight_fb_size": 50000,

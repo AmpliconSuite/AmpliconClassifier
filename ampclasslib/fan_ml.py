@@ -1,5 +1,5 @@
 """
-chromoauxesis_ml — ML classifier for chromoauxesis detection.
+fan_ml — ML classifier for FAN (Focal amplification in neochromosome) detection.
 
 Model: model_3_5_rank05_20260514_142539 (L2 logistic regression, 5 features)
 Balanced accuracy: 0.961 (TCGA CV, grouped by patient), PR-AUC: 0.988
@@ -12,7 +12,7 @@ Public API
     # standalone / CLI — reads the file internally:
     result = classify_graph(graph_path)
 
-    # result: {"decision": "chromoauxesis" | "not_chromoauxesis",
+    # result: {"decision": "FAN" | "not_FAN",
     #          "probability": float, "features": dict}
 
 seq_edges format: list of dicts with keys chrom, start, end, cn, size_bp
@@ -201,7 +201,7 @@ def extract_features_from_edges(seq_edges: list, sv_edges: list,
 # ── Scoring ───────────────────────────────────────────────────────────────────
 
 def _score(feats: dict) -> float:
-    """Apply preprocessing pipeline and return P(chromoauxesis)."""
+    """Apply preprocessing pipeline and return P(FAN)."""
     row = []
     for i, name in enumerate(_FEATURE_NAMES):
         val = feats.get(name, float("nan"))
@@ -228,7 +228,7 @@ def classify_from_edges(seq_edges: list, sv_edges: list,
     """
     feats = extract_features_from_edges(seq_edges, sv_edges, cn_floor)
     prob  = _score(feats)
-    label = "chromoauxesis" if prob >= _THRESHOLD else "not_chromoauxesis"
+    label = "FAN" if prob >= _THRESHOLD else "not_FAN"
     return {"decision": label, "probability": round(prob, 4), "features": feats}
 
 
@@ -247,7 +247,7 @@ def classify_graph(graph_path: str, cn_floor: float = 4.0) -> dict:
 def _main() -> None:
     import argparse
     parser = argparse.ArgumentParser(
-        description="Classify an AA graph file as chromoauxesis or not_chromoauxesis."
+        description="Classify an AA graph file as FAN (Focal amplification in neochromosome) or not_FAN."
     )
     parser.add_argument("graph", metavar="GRAPH_TXT",
                         help="Path to *_amplicon*_graph.txt")

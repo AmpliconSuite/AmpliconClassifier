@@ -18,8 +18,8 @@ def make_record(sample_name, amplicon_number, ec_count=0):
         classification=("Cyclic", ec_count > 0, False, ec_count),
         dvalues=[float(ec_count)],
         bfbarchitect_summary={"min_score": "NA"},
-        chromoauxesis_result={"decision": "not_chromoauxesis", "probability": 0.0, "features": {}},
-        feature_entropy={(sample_name, amplicon_number, "ecDNA_1"): (1.0, 2.0, 3.0)},
+        fan_result={"decision": "not_FAN", "probability": 0.0, "features": {}},
+        feature_complexity={(sample_name, amplicon_number, "ecDNA_1"): (1.0, 2.0, 3.0)},
         ec_count=ec_count,
         samp_amp_to_graph={"{}_{}".format(sample_name, amplicon_number): "{}_{}_graph.txt".format(sample_name, amplicon_number)},
         feature_registry={feature_id: {"sample_name": sample_name, "amplicon_number": amplicon_number}},
@@ -42,7 +42,7 @@ class ClassificationRecordsTests(unittest.TestCase):
         self.assertEqual(results.cyclesFiles, ["sampleA_amplicon1_cycles.txt", "sampleA_amplicon2_cycles.txt"])
         self.assertEqual(results.AMP_classifications, [records[0].classification, records[1].classification])
         self.assertEqual(results.samp_to_ec_count["sampleA"], 3)
-        self.assertIn(("sampleA", "amplicon1", "ecDNA_1"), results.featEntropyD)
+        self.assertIn(("sampleA", "amplicon1", "ecDNA_1"), results.featComplexityD)
         self.assertIn("sampleA_amplicon2_ecDNA_1", results.feature_registry)
         self.assertEqual(
             results.samp_amp_to_graph["sampleA_amplicon1"],
