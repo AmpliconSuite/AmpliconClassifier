@@ -31,6 +31,7 @@ class ConfigVars:
         fb_dist_cut = 50000
         min_flow = 1.0
         max_foldback_edges_qc = 100
+        min_bp_per_foldback = 50000
         max_nonbfb_break_weight = 0.5
         min_bfb_cycle_weight_ratio = 0.6
         bfbarchitect_max_score = 2.8

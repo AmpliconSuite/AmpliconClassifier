@@ -245,8 +245,10 @@ def decompositionComplexity(graphf, cycleList, cycleCNs, segSeqD, feature_inds, 
 def compute_f_from_AA_graph(graphf, lcD):
     h = "SequenceEdge: StartPosition, EndPosition, PredictedCopyCount, AverageCoverage, Size, NumberReadsMapped".rsplit()
     h = [x.rstrip(',') for x in h]
+    fb_candidates = []  # (chrom, lo, hi, reads) — resolved for nesting after collection
+    nonFbCount, maxCN, tot_over_min_cn, total_seq_len = 0, 0, 0, 0
+
     with open(graphf) as infile:
-        fb_readcount, nonFbCount, fbEdges, maxCN, tot_over_min_cn = 0, 0, 0, 0, 0
         for line in infile:
             fields = line.rstrip().rsplit()
             if line.startswith("SequenceEdge:"):
@@ -272,9 +274,8 @@ def compute_f_from_AA_graph(graphf, lcD):
                 rSupp = int(fields[3])
                 if ldir == rdir:
                     if lchrom == rchrom and abs(rpos - lpos) < ConfigVars.fb_dist_cut:
-                        fb_readcount += rSupp
-                        fbEdges += 1
-
+                        lo, hi = min(lpos, rpos), max(lpos, rpos)
+                        fb_candidates.append((lchrom, lo, hi, rSupp))
                     else:
                         nonFbCount += rSupp
 
@@ -282,6 +283,7 @@ def compute_f_from_AA_graph(graphf, lcD):
                     nonFbCount += rSupp
 
             elif line.startswith("sequence"):
+                total_seq_len += int(fields[5])
                 if not lcD[fields[1].rsplit(":")[0]].overlaps(int(fields[1].rsplit(":")[1][:-1]),
                                                               int(fields[2].rsplit(":")[1][:-1])):
                     ccn = float(fields[3])
@@ -293,11 +295,28 @@ def compute_f_from_AA_graph(graphf, lcD):
                         if ccn > ConfigVars.min_amp_cn:
                             tot_over_min_cn += seglen
 
+    # Filter nested foldbacks: if a foldback's span [lo, hi] is completely
+    # contained within another foldback's span on the same chromosome, it does
+    # not represent an independent inversion event. Move its reads to the
+    # denominator so the total read count is preserved for normalisation.
+    fb_readcount, fbEdges = 0, 0
+    for i, (ci, lo_i, hi_i, reads_i) in enumerate(fb_candidates):
+        is_nested = any(
+            ci == cj and lo_j <= lo_i and hi_i <= hi_j
+            for j, (cj, lo_j, hi_j, _) in enumerate(fb_candidates)
+            if j != i
+        )
+        if is_nested:
+            nonFbCount += reads_i
+        else:
+            fb_readcount += reads_i
+            fbEdges += 1
+
     # just return 0 if there isn't enough support
     if fbEdges < 1:
-        return 0, 0, 0, maxCN, tot_over_min_cn
+        return 0, 0, 0, maxCN, tot_over_min_cn, total_seq_len
 
-    return fbEdges, fb_readcount, fb_readcount / max(1.0, float(fb_readcount + nonFbCount)), maxCN, tot_over_min_cn
+    return fbEdges, fb_readcount, fb_readcount / max(1.0, float(fb_readcount + nonFbCount)), maxCN, tot_over_min_cn, total_seq_len
 
 
 def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs, graph_cns):
@@ -741,6 +760,13 @@ def is_foldback_qc_artifact(fb_edges, fb_read_prop):
     )
 
 
+def is_dense_foldback_artifact(fb_edges, total_seq_len):
+    # More than 2 foldback edges with density exceeding 1 per min_bp_per_foldback bp
+    # indicates artifactual inversions rather than a true BFB structure.
+    return (fb_edges > 2 and total_seq_len > 0 and
+            fb_edges * ConfigVars.min_bp_per_foldback > total_seq_len)
+
+
 def empty_bfbarchitect_summary():
     return {
         "min_score": "NA",
@@ -1059,7 +1085,7 @@ def run_bfbarchitect(graphf, fb_edges, output_prefix):
                     return summary
             else:
                 whole_graph_skipped = True
-                logger.info(
+                logger.debug(
                     "Skipping BFBArchitect whole-graph retry for {} because graph preflight failed "
                     "(sequence_edges={}, discordant_edges={}, foldback_edges={}, foldback_fraction={:.3f}, "
                     "large_chrom_count={}).".format(
@@ -1939,7 +1965,7 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
 
     graph_cns = get_graph_cns(graphFile, args.add_chr_tag)
     # first compute some properties about the foldbacks and copy numbers
-    fb_edges, fb_readcount, fb_read_prop, maxCN, tot_over_min_cn = compute_f_from_AA_graph(graphFile, lcD)
+    fb_edges, fb_readcount, fb_read_prop, maxCN, tot_over_min_cn, total_seq_len = compute_f_from_AA_graph(graphFile, lcD)
     rearr_e = tot_rearr_edges(graphFile)
     (totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights,
      rearrCycleInds) = get_raw_cycle_props(cycleList, cycleCNs, segSeqD, maxCN, rearr_e, tot_over_min_cn, graph_cns)
@@ -1963,17 +1989,11 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
 
     non_fb_rearr_e = rearr_e - fb_edges
     bfb_suppressed_as_artifact = False
+    qc_filter_reason = ""
     # heuristics to catch sequencing artifact samples
     if is_foldback_qc_artifact(fb_edges, fb_read_prop):
-        bfbClass = False
         bfb_suppressed_as_artifact = True
-        if non_fb_rearr_e >= 4 and tot_over_min_cn > ConfigVars.compCycContCut and maxCN > ConfigVars.sig_amp:
-            ampClass = "Complex-non-cyclic"
-        elif tot_over_min_cn > ConfigVars.compCycContCut and maxCN > ConfigVars.sig_amp:
-            ampClass = "Linear"
-        else:
-            ampClass = INVALID_CLASS
-
+        qc_filter_reason = "foldback_qc_artifact"
         logger.warning(
             "{} has high foldback edge count ({}) and foldback read fraction ({:.3f}), suggesting "
             "read-orientation artifacts. Suppressing BFB calls and BFBArchitect for this amplicon. "
@@ -1982,6 +2002,27 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
                 amplicon_log_id(sName, ampN), fb_edges, fb_read_prop
             )
         )
+
+    elif is_dense_foldback_artifact(fb_edges, total_seq_len):
+        bfb_suppressed_as_artifact = True
+        qc_filter_reason = "dense_foldback_artifact"
+        logger.warning(
+            "{} has {} foldback edges over {} bp of total amplicon sequence "
+            "({:.2f} foldbacks/50kbp), suggesting high-density artifactual inversions. "
+            "Suppressing BFB and ecDNA detection.".format(
+                amplicon_log_id(sName, ampN), fb_edges, total_seq_len,
+                fb_edges / (total_seq_len / ConfigVars.min_bp_per_foldback)
+            )
+        )
+
+    if bfb_suppressed_as_artifact:
+        bfbClass = False
+        if non_fb_rearr_e >= 4 and tot_over_min_cn > ConfigVars.compCycContCut and maxCN > ConfigVars.sig_amp:
+            ampClass = "Complex-non-cyclic"
+        elif tot_over_min_cn > ConfigVars.compCycContCut and maxCN > ConfigVars.sig_amp:
+            ampClass = "Linear"
+        else:
+            ampClass = INVALID_CLASS
 
     pre_finalize_ampClass = ampClass
     ampClass = finalize_no_amp_invalid_class(ampClass, lc_filtered_cycle_count)
@@ -2197,6 +2238,7 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
         feature_registry=feature_registry,
         full_featname_to_graph=full_featname_to_graph,
         full_featname_to_intervals=full_featname_to_intervals,
+        qc_filter=qc_filter_reason,
     )
 
 
@@ -2485,6 +2527,18 @@ if __name__ == "__main__":
     amplicon_records = classify_amplicons(amplicon_inputs, classification_context, jobs)
 
     logger.info("Classification stage completed")
+
+    qc_filtered = [(r.sample_name, r.amplicon_number, r.qc_filter)
+                   for r in amplicon_records if r.qc_filter]
+    if qc_filtered:
+        qc_file = args.o + "_foldback_qc_filtered.txt"
+        with open(qc_file, "w") as qf:
+            qf.write("sample_name\tamplicon_number\tqc_filter\n")
+            for sn, an, reason in qc_filtered:
+                qf.write("{}\t{}\t{}\n".format(sn, an, reason))
+        logger.info("Wrote {} foldback QC-filtered amplicon(s) to {}".format(
+            len(qc_filtered), qc_file))
+
     classification_results = collect_amplicon_records(amplicon_records)
 
     feature_similarity_threads = jobs * max(1, args.bfb_threads) if args.bfbarchitect else jobs

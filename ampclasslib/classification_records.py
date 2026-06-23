@@ -43,6 +43,7 @@ class AmpliconRecord:
     feature_registry: dict = field(default_factory=dict)
     full_featname_to_graph: dict = field(default_factory=dict)
     full_featname_to_intervals: dict = field(default_factory=dict)
+    qc_filter: str = ""
 
 
 @dataclass
