@@ -70,7 +70,12 @@ sample_name_from_cycles() {
 sample_name_from_summary() {
     local base
     base=$(basename "$1")
-    echo "${base%_summary.txt}"
+    base=${base%_summary.txt}
+    # CoRAL writes "{sample}_amplicon_summary.txt" while AA writes "{sample}_summary.txt".
+    # Strip a trailing "_amplicon" so the summary sample name matches the cycles-derived name
+    # (sample_name_from_cycles strips "_amplicon[0-9]*"). No-op for AA-style names.
+    base=${base%_amplicon}
+    echo "$base"
 }
 
 cycles_files=()

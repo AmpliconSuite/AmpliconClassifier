@@ -413,7 +413,10 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
                 l, r = int(fields[3]), int(fields[4])
                 segSeqD[segNum] = (chrom, l, r)
 
-            elif line.startswith("Cycle"):
+            elif line.startswith("Cycle=") or line.startswith("Path="):
+                # CoRAL labels non-cyclic walks "Path=" and cyclic walks "Cycle="; AA labels
+                # both "Cycle=". Accept either - cyclic vs. path is inferred from the 0 segment.
+                # Require the '=' so CoRAL's "Path constraint" lines are not mistaken for walks.
                 cf = [tuple(x.rsplit("=")) for x in line.rstrip().rsplit(";")]
                 cd = dict(cf)
                 ss = cd["Segments"]

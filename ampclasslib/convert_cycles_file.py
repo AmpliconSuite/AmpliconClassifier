@@ -80,7 +80,9 @@ def make_new_cycle(graph_path, cycle_path):
                 segment_length = int(segment_end) - int(segment_start)
                 segment_dict[segment_number] = {'segment_chr': segment_chr, 'segment_start': segment_start,
                                                 'segment_end': segment_end, 'length': segment_length}
-            elif line.startswith('Cycle'):
+            elif line.startswith('Cycle=') or line.startswith('Path='):
+                # CoRAL labels non-cyclic walks "Path="; treat identically to "Cycle=".
+                # Require '=' so CoRAL's "Path constraint" lines are not mistaken for walks.
                 cycle_info = {}
                 continues = 1
                 end_loc = 0
