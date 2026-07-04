@@ -74,6 +74,8 @@ python -m pip install -e /path/to/BFBArchitect
 
 BFBArchitect-positive regions are integrated into `BFB+` calls and reported BFB feature intervals. Use `--no_bfbarchitect` to disable this integration. When `--verbose_classification` is set, BFBArchitect scores and the BFB call source are reported in the classification profile.
 
+BFBArchitect uses the free, open-source **CBC** solver by default. If a **Gurobi** or **Mosek** license is present (`$HOME/gurobi.lic` or `$HOME/mosek/mosek.lic`), it is used automatically for faster BFB reconstruction; a license is not required. In our testing the BFB calls agree across solvers in the large majority of cases, though in rare borderline instances the choice of solver can shift a BFB score across the `BFB+`/`BFB-` threshold. See the [AmpliconSuite-pipeline README](https://github.com/AmpliconSuite/AmpliconSuite-pipeline#optimizer-licenses--do-i-need-one-short-answer-no) for details.
+
 
 ### 2. Usage
 
