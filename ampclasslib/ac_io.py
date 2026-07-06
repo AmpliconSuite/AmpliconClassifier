@@ -418,7 +418,7 @@ def write_annotated_corrected_cycles_file(prefix, outname, cycleList, cycleCNs, 
 def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featComplexityD, categories, sampNames, cyclesFiles,
                   AMP_classifications, AMP_dvaluesList, samp_to_ec_count, fd_list,
                   samp_amp_to_graph, prop_list, summary_map, bfbarchitect_summaries=None,
-                  fan_results=None):
+                  fan_results=None, contains_viral_list=None):
 
     # Genes and ncRNA
     gene_extraction_outname = args.o + "_gene_list.tsv"
@@ -440,7 +440,7 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featComplexityD, catego
     # Amplicon profiles
     with open(args.o + "_amplicon_classification_profiles.tsv", 'w') as outfile:
         oh = ["sample_name", "amplicon_number", "amplicon_decomposition_class", "ecDNA+", "BFB+",
-              "FAN+", "ecDNA_amplicons"]
+              "FAN+", "ecDNA_amplicons", "contains_viral"]
         if args.verbose_classification:
             oh += categories
             if args.bfbarchitect:
@@ -459,7 +459,11 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featComplexityD, catego
                 caOut = "Positive" if fan_results[ind]["decision"] == "FAN" else "None detected"
             else:
                 caOut = "NA"
-            ov = [sname.rsplit("_amplicon")[0], ampN, ampClass, ecOut, bfbOut, caOut, str(ecAmpliconCount)]
+            if contains_viral_list and ind < len(contains_viral_list):
+                viralOut = "True" if contains_viral_list[ind] else "False"
+            else:
+                viralOut = "NA"
+            ov = [sname.rsplit("_amplicon")[0], ampN, ampClass, ecOut, bfbOut, caOut, str(ecAmpliconCount), viralOut]
             if args.verbose_classification:
                 ov += [str(x) for x in AMP_dvaluesList[ind]]
                 if args.bfbarchitect:
@@ -586,4 +590,5 @@ def write_classification_results(args, classification_results, categories, summa
         summary_map,
         classification_results.bfbarchitect_summaries,
         classification_results.fan_results,
+        classification_results.contains_viral_list,
     )

@@ -13,7 +13,7 @@ NON_FEATURE_CLASSES = {"No amp/Invalid", "No-FSCNA", "Invalid"}
 FALLBACK_FEATURE_CLASSES = {"Linear", "Complex-non-cyclic"}
 MECHANISM_DECOMPOSITION_CLASSES = {"Virus"}
 OUTPUT_HEAD = ["Sample name", "AA amplicon number", "Feature ID", "Classification",
-               "FAN probability", "Location", "Oncogenes", "All genes", "NCBI Gene IDs",
+               "FAN probability", "Contains viral", "Location", "Oncogenes", "All genes", "NCBI Gene IDs",
                "Complexity score", "ecDNA context", "Captured interval length", "Feature median copy number",
                "Feature maximum copy number", "Filter flag", "Reference version", "Tissue of origin",
                "Sample type", "Feature BED file", "CNV BED file", "AS-p version", "AA version", "AC version",
@@ -272,7 +272,7 @@ def discover_feature_specs(classD, amplicon_id, class_bed_dir):
 
 def build_feature_row(sample_name, amplicon_number, feature_id, feature, feature_bed, chromo_prob, intervals,
                       gene_dict, complexity_dict, context_dict, basic_stats_dict, run_metadata, sample_metadata,
-                      cnv_bed_path, versions, image_locs, summary_files):
+                      cnv_bed_path, versions, image_locs, summary_files, contains_viral="NA"):
     sorted_glist = sorted(gene_dict[feature_id])
     asp_version, aa_version, ac_version = versions
     sumf, run_metadata_file, sample_metadata_file = summary_files
@@ -283,6 +283,7 @@ def build_feature_row(sample_name, amplicon_number, feature_id, feature, feature
         "Feature ID": feature_id,
         "Classification": feature,
         "FAN probability": chromo_prob,
+        "Contains viral": contains_viral,
         "Location": intervals,
         "Oncogenes": str([g[0] for g in sorted_glist if g[2]]),
         "All genes": str([g[0] for g in sorted_glist]),
@@ -526,12 +527,13 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
             if feature_specs:
                 sumf_used.add((sample_name, cfile_dir))
             chromo_prob = fan_dict[ampliconID]["probability"]
+            contains_viral = classD.get("contains_viral", "NA")
             for featureID, feature, featureBed in feature_specs:
                 result_rows.append(build_feature_row(
                     sample_name, AA_amplicon_number, featureID, feature, featureBed, chromo_prob,
                     read_bed_intervals(featureBed), amplicon_gene_dict, amplicon_complexity_dict, context_dict,
                     basic_stats_dict, curr_run_metadata, curr_sample_metadata, cnv_bed_path, versions, image_locs,
-                    summary_files
+                    summary_files, contains_viral
                 ))
 
         for k in set(sumf_dict.keys()) - sumf_used:

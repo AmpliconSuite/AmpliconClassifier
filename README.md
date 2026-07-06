@@ -13,6 +13,22 @@ Luebeck J, et al. [Extrachromosomal DNA in the cancerous transformation of Barre
 See the section at the end of the README for information about the legacy version.<br />
 <br />
 
+### Amplification types detected by AmpliconClassifier
+
+AmpliconClassifier characterizes **focal oncogene amplifications** — the local, high-copy-number amplification of a genomic region — as reconstructed by AmpliconArchitect or CoRAL. It does **not** analyze karyotypic abnormalities such as aneuploidy, balanced translocations, or broad chromosome/arm-level gains and losses; it focuses on the structure of the focal amplification event itself.
+
+The main amplification mechanisms and structures it distinguishes are:
+
+- **ecDNA (extrachromosomal DNA)** — Circular, extrachromosomal amplicons that replicate autonomously and segregate unequally to daughter cells, driving rapid copy-number escalation and intratumoral heterogeneity. ecDNA is typically focal and high copy-number, and is reconstructed as one or more genome cycles. Reported with the `ecDNA+` flag.
+- **BFB (breakage–fusion–bridge)** — Amplification produced by iterative cycles of chromosome-end breakage, sister-chromatid fusion, and anaphase-bridge rupture. BFB leaves a characteristic signature of fold-back inversions and a stair-step copy-number gradient, and the amplified material remains chromosomally integrated (frequently as a homogeneously staining region, HSR). Reported with the `BFB+` flag.
+- **FAN (focal amplification in neochromosome)** — A broad, structurally complex, multi-chromosomal amplification that is integrated into a chromosome or assembled into a neochromosome rather than existing as an extrachromosomal circle. FAN is a term we introduce to describe these neochromosome-like focal amplifications. FAN events can incorporate ecDNA- and BFB-type mechanisms within the same amplification; `FAN+` is an independent flag and can co-occur with `ecDNA+` and `BFB+` (see the `_fan_calls.tsv` output below).
+- **CNC (complex non-cyclic)** — An abstract label for a focal amplification embedded in a complex genome rearrangement that lacks the genome cycles characteristic of ecDNA. It describes the observed structure rather than a specific mechanism — the underlying process (e.g. chromothripsis) is often not fully clear.
+- **Linear** — A focal amplification with few or no significant rearrangements, including low-copy amplifications arising from tandem duplication. The underlying mechanism is frequently unclear.
+
+When AmpliconArchitect or CoRAL is run against the `GRCh38_viral` reference, an additional **Virus** category applies: amplicons corresponding to a viral genome are labeled `Virus`, and amplicons that fuse viral and human sequence are treated as human–viral **hybrids**. A hybrid oncoviral amplicon is reported through its human amplification mechanism (e.g. `ecDNA`) rather than as `Virus`, so its viral content is surfaced by the `contains_viral` column in the classification profiles and results table (`True` whenever any viral sequence is present, including hybrids).
+
+**Mechanistic calls vs. the abstract decomposition class.** AmpliconClassifier reports these results in two complementary ways. The `ecDNA+`, `BFB+`, and `FAN+` columns — together with `Virus` — are *mechanistic* calls: each fires when evidence for that specific mechanism or origin is present, and more than one can be positive on the same amplicon. Separately, every amplicon also receives a single, abstract `amplicon_decomposition_class` that summarizes its overall structure. `Cyclic` is the structural signature underlying ecDNA and BFB calls, while `Linear` and `Complex-non-cyclic` are *residual* structural labels — they are what remains to describe an amplicon's structure (simple versus rearranged) when no mechanistic call fires, and they do not themselves imply a mechanism. The full set of `amplicon_decomposition_class` values is listed under [Outputs](#3-outputs) below.
+
 ### 1. Installation
 
 AmpliconClassifier is included with [AmpliconSuite-pipeline](https://github.com/AmpliconSuite/AmpliconSuite-pipeline), but for standalone re-classification you can install it directly using the steps below.
@@ -128,8 +144,9 @@ Note that amplicons receiving a "Cyclic" classification may be ecDNA+, BFB+ or b
 | `amplicon_decomposition_class` | Abstract description of the AA amplicon type.                                                                                   |
 | `ecDNA+`                       | Prediction about whether the AA amplicon contains ecDNA. Note, an AA amplicon may contain regions surrounding the ecDNA, or multiple linked ecDNA. Either `Positive` or `None detected` |
 | `BFB+`                         | Prediction about whether the AA amplicon is the result of a BFB. Either `Positive` or `None detected`                                                                                   |
-| `FAN+`                          | Prediction about whether the AA amplicon has FAN (Focal amplification in neochromosome) graph structure. Either `Positive` or `None detected`                                           |
+| `FAN+`                          | Prediction about whether the AA amplicon is a FAN (Focal amplification in neochromosome): a broad, SV-dense, multi-chromosomal amplification that resolves into chromosomal/neochromosomal (non-circular) structure, as opposed to circular ecDNA. Reported as an independent flag and **not mutually exclusive** with `ecDNA+` or `BFB+`. Either `Positive` or `None detected`. See the `_fan_calls.tsv` description below. |
 | `ecDNA_amplicons`              | Predicted number of distinct (non-overlapping) ecDNA which are represented in a single AA amplicon. This estimate is experimental.                                               |
+| `contains_viral`               | Whether the amplicon contains any oncoviral sequence (a segment on a viral contig) — covering both pure `Virus` amplicons and human–viral hybrids. `True`/`False`. Only meaningful when the `GRCh38_viral` reference was used; `False` otherwise. |
 
 When `--verbose_classification` is set, the profile also includes `BFB_source`, which reports `AC`, `BFBArchitect`, or `AC|BFBArchitect` for positive BFB calls. If BFBArchitect is available and enabled, verbose profiles also include BFBArchitect score summaries.
 
@@ -140,7 +157,7 @@ The `amplicon_decomposition_class` is an abstract label and can be one of six cl
 - `Linear`: A focal amplification with few to no significant rearrangments evident - frequently the exact mechanism is unclear. Label also includes low CN focal amplifications caused by tandem duplications.
 - `No-FSCNA`: The AA amplicon is valid, but AC did not detect a focal significant copy-number amplification.
 - `Invalid`: The AA amplicon failed AC validity checks, such as when cycles are removed by low-complexity filtering. AC also marks high foldback-orientation artifact cases as `Invalid` and logs QC guidance for re-running AmpliconSuite-pipeline with stricter foldback pair support.
-- `Virus`: If the GRCh38_viral reference was used with AA, then this amplicon corresponds to a viral genome.
+- `Virus`: If the GRCh38_viral reference was used, then this amplicon corresponds to an oncoviral genome.
 
 #### ****`[prefix]_gene_list.tsv`****
 Reports the genes present on amplicons with each classification, and which genomic feature (e.g. ecDNA_1, BFB_1, etc), it is located on, along with the copy number and which end(s) of the gene have been lost ("truncated"), will be one of `None`, `5p` (5-prime end), `3p` (3-prime end) or `5p_3p` if both. Genes are sourced from RefGene and most lncRNAs and micro-RNAs are excluded from the report.
@@ -176,7 +193,11 @@ Reports per-feature complexity scores as measured by the number of genomic segme
 
 
 #### ****`[output_prefix]_fan_calls.tsv`****
-Reports the FAN (Focal amplification in neochromosome) classifier result for each AA amplicon. The file includes `sample_name`, `amplicon_number`, `fan_call`, `fan_probability`, and the model features used for the call.
+Reports the FAN (Focal amplification in neochromosome) classifier result for each AA amplicon. The file includes `sample_name`, `amplicon_number`, `fan_call` (`Positive`/`None detected`), `fan_probability`, and the model features used for the call.
+
+**What FAN detects.** FAN identifies a focal-amplification phenotype that is structurally distinct from ecDNA. Where ecDNA is spatially focal, high copy-number, and circular, a FAN amplicon is broad and copy-number–heterogeneous, carries a high density of large or interchromosomal structural variants, and spreads across two or more chromosomes — a pattern that resolves into a chromosomal or neochromosomal (i.e. non-circular, integrated) structure rather than an extrachromosomal circle. A neochromosome is a large, structurally rearranged chromosome assembled *de novo* from amplified material, frequently drawing on multiple chromosomes of origin and carrying amplified oncogenes (Garsed et al., *[The architecture and evolution of cancer neochromosomes](https://doi.org/10.1016/j.ccr.2014.09.010)*, Cancer Cell, 2014). The FAN call is produced by a lightweight machine-learning model that scores each amplicon's AA graph from a compact set of features capturing SV burden, chromosomal spread, and amplified span; `fan_probability` is the model's score and `fan_call` applies the default decision threshold (0.5).
+
+FAN is reported as an independent flag and is **not mutually exclusive** with `ecDNA+` or `BFB+` — a single amplicon can be both FAN+ and ecDNA+. In cell-line FISH validation, FAN calls corresponded predominantly to non-native HSRs (amplified material integrated at a non-native chromosomal location), consistent with the neochromosomal interpretation. No FAN call corresponded to a double minute (DM) alone: in the cases where a FAN-classified amplicon coincided with a FISH-observed DM, that amplicon was also called `ecDNA+`.
 
 #### ****`[output_prefix]_feature_similarity_scores.tsv`****
 Reports pairwise feature similarity scores for cross-sample feature pairs with overlapping genomic intervals. Same-sample pairs are not compared. The score table includes ecDNA, BFB, Linear, Complex-non-cyclic, and FAN features, and is written by default for each AC run. These rows are also the audit trail used by `--filter_similar`; the table is written regardless of whether filtering is enabled.
@@ -212,7 +233,7 @@ Additionally, there are three directories  created by `amplicon_classifier.py`. 
 - `[prefix]_annotated_cycles_files/`, which contains AA cycles files with additional annotations about length of discovered paths/cycles and their classification status. Using these annotated cycles files is preferred over the unannotated cycles file produced by AA. These cycles are filtered to remove cycles overlapping low-complexity regions of the genome, patches reference genome issues, and filters duplicate cycle entries erroneously output by AA (uncommon).
 
 #### Results table
-When `--make_results_table` is used, AC creates `[prefix]_result_table.tsv` and `[prefix]_result_data.json`. The table has one row per reported feature, including ecDNA, BFB, decomposition features, and FAN features. FAN rows use the numbered feature ID `FAN_1`; the `FAN probability` column reports the model probability for each amplicon.
+By default (in `--AA_results`/`--input` mode), AC creates `[prefix]_result_table.tsv` and `[prefix]_result_data.json`; pass `--no_results_table` to skip this. The table has one row per reported feature, including ecDNA, BFB, decomposition features, and FAN features. FAN rows use the numbered feature ID `FAN_1`; the `FAN probability` column reports the model probability for each amplicon, and the `Contains viral` column carries the amplicon's `contains_viral` status.
 
 
 ### 4. Command-Line Options
@@ -227,20 +248,23 @@ Else if running on multiple amplicons, use argument
 
 | Column name                                     | Contents                                                                                                                                                                                                             |
 |-------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------| 
-| `--ref [hg19, GRCh37, GRCh38, mm10, or GRCm38]` | (Required) Choose reference genome version used in generating AA output.                                                                                                                                             |
+| `--ref [hg19, GRCh37, GRCh38, GRCh38_viral, mm10, or GRCm38]` | (Required) Choose reference genome version used in generating AA output.                                                                                                                                |
 | `-v/--version`                                  | Print version and exit.                                                                                                                                                                                              |
 | `-o`                                            | Output filename prefix. Can include a custom dir path. Defaults to prefix of `-i` or `-c`.                                                                                                                           |
 | `--add_chr_tag`                                 | Adds back missing "chr" prefix to chromosome names. If you have a mix of hg19 and GRCh37 amplicons, set `--ref hg19` and `--add_chr_tag` to classify them all together.                                              |
 | `--min_flow`                                    | Minumum cycle CN flow to consider among decomposed paths (default=1).                                                                                                                                                | 
 | `--min_size`                                    | Minimum cycle size (in bp) to consider as valid amplicon (default=5000).                                                                                                                                             |
-| `--verbose_classification`                      | Output verbose information in the `amplicon_classification_profiles.tsv` file, and create `edge_classification_profiles.tsv`. Useful for debugging.                                                                  |
+| `--verbose_classification`                      | Add verbose columns (raw classification scores, and BFBArchitect score summaries / `BFB_source` when BFBArchitect is enabled) to the `amplicon_classification_profiles.tsv` file. Useful for debugging.              |
+| `--report_complexity`                           | [Deprecated — on by default] Compute an amplicon entropy/complexity measure for each amplicon (written to `_feature_complexity.tsv`).                                                                                |
 | `--force`                                       | Disable No-FSCNA/Invalid class, if possible. Use only when extremely large CN seeds were used in AA amplicon generation (>10 Mbp intervals) or if debugging.                                                           |
 | `--plotstyle [noplot, individual]`              | \[experimental] Produce a radar-style plot of classification strengths. Default `noplot`.                                                                                                                            |
 | `--decomposition_strictness`                    | Value between 0 and 1 reflecting how strictly to filter low CN decompositions (default = 0.1). Higher values filter more of the low-weight decompositions.                                                           |
 | `--exclude_bed`                                 | Provide a bed file of regions to ignore during classification. Useful for separating linked amplicons or augmenting existing low-complexity annotations.                                                             |
 | `--no_LC_filter`                                | Set this to turn off filtering low-complexity & poor mappability genome region paths & cycles based on the regions in the AA data repo.                                                                              |
 | `--filter_similar`                              | Permits filtering of false-positive amps arising in multiple independent samples based on similarity calculation. Only use if all samples are of independent origins (not replicates and not multi-region biopsies). |
-| `--make_results_table`                          | Creates summary results table (_results_table.tsv) after classification completes.                                                                                                                                   |
+| `--filter_pval`                                 | P-value cutoff used when `--filter_similar` is set. Default is `0.05/(n_amps-1)`.                                                                                                                                    |
+| `--config`                                      | Path to a custom parameter configuration file. If not specified, uses the default config in the `ampclasslib` directory.                                                                                            |
+| `--no_results_table`                            | Skip creation of the summary results table. The `_result_table.tsv`/`_result_data.json` table is generated by default (when running in `--AA_results`/`--input` mode); use this flag to turn it off.                   |
 | `--no_bfbarchitect`                             | Disable BFBArchitect integration. By default, AmpliconClassifier uses BFBArchitect when it is installed and warns when it is unavailable.                                                                               |
 | `--bfb_threads`                                 | Number of BFBArchitect ILP solver threads per amplicon. For multi-amplicon runs, `2` is generally the best efficiency setting. When using `--jobs`, approximate total BFBArchitect solver threads are `--jobs * --bfb_threads`. |
 | `--jobs`                                        | Number of amplicons to classify in parallel. Default is 1. Output rows are collected in input order.                                                                                                                   |
@@ -269,7 +293,7 @@ The primary difference between `amplicon_similarity.py` and `feature_similarity.
 ```shell
 $AC_SRC/feature_similarity.py --ref hg38 -f [sample]_features_to_graph.txt --required_classifications [default "any", but can be "ecDNA", "BFB", "CNC", "linear" or any combination of those] 
 ```
-Where "[sample]_features_to_graph.txt" is one of the output files generated by `amplicon_classifier.py` and is a two-column text file with the feature ID (e.g. `sample_amplicon1_ecDNA1`) as the first column and the path of the associated AA graph file in the second column. `--include_path_in_features` is useful for comparing two runs with the same sample names 
+Where "[sample]_features_to_graph.txt" is one of the output files generated by `amplicon_classifier.py` and is a two-column text file with the feature ID (e.g. `sample_amplicon1_ecDNA1`) as the first column and the path of the associated AA graph file in the second column. `--include_path_in_feature_name` is useful for comparing two runs with the same sample names 
 (after combining both `_features_to_graph.txt` files from each run into one file).
 
 **How do I use this to perform similarity score-based filtering on my samples?**

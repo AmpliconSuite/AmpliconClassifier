@@ -44,6 +44,7 @@ class AmpliconRecord:
     full_featname_to_graph: dict = field(default_factory=dict)
     full_featname_to_intervals: dict = field(default_factory=dict)
     qc_filter: str = ""
+    contains_viral: bool = False
 
 
 @dataclass
@@ -71,6 +72,7 @@ class ClassificationResults:
     fan_results: list = field(default_factory=list)
     sampNames: list = field(default_factory=list)
     cyclesFiles: list = field(default_factory=list)
+    contains_viral_list: list = field(default_factory=list)
     featComplexityD: dict = field(default_factory=dict)
     samp_to_ec_count: dict = field(default_factory=lambda: defaultdict(int))
     samp_amp_to_graph: dict = field(default_factory=dict)
@@ -93,6 +95,7 @@ def collect_amplicon_records(records):
         results.fan_results.append(record.fan_result)
         results.sampNames.append(record.sample_name)
         results.cyclesFiles.append(record.cycles_file)
+        results.contains_viral_list.append(record.contains_viral)
         results.featComplexityD.update(record.feature_complexity)
         results.samp_to_ec_count[record.sample_name] += record.ec_count
         results.samp_amp_to_graph.update(record.samp_amp_to_graph)

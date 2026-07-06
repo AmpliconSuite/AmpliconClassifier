@@ -61,6 +61,7 @@ NO_FSCNA_CLASS = "No-FSCNA"
 INVALID_CLASS = "Invalid"
 BFBARCHITECT_SOURCE = "BFBArchitect"
 AC_SOURCE = "AC"
+BFBARCHITECT_UNSUPPORTED_KWARGS_WARNED = set()
 
 
 def is_non_feature_amplicon_class(amp_class):
@@ -788,6 +789,54 @@ def format_bfbarchitect_score(score):
     return "{:.2f}".format(score)
 
 
+def tag_bfbarchitect_results(results, whole_graph_used, reverse_polarity_used):
+    tagged = []
+    for res in results or []:
+        tagged_res = dict(res)
+        tagged_res["_ac_whole_graph_used"] = bool(whole_graph_used)
+        tagged_res["_ac_reverse_polarity_used"] = bool(reverse_polarity_used)
+        tagged.append(tagged_res)
+
+    return tagged
+
+
+def _bfbarchitect_result_flag(res, key, fallback=False):
+    value = res.get(key, fallback)
+    if isinstance(value, str):
+        return value == "True"
+
+    return bool(value)
+
+
+def _bfbarchitect_signature_accepts(sig_params, param_name):
+    if not sig_params or param_name in sig_params:
+        return True
+
+    return any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig_params.values())
+
+
+def _warn_unsupported_bfbarchitect_kwarg(param_name):
+    if param_name in BFBARCHITECT_UNSUPPORTED_KWARGS_WARNED:
+        return
+
+    BFBARCHITECT_UNSUPPORTED_KWARGS_WARNED.add(param_name)
+    active_logger = globals().get("logger", logging.getLogger(__name__))
+    active_logger.warning(
+        "Installed BFBArchitect reconstruct_bfb_from_graph() does not accept expected parameter '{}'; "
+        "omitting it for compatibility. Check that AmpliconClassifier and BFBArchitect are from compatible "
+        "prerelease revisions.".format(param_name)
+    )
+
+
+def _add_bfbarchitect_kwarg_if_supported(kwargs, sig_params, param_name, value):
+    if _bfbarchitect_signature_accepts(sig_params, param_name):
+        kwargs[param_name] = value
+        return True
+
+    _warn_unsupported_bfbarchitect_kwarg(param_name)
+    return False
+
+
 def summarize_bfbarchitect_results(results, whole_graph_used, reverse_polarity_used=False):
     all_scores = []
     passing_regions = 0
@@ -795,8 +844,20 @@ def summarize_bfbarchitect_results(results, whole_graph_used, reverse_polarity_u
     region_strings = []
     passing_intervals = []
     passing_scores = []
+    best_score = None
+    best_whole_graph_used = False
+    best_reverse_polarity_used = False
+    attempted_whole_graph = False
+    attempted_reverse_polarity = False
 
     for res in results or []:
+        result_whole_graph_used = _bfbarchitect_result_flag(res, "_ac_whole_graph_used", whole_graph_used)
+        result_reverse_polarity_used = _bfbarchitect_result_flag(
+            res, "_ac_reverse_polarity_used", reverse_polarity_used
+        )
+        attempted_whole_graph = attempted_whole_graph or result_whole_graph_used
+        attempted_reverse_polarity = attempted_reverse_polarity or result_reverse_polarity_used
+
         raw_scores = res.get("scores", [])
         if raw_scores is None:
             raw_scores = []
@@ -813,6 +874,14 @@ def summarize_bfbarchitect_results(results, whole_graph_used, reverse_polarity_u
         region_min = min(scores) if scores else None
         if region_min is not None:
             all_scores.append(region_min)
+            if best_score is None or region_min < best_score:
+                best_score = region_min
+                best_whole_graph_used = result_whole_graph_used
+                best_reverse_polarity_used = result_reverse_polarity_used
+            elif region_min == best_score:
+                best_whole_graph_used = best_whole_graph_used or result_whole_graph_used
+                best_reverse_polarity_used = best_reverse_polarity_used or result_reverse_polarity_used
+
             if region_min <= ConfigVars.bfbarchitect_max_score:
                 passing_regions += 1
                 region = res.get("region")
@@ -834,13 +903,17 @@ def summarize_bfbarchitect_results(results, whole_graph_used, reverse_polarity_u
     if not all_scores and not region_strings:
         return empty_bfbarchitect_summary()
 
+    if best_score is None:
+        best_whole_graph_used = attempted_whole_graph
+        best_reverse_polarity_used = attempted_reverse_polarity
+
     return {
-        "min_score": format_bfbarchitect_score(min(all_scores) if all_scores else None),
+        "min_score": format_bfbarchitect_score(best_score),
         "passing_region_count": str(passing_regions),
         "multiplicities": ";".join(multiplicities) if multiplicities else "NA",
         "regions": ";".join(region_strings) if region_strings else "NA",
-        "whole_graph_used": str(whole_graph_used),
-        "reverse_polarity_used": str(reverse_polarity_used),
+        "whole_graph_used": str(best_whole_graph_used),
+        "reverse_polarity_used": str(best_reverse_polarity_used),
         "passing_intervals": passing_intervals,
         "passing_scores": passing_scores,
         "bfb_sources": "NA"
@@ -999,25 +1072,27 @@ def run_bfbarchitect_reconstruct(graphf, whole_graph, reverse_polarity=False, re
         "threads": args.bfb_threads,
     }
 
-    if region is not None:
-        kwargs["region"] = region
-
-    if not whole_graph:
-        kwargs["max_graph_segments"] = ConfigVars.bfbarchitect_max_region_segments
-
     try:
         sig = inspect.signature(BFBARCHITECT_RECONSTRUCT)
         sig_params = sig.parameters
     except (TypeError, ValueError):
         sig_params = {}
 
+    if region is not None:
+        _add_bfbarchitect_kwarg_if_supported(kwargs, sig_params, "region", region)
+
+    if not whole_graph:
+        _add_bfbarchitect_kwarg_if_supported(
+            kwargs, sig_params, "max_graph_segments", ConfigVars.bfbarchitect_max_region_segments
+        )
+
     if ConfigVars.bfbarchitect_min_lp_bound is not None:
-        if not sig_params or "min_lp_bound" in sig_params:
-            kwargs["min_lp_bound"] = ConfigVars.bfbarchitect_min_lp_bound
+        _add_bfbarchitect_kwarg_if_supported(
+            kwargs, sig_params, "min_lp_bound", ConfigVars.bfbarchitect_min_lp_bound
+        )
 
     if reverse_polarity:
-        if not sig_params or "reverse_polarity" in sig_params:
-            kwargs["reverse_polarity"] = True
+        _add_bfbarchitect_kwarg_if_supported(kwargs, sig_params, "reverse_polarity", True)
 
     def _round_scores(results):
         for res in results or []:
@@ -1060,9 +1135,16 @@ def run_bfbarchitect(graphf, fb_edges, output_prefix):
         return empty_bfbarchitect_summary()
 
     try:
+        all_attempted_results = []
+
         # Step 1: region mode, normal polarity
         with suppress_bfbarchitect_chatter():
-            results = run_bfbarchitect_reconstruct(graphf, whole_graph=False, reverse_polarity=False)
+            results = tag_bfbarchitect_results(
+                run_bfbarchitect_reconstruct(graphf, whole_graph=False, reverse_polarity=False),
+                whole_graph_used=False,
+                reverse_polarity_used=False
+            )
+        all_attempted_results.extend(results)
 
         passing = _bfbarchitect_passing_results(results)
         failing_regions = _bfbarchitect_failing_regions(results)
@@ -1076,7 +1158,12 @@ def run_bfbarchitect(graphf, fb_edges, output_prefix):
             preflight_ok, graph_stats = bfbarchitect_whole_graph_preflight(graphf)
             if preflight_ok:
                 with suppress_bfbarchitect_chatter():
-                    wg_results = run_bfbarchitect_reconstruct(graphf, whole_graph=True, reverse_polarity=False)
+                    wg_results = tag_bfbarchitect_results(
+                        run_bfbarchitect_reconstruct(graphf, whole_graph=True, reverse_polarity=False),
+                        whole_graph_used=True,
+                        reverse_polarity_used=False
+                    )
+                all_attempted_results.extend(wg_results)
                 wg_passing = _bfbarchitect_passing_results(wg_results)
                 if wg_passing:
                     summary = summarize_bfbarchitect_results(wg_passing, whole_graph_used=True,
@@ -1100,12 +1187,22 @@ def run_bfbarchitect(graphf, fb_edges, output_prefix):
         if not results:
             # no candidates were found at all; let BFBArchitect re-discover with reversed polarity
             with suppress_bfbarchitect_chatter():
-                rp_results = run_bfbarchitect_reconstruct(graphf, whole_graph=False, reverse_polarity=True)
+                rp_results = tag_bfbarchitect_results(
+                    run_bfbarchitect_reconstruct(graphf, whole_graph=False, reverse_polarity=True),
+                    whole_graph_used=False,
+                    reverse_polarity_used=True
+                )
+            all_attempted_results.extend(rp_results)
         else:
             for region in failing_regions:
                 with suppress_bfbarchitect_chatter():
-                    rp = run_bfbarchitect_reconstruct(graphf, whole_graph=False, reverse_polarity=True,
-                                                      region=region)
+                    rp = tag_bfbarchitect_results(
+                        run_bfbarchitect_reconstruct(graphf, whole_graph=False, reverse_polarity=True,
+                                                    region=region),
+                        whole_graph_used=False,
+                        reverse_polarity_used=True
+                    )
+                all_attempted_results.extend(rp)
                 rp_results.extend(rp)
 
         rp_passing = _bfbarchitect_passing_results(rp_results)
@@ -1118,7 +1215,12 @@ def run_bfbarchitect(graphf, fb_edges, output_prefix):
                 preflight_ok, graph_stats = bfbarchitect_whole_graph_preflight(graphf)
             if preflight_ok:
                 with suppress_bfbarchitect_chatter():
-                    rp_wg_results = run_bfbarchitect_reconstruct(graphf, whole_graph=True, reverse_polarity=True)
+                    rp_wg_results = tag_bfbarchitect_results(
+                        run_bfbarchitect_reconstruct(graphf, whole_graph=True, reverse_polarity=True),
+                        whole_graph_used=True,
+                        reverse_polarity_used=True
+                    )
+                all_attempted_results.extend(rp_wg_results)
                 rp_wg_passing = _bfbarchitect_passing_results(rp_wg_results)
                 if rp_wg_passing:
                     summary = summarize_bfbarchitect_results(rp_wg_passing, whole_graph_used=True,
@@ -1126,7 +1228,7 @@ def run_bfbarchitect(graphf, fb_edges, output_prefix):
                     write_bfbarchitect_outputs(rp_wg_passing, output_prefix, whole_graph_used=True)
                     return summary
 
-        display_results = combined_passing if combined_passing else (results + rp_results)
+        display_results = combined_passing if combined_passing else all_attempted_results
         summary = summarize_bfbarchitect_results(display_results, whole_graph_used=False,
                                                   reverse_polarity_used=reverse_polarity_used)
         if whole_graph_skipped and not combined_passing:
@@ -2214,6 +2316,12 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
     classification = (ampClass, ecStat, bfbStat, ecAmpliconCount)
     dvalues = [AMP_dvaluesDict[x] for x in categories]
 
+    # Flag amplicons that contain viral sequence (pure Virus amplicons and human-viral
+    # hybrids alike). Viral genomes are represented as non-"chr" contigs under the
+    # GRCh38_viral reference; this is the same convention used by is_human_viral_hybrid.
+    amp_chroms = set(x[0] for k, x in segSeqD.items() if k != 0)
+    contains_viral = args.ref == "GRCh38_viral" and any(not c.startswith("chr") for c in amp_chroms)
+
     annotated_cycle_outname = os.path.basename(cyclesFile).rsplit("_cycles")[0] + "_annotated_cycles.txt"
     annotated_cycles_entry = [annotated_cycle_outname, cycleList, cycleCNs, segSeqD, bfb_cycle_inds, ecIndexClusters,
                               invalidInds, rearrCycleInds]
@@ -2239,6 +2347,7 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
         full_featname_to_graph=full_featname_to_graph,
         full_featname_to_intervals=full_featname_to_intervals,
         qc_filter=qc_filter_reason,
+        contains_viral=contains_viral,
     )
 
 

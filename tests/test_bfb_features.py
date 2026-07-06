@@ -19,6 +19,37 @@ from amplicon_classifier import (
 
 
 class BFBFeatureTests(unittest.TestCase):
+    def _run_with_fake_bfbarchitect(self, fake_reconstruct):
+        with NamedTemporaryFile(mode="w", delete=True) as graph:
+            graph.write("sequence\tchr1:100+\tchr1:200-\t6\t100\t60\n")
+            graph.write("discordant\tchr1:150+->chr1:160+\t0\t5\t0\n")
+            graph.flush()
+
+            had_args = hasattr(ac, "args")
+            old_args = getattr(ac, "args", None)
+            old_reconstruct = ac.BFBARCHITECT_RECONSTRUCT
+            old_centromeres = ac.BFBARCHITECT_CENTROMERES
+            had_logger = hasattr(ac, "logger")
+            old_logger = getattr(ac, "logger", None)
+            try:
+                ac.args = SimpleNamespace(no_bfbarchitect=False, bfb_threads=1, verbose_classification=False, o="/tmp/ac")
+                ac.BFBARCHITECT_RECONSTRUCT = fake_reconstruct
+                ac.BFBARCHITECT_CENTROMERES = {"chr1": 100000000}
+                ac.logger = logging.getLogger("test_bfb_features")
+
+                return ac.run_bfbarchitect(graph.name, fb_edges=2, output_prefix="test_amplicon")
+            finally:
+                if had_args:
+                    ac.args = old_args
+                else:
+                    del ac.args
+                ac.BFBARCHITECT_RECONSTRUCT = old_reconstruct
+                ac.BFBARCHITECT_CENTROMERES = old_centromeres
+                if had_logger:
+                    ac.logger = old_logger
+                else:
+                    del ac.logger
+
     def test_foldback_qc_artifact_detects_extreme_edge_count(self):
         self.assertTrue(is_foldback_qc_artifact(101, 0.1))
         self.assertTrue(is_foldback_qc_artifact(16, 0.81))
@@ -123,8 +154,8 @@ class BFBFeatureTests(unittest.TestCase):
         calls = []
 
         def fake_reconstruct(_graphf, centromere_dict=None, solver=None, multiple=False, whole_graph=False,
-                             threads=1, min_lp_bound=None):
-            calls.append((whole_graph, min_lp_bound))
+                             threads=1, min_lp_bound=None, max_graph_segments=None, reverse_polarity=False):
+            calls.append((whole_graph, reverse_polarity, min_lp_bound))
             return []
 
         with NamedTemporaryFile(mode="w", delete=True) as graph:
@@ -159,11 +190,75 @@ class BFBFeatureTests(unittest.TestCase):
                 else:
                     del ac.logger
 
-        self.assertEqual(calls, [(False, 25)])
+        self.assertEqual(calls, [(False, False, 25), (False, True, 25)])
         self.assertEqual(summary["whole_graph_used"], "False")
         self.assertEqual(summary["regions"], "whole_graph_skipped_complex_weak_foldback")
 
-    def test_run_bfbarchitect_reconstruct_supports_older_bfbarchitect_signature(self):
+    def test_run_bfbarchitect_failed_summary_uses_best_whole_graph_reverse_score_mode(self):
+        calls = []
+
+        def fake_reconstruct(_graphf, centromere_dict=None, solver=None, multiple=False, whole_graph=False,
+                             threads=1, min_lp_bound=None, max_graph_segments=None, reverse_polarity=False,
+                             region=None):
+            calls.append((whole_graph, reverse_polarity, region))
+            if whole_graph and reverse_polarity:
+                return [{"scores": [3.1], "region": "whole_graph_reverse", "multiplicity": 1}]
+            if whole_graph:
+                return [{"scores": [3.7], "region": "whole_graph", "multiplicity": 1}]
+            if reverse_polarity:
+                return [{"scores": [3.4], "region": region, "multiplicity": 1}]
+            return [{"scores": [4.5], "region": ("chr1", 100, 200), "multiplicity": 1}]
+
+        summary = self._run_with_fake_bfbarchitect(fake_reconstruct)
+
+        self.assertEqual(calls, [
+            (False, False, None),
+            (True, False, None),
+            (False, True, ("chr1", 100, 200)),
+            (True, True, None),
+        ])
+        self.assertEqual(summary["min_score"], "3.10")
+        self.assertEqual(summary["passing_region_count"], "0")
+        self.assertEqual(summary["whole_graph_used"], "True")
+        self.assertEqual(summary["reverse_polarity_used"], "True")
+
+    def test_run_bfbarchitect_failed_summary_keeps_region_mode_when_region_score_is_best(self):
+        def fake_reconstruct(_graphf, centromere_dict=None, solver=None, multiple=False, whole_graph=False,
+                             threads=1, min_lp_bound=None, max_graph_segments=None, reverse_polarity=False,
+                             region=None):
+            if whole_graph and reverse_polarity:
+                return [{"scores": [5.0], "region": "whole_graph_reverse", "multiplicity": 1}]
+            if whole_graph:
+                return [{"scores": [4.0], "region": "whole_graph", "multiplicity": 1}]
+            if reverse_polarity:
+                return [{"scores": [4.5], "region": region, "multiplicity": 1}]
+            return [{"scores": [3.0], "region": ("chr1", 100, 200), "multiplicity": 1}]
+
+        summary = self._run_with_fake_bfbarchitect(fake_reconstruct)
+
+        self.assertEqual(summary["min_score"], "3.00")
+        self.assertEqual(summary["passing_region_count"], "0")
+        self.assertEqual(summary["whole_graph_used"], "False")
+        self.assertEqual(summary["reverse_polarity_used"], "False")
+
+    def test_run_bfbarchitect_stops_after_passing_region_result(self):
+        calls = []
+
+        def fake_reconstruct(_graphf, centromere_dict=None, solver=None, multiple=False, whole_graph=False,
+                             threads=1, min_lp_bound=None, max_graph_segments=None, reverse_polarity=False,
+                             region=None):
+            calls.append((whole_graph, reverse_polarity, region))
+            return [{"scores": [2.1], "region": ("chr1", 100, 200), "multiplicity": 1}]
+
+        summary = self._run_with_fake_bfbarchitect(fake_reconstruct)
+
+        self.assertEqual(calls, [(False, False, None)])
+        self.assertEqual(summary["min_score"], "2.10")
+        self.assertEqual(summary["passing_region_count"], "1")
+        self.assertEqual(summary["whole_graph_used"], "False")
+        self.assertEqual(summary["reverse_polarity_used"], "False")
+
+    def test_run_bfbarchitect_reconstruct_warns_for_unsupported_expected_kwargs(self):
         calls = []
 
         def fake_reconstruct(_graphf, centromere_dict=None, solver=None, multiple=False, whole_graph=False, threads=1):
@@ -174,12 +269,18 @@ class BFBFeatureTests(unittest.TestCase):
         old_args = getattr(ac, "args", None)
         old_reconstruct = ac.BFBARCHITECT_RECONSTRUCT
         old_centromeres = ac.BFBARCHITECT_CENTROMERES
+        old_warned = set(ac.BFBARCHITECT_UNSUPPORTED_KWARGS_WARNED)
+        had_logger = hasattr(ac, "logger")
+        old_logger = getattr(ac, "logger", None)
         try:
             ac.args = SimpleNamespace(bfb_threads=1)
             ac.BFBARCHITECT_RECONSTRUCT = fake_reconstruct
             ac.BFBARCHITECT_CENTROMERES = {"chr1": 100000000}
+            ac.BFBARCHITECT_UNSUPPORTED_KWARGS_WARNED.clear()
+            ac.logger = logging.getLogger("test_bfb_features")
 
-            result = ac.run_bfbarchitect_reconstruct("graph.txt", whole_graph=True)
+            with self.assertLogs("test_bfb_features", level="WARNING") as logs:
+                result = ac.run_bfbarchitect_reconstruct("graph.txt", whole_graph=True)
         finally:
             if had_args:
                 ac.args = old_args
@@ -187,9 +288,16 @@ class BFBFeatureTests(unittest.TestCase):
                 del ac.args
             ac.BFBARCHITECT_RECONSTRUCT = old_reconstruct
             ac.BFBARCHITECT_CENTROMERES = old_centromeres
+            ac.BFBARCHITECT_UNSUPPORTED_KWARGS_WARNED.clear()
+            ac.BFBARCHITECT_UNSUPPORTED_KWARGS_WARNED.update(old_warned)
+            if had_logger:
+                ac.logger = old_logger
+            else:
+                del ac.logger
 
         self.assertEqual(result, [])
         self.assertEqual(calls, [True])
+        self.assertIn("min_lp_bound", logs.output[0])
 
 
 if __name__ == "__main__":
