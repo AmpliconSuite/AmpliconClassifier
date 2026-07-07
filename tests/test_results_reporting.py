@@ -6,6 +6,11 @@ from pathlib import Path
 from intervaltree import IntervalTree
 
 from ampclasslib.ac_annotation import amplicon_annotation
+from amplicon_classifier import (
+    INVALID_CLASS,
+    NO_FSCNA_CLASS,
+    infer_fan_decomposition_class,
+)
 from make_results_table import discover_feature_specs
 
 
@@ -104,6 +109,49 @@ class ResultsReportingTests(unittest.TestCase):
         self.assertEqual(amp_class, "Cyclic")
         self.assertNotIn("Cyclic_1", feature_dict)
         self.assertIn("FAN_1", feature_dict)
+
+    def test_annotation_keeps_fan_decomposition_when_fallback_intervals_are_filtered(self):
+        with tempfile.TemporaryDirectory(prefix="ac-reporting-") as tmpdir:
+            graph = Path(tmpdir) / "sample_amplicon1_graph.txt"
+            graph.write_text("sequence chr1:100+ chr1:2200- 3\n", encoding="utf-8")
+
+            _, _, _, feature_dict, _, amp_class = amplicon_annotation(
+                cycleList=[[1]],
+                segSeqD={0: ("", 0, 0), 1: ("chr1", 100, 2200)},
+                bfb_cycle_inds=[],
+                ecIndexClusters=[],
+                invalidInds=[],
+                bfbStat=False,
+                ecStat=False,
+                ampClass="Complex-non-cyclic",
+                graphf=str(graph),
+                add_chr_tag=False,
+                lcD=defaultdict(IntervalTree),
+                ref="GRCh38",
+                fan_intervals={"chr1": [(100, 2200)]},
+            )
+
+        self.assertEqual(amp_class, "Complex-non-cyclic")
+        self.assertIn("FAN_1", feature_dict)
+
+    def test_fan_no_fscna_gets_structural_decomposition_class(self):
+        amp_profile = defaultdict(float)
+        amp_profile.update({
+            "No amp/Invalid": 1.0,
+            "Linear": 0.0,
+            "Trivial cycle": 0.0,
+            "Complex-non-cyclic": 0.0,
+            "Complex-cyclic": 0.0,
+        })
+
+        self.assertEqual(
+            infer_fan_decomposition_class(NO_FSCNA_CLASS, amp_profile, rearr_e=2),
+            "Complex-non-cyclic",
+        )
+        self.assertEqual(
+            infer_fan_decomposition_class(INVALID_CLASS, amp_profile, rearr_e=2),
+            INVALID_CLASS,
+        )
 
 
 if __name__ == "__main__":

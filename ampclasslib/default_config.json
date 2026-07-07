@@ -12,6 +12,8 @@
     "max_segdup_size": 1000000,
     "segdup_max_extra_fraction": 0.25,
     "decomposition_strictness": 0.1,
+    "lc_cycle_max_bp_fraction": 0.1,
+    "lc_cycle_max_breakend_fraction": 0.1,
     "min_flow": 1.0,
     "min_fb_read_prop": 0.25,
     "fb_break_weight_prop": 0.3,

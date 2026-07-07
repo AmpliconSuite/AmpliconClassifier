@@ -25,6 +25,8 @@ class ConfigVars:
         max_segdup_size = 1000000
         segdup_max_extra_fraction = 0.25
         decomposition_strictness = 0.1
+        lc_cycle_max_bp_fraction = 0.10
+        lc_cycle_max_breakend_fraction = 0.10
         # bfb-related items
         min_fb_read_prop = 0.25
         fb_break_weight_prop = 0.3
@@ -242,6 +244,106 @@ def get_amp_outside_bounds(graphf, add_chr_tag):
     return (xc, xs), (yc, ye), ee_spans
 
 
+def _parse_graph_vertex(vertex, add_chr_tag=False):
+    chrom, pos_dir = vertex.rsplit(":", 1)
+    if add_chr_tag and not chrom.startswith("chr"):
+        chrom = "chr" + chrom
+    return chrom, int(pos_dir[:-1]), pos_dir[-1]
+
+
+def _discordant_edge_key(v1, v2):
+    return tuple(sorted((v1, v2)))
+
+
+def get_discordant_edge_keys(graphf, add_chr_tag=False):
+    discordant_edges = set()
+    with open(graphf) as infile:
+        for line in infile:
+            if not line.startswith("discordant"):
+                continue
+            fields = line.rstrip().rsplit()
+            if len(fields) < 2:
+                continue
+            try:
+                v1, v2 = fields[1].rsplit("->", 1)
+                discordant_edges.add(_discordant_edge_key(
+                    _parse_graph_vertex(v1, add_chr_tag),
+                    _parse_graph_vertex(v2, add_chr_tag),
+                ))
+            except (IndexError, ValueError):
+                continue
+
+    return discordant_edges
+
+
+def _signed_segment_entry_vertex(signed_seg, segSeqD):
+    chrom, start, end = segSeqD[abs(signed_seg)]
+    if signed_seg > 0:
+        return chrom, start, "-"
+    return chrom, end, "+"
+
+
+def _signed_segment_exit_vertex(signed_seg, segSeqD):
+    chrom, start, end = segSeqD[abs(signed_seg)]
+    if signed_seg > 0:
+        return chrom, end, "+"
+    return chrom, start, "-"
+
+
+def _walk_junction_pairs(num_ss):
+    pairs = list(zip(num_ss[:-1], num_ss[1:]))
+    if 0 not in num_ss and len(num_ss) > 1:
+        pairs.append((num_ss[-1], num_ss[0]))
+    return pairs
+
+
+def _lc_overlap_bp(lcD, chrom, start, end):
+    return sum(max(0, min(end, iv.end) - max(start, iv.begin)) for iv in lcD[chrom].overlap(start, end))
+
+
+def lc_cycle_content(num_ss, segSeqD, lcD, discordant_edge_keys):
+    total_bp = 0
+    lc_bp = 0
+    first_lc_overlap = None
+    for signed_seg in num_ss:
+        if signed_seg == 0:
+            continue
+        chrom, start, end = segSeqD[abs(signed_seg)]
+        total_bp += max(0, end - start)
+        overlap_bp = _lc_overlap_bp(lcD, chrom, start, end)
+        if overlap_bp:
+            lc_bp += overlap_bp
+            if first_lc_overlap is None:
+                first_lc_overlap = (chrom, start, end)
+
+    total_breakends = 0
+    lc_breakends = 0
+    for a, b in _walk_junction_pairs(num_ss):
+        if a == 0 or b == 0:
+            continue
+        v1 = _signed_segment_exit_vertex(a, segSeqD)
+        v2 = _signed_segment_entry_vertex(b, segSeqD)
+        if _discordant_edge_key(v1, v2) not in discordant_edge_keys:
+            continue
+
+        for chrom, pos, _strand in (v1, v2):
+            total_breakends += 1
+            if lcD[chrom].overlaps(pos, pos + 1):
+                lc_breakends += 1
+
+    bp_fraction = lc_bp / float(total_bp) if total_bp else 0.0
+    breakend_fraction = lc_breakends / float(total_breakends) if total_breakends else 0.0
+    return {
+        "total_bp": total_bp,
+        "lc_bp": lc_bp,
+        "bp_fraction": bp_fraction,
+        "total_breakends": total_breakends,
+        "lc_breakends": lc_breakends,
+        "breakend_fraction": breakend_fraction,
+        "first_lc_overlap": first_lc_overlap,
+    }
+
+
 def get_diff(e1, e2, segSeqD):
     p1_abs = segSeqD[abs(e1)]
     p2_abs = segSeqD[abs(e2)]
@@ -395,6 +497,7 @@ def repair_cycle(cycle, segSeqD, patch_links, xt, yt, ee_spans):
 
 def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
     xt, yt, ee_spans = get_amp_outside_bounds(graphf, add_chr_tag)
+    discordant_edge_keys = get_discordant_edge_keys(graphf, add_chr_tag)
     segSeqD = {0: (None, 0, 0)}
     cycleList = []
     cycleCNs = []
@@ -421,7 +524,6 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
                 cd = dict(cf)
                 ss = cd["Segments"]
                 num_ss = [int(x[-1] + x[:-1]) for x in ss.rsplit(",")]
-                lcCycle = False
                 pop_inds = []
                 for seg_ind, seg in enumerate(num_ss):
                     t = segSeqD[abs(seg)]
@@ -430,12 +532,31 @@ def parseCycle(cyclef, graphf, add_chr_tag, lcD, patch_links):
                             pop_inds.append(seg_ind)
                             continue
 
-                        else:
-                            logger.info("Cycle was LC: {} | overlaps {}:{}-{}".format(line.rstrip(), str(t[0]), str(t[1]), str(t[2])))
-                            lcCycle = True
-                            break
+                pop_ind_set = set(pop_inds)
+                eval_num_ss = [seg for seg_ind, seg in enumerate(num_ss) if seg_ind not in pop_ind_set]
+                lc_stats = lc_cycle_content(eval_num_ss, segSeqD, lcD, discordant_edge_keys)
+                lc_bp_filter = (
+                    lc_stats["lc_bp"] > 0 and
+                    lc_stats["bp_fraction"] >= ConfigVars.lc_cycle_max_bp_fraction
+                )
+                lc_breakend_filter = (
+                    lc_stats["lc_breakends"] > 0 and
+                    lc_stats["breakend_fraction"] >= ConfigVars.lc_cycle_max_breakend_fraction
+                )
 
-                if lcCycle:
+                if lc_bp_filter or lc_breakend_filter:
+                    first_overlap = lc_stats["first_lc_overlap"]
+                    if first_overlap:
+                        overlap_msg = " | overlaps {}:{}-{}".format(
+                            str(first_overlap[0]), str(first_overlap[1]), str(first_overlap[2])
+                        )
+                    else:
+                        overlap_msg = ""
+                    logger.info(
+                        "Cycle was LC: {}{} | LC_bp_fraction={:.4f}; LC_breakend_fraction={:.4f}".format(
+                            line.rstrip(), overlap_msg, lc_stats["bp_fraction"], lc_stats["breakend_fraction"]
+                        )
+                    )
                     lc_filtered_cycles += 1
                     continue
 

@@ -341,6 +341,8 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                     ampClass = "Invalid"
                 elif other_interval_dict and ampClass == "Cyclic":
                     pass
+                elif fan_intervals:
+                    pass
                 else:
                     ampClass = "No-FSCNA"
         else:

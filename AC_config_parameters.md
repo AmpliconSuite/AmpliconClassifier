@@ -10,6 +10,7 @@ This document describes all configuration parameters available in AmpliconClassi
 - [Cycle Classification Parameters](#cycle-classification-parameters)
 - [Segmental Duplication Parameters](#segmental-duplication-parameters)
 - [Decomposition Parameters](#decomposition-parameters)
+- [Low-Complexity Filtering Parameters](#low-complexity-filtering-parameters)
 - [BFB (Breakage-Fusion-Bridge) Parameters](#bfb-breakage-fusion-bridge-parameters)
 
 ---
@@ -112,6 +113,20 @@ This document describes all configuration parameters available in AmpliconClassi
   - Used in `cycleIsNoAmpInvalid()` as part of the scaling calculation
   - Used in `clusterECCycles()` to filter cycles with insufficient CN
   - Can be overridden with `--min_flow` command-line argument
+
+---
+
+## Low-Complexity Filtering Parameters
+
+### `lc_cycle_max_bp_fraction`
+- **Default:** 0.10
+- **Description:** Maximum fraction of a path/cycle's segment base pairs that may overlap low-complexity or poor-mappability intervals before that path/cycle is removed during cycle parsing.
+- **Usage:** In `parseCycle()`, segment lengths are counted in the order they appear in the path/cycle, so repeated segment uses contribute repeatedly. Paths/cycles are retained only when the LC-overlapping bp fraction is below this threshold and the LC breakend fraction is also below `lc_cycle_max_breakend_fraction`.
+
+### `lc_cycle_max_breakend_fraction`
+- **Default:** 0.10
+- **Description:** Maximum fraction of discordant-junction breakends used by a path/cycle that may fall in low-complexity or poor-mappability intervals before that path/cycle is removed.
+- **Usage:** In `parseCycle()`, discordant junctions are inferred from adjacent signed segments in the path/cycle and matched against graph discordant edges. Concordant reference adjacencies and CoRAL path constraints are not counted. Each matched discordant junction contributes two breakends. Paths/cycles are retained only when this breakend fraction is below the threshold and the LC bp fraction is also below `lc_cycle_max_bp_fraction`.
 
 ---
 

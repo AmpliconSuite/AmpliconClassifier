@@ -26,6 +26,8 @@ DEFAULT_CONFIG = {
     "max_segdup_size": 1000000,  # maximum allowed size for something to be a segmental dup
     "segdup_max_extra_fraction": 0.25,  # maximum additional CN ratio beyond baseline 2x for a segmental dup
     "decomposition_strictness": 0.1,    # for singleton paths/cycles, strictness scale of filtering path flow against CN
+    "lc_cycle_max_bp_fraction": 0.10,  # max LC-overlapping bp fraction allowed per path/cycle
+    "lc_cycle_max_breakend_fraction": 0.10,  # max LC-overlapping discordant breakend fraction allowed per path/cycle
     "min_flow": 1.0,          # minimum flow to consider path for classification as valid focal amp
 
     # bfb-related items
@@ -127,6 +129,12 @@ def validate_config(config):
     # Validate percentage/ratio values
     if not 0 <= config["decomposition_strictness"] <= 1:
         raise ValueError("decomposition_strictness must be between 0 and 1")
+
+    if not 0 <= config["lc_cycle_max_bp_fraction"] <= 1:
+        raise ValueError("lc_cycle_max_bp_fraction must be between 0 and 1")
+
+    if not 0 <= config["lc_cycle_max_breakend_fraction"] <= 1:
+        raise ValueError("lc_cycle_max_breakend_fraction must be between 0 and 1")
 
     if not 0 <= config["cycCut"] <= 1:
         raise ValueError("cycCut must be between 0 and 1")

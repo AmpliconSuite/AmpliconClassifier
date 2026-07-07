@@ -81,6 +81,23 @@ def finalize_no_amp_invalid_class(amp_class, lc_filtered_cycle_count):
 
     return NO_FSCNA_CLASS
 
+
+def infer_fan_decomposition_class(amp_class, amp_profile, rearr_e):
+    if amp_class not in {NO_AMP_INVALID_INTERNAL_CLASS, NO_FSCNA_CLASS}:
+        return amp_class
+
+    cyc_sig = amp_profile["Trivial cycle"] + amp_profile["Complex-cyclic"]
+    if cyc_sig > 0:
+        return "Cyclic"
+    if amp_profile["Complex-non-cyclic"] > 0 or rearr_e > 1:
+        return "Complex-non-cyclic"
+    if amp_profile["Linear"] > 0:
+        return "Linear"
+
+    # FAN is a rearranged focal amplification mechanism; avoid pairing FAN+ with
+    # a no-focal-amplification placeholder when AA decomposition was too weak.
+    return "Complex-non-cyclic"
+
 # ------------------------------------------------------------
 # Methods to compute values used in classification
 def get_size(cycle, segSeqD):
@@ -1111,12 +1128,6 @@ def run_bfbarchitect_reconstruct(graphf, whole_graph, reverse_polarity=False, re
         err = str(e)
         if "min_lp_bound" in kwargs and "min_lp_bound" in err:
             kwargs.pop("min_lp_bound")
-            return _round_scores(BFBARCHITECT_RECONSTRUCT(graphf, **kwargs))
-        raise
-    except Exception as e:
-        if kwargs.get("solver") is None and "expired" in str(e).lower():
-            logger.info("BFBArchitect: Gurobi license unavailable, retrying with CBC solver.")
-            kwargs["solver"] = "cbc"
             return _round_scores(BFBARCHITECT_RECONSTRUCT(graphf, **kwargs))
         raise
 
@@ -2166,6 +2177,8 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
     ca_result = _run_fan_from_edges(_ca_seq_edges, _ca_sv_edges)
     ca_result["amplicon_intervals"] = _get_intervals_from_seq_edges(_ca_seq_edges)
     is_fan = (ca_result["decision"] == "FAN")
+    if is_fan:
+        ampClass = infer_fan_decomposition_class(ampClass, AMP_dvaluesDict, rearr_e)
 
     ecStat = False
     bfbStat = False

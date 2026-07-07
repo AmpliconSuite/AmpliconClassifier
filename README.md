@@ -156,7 +156,7 @@ The `amplicon_decomposition_class` is an abstract label and can be one of six cl
 - `Complex non-cyclic`: (CNC) The amplicon contains a focal amplification with significant rearrangements (e.g. derived by chromothripsis), but does not contain genome cycles characteristic of ecDNA. However, this may class still contain a BFB (check `BFB+` column).
 - `Linear`: A focal amplification with few to no significant rearrangments evident - frequently the exact mechanism is unclear. Label also includes low CN focal amplifications caused by tandem duplications.
 - `No-FSCNA`: The AA amplicon is valid, but AC did not detect a focal significant copy-number amplification.
-- `Invalid`: The AA amplicon failed AC validity checks, such as when cycles are removed by low-complexity filtering. AC also marks high foldback-orientation artifact cases as `Invalid` and logs QC guidance for re-running AmpliconSuite-pipeline with stricter foldback pair support.
+- `Invalid`: The AA amplicon failed AC validity checks, such as when cycles are removed by low-complexity filtering. LC filtering removes paths/cycles only when their LC-overlapping bp fraction or LC-overlapping discordant-breakend fraction exceeds configured thresholds. AC also marks high foldback-orientation artifact cases as `Invalid` and logs QC guidance for re-running AmpliconSuite-pipeline with stricter foldback pair support.
 - `Virus`: If the GRCh38_viral reference was used, then this amplicon corresponds to an oncoviral genome.
 
 #### ****`[prefix]_gene_list.tsv`****
@@ -230,7 +230,7 @@ Additionally, there are three directories  created by `amplicon_classifier.py`. 
   - Intervals reported in these bed files do not represent the structure of ecDNA, and may face limitations related to missing SVs or inexactly refined amplicon endpoints (a limitation of short-reads).
 
 - `[prefix]_SV_summaries/`, which contains tab-separated files summarizing the SVs detected by AA and what features the overlap in the amplicon.
-- `[prefix]_annotated_cycles_files/`, which contains AA cycles files with additional annotations about length of discovered paths/cycles and their classification status. Using these annotated cycles files is preferred over the unannotated cycles file produced by AA. These cycles are filtered to remove cycles overlapping low-complexity regions of the genome, patches reference genome issues, and filters duplicate cycle entries erroneously output by AA (uncommon).
+- `[prefix]_annotated_cycles_files/`, which contains AA cycles files with additional annotations about length of discovered paths/cycles and their classification status. Using these annotated cycles files is preferred over the unannotated cycles file produced by AA. These cycles are filtered to remove paths/cycles with excessive low-complexity content, patch reference genome issues, and filter duplicate cycle entries erroneously output by AA (uncommon).
 
 #### Results table
 By default (in `--AA_results`/`--input` mode), AC creates `[prefix]_result_table.tsv` and `[prefix]_result_data.json`; pass `--no_results_table` to skip this. The table has one row per reported feature, including ecDNA, BFB, decomposition features, and FAN features. FAN rows use the numbered feature ID `FAN_1`; the `FAN probability` column reports the model probability for each amplicon, and the `Contains viral` column carries the amplicon's `contains_viral` status.
