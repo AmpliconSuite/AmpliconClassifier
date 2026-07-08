@@ -37,6 +37,8 @@ pip install gurobipy pulp
 
 ## 2. Install BFBArchitect (editable, from source)
 
+BFBArchitect is a core AmpliconClassifier dependency and is normally installed automatically from PyPI. For development, install it as an editable checkout instead so local changes to BFBArchitect are picked up immediately:
+
 ```bash
 pip install -e /path/to/BFBArchitect
 ```

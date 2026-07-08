@@ -28,7 +28,6 @@ from ampclasslib.classification_records import (
     AmpliconInput, AmpliconRecord, ClassificationContext, Feature, collect_amplicon_records
 )
 from ampclasslib.config_params import load_config
-from ampclasslib.radar_plotting import *
 from ampclasslib._version import __ampliconclassifier_version__
 from ampclasslib.fan_ml import classify_from_edges as _fan_classify_from_edges
 from ampclasslib.tid_filter import check_tid as _check_tid
@@ -1497,24 +1496,6 @@ def load_bfbarchitect_centromeres(aa_data_repo_base, ref):
 # ------------------------------------------------------------
 
 
-def plotting(classification_results):
-    textCategories = ["No-FSCNA/\nInvalid", "Linear\namplification", "Trivial\ncycle", "Complex\nnon-cyclic",
-                      "Complex\ncyclic", "BFB\nfoldback"]
-    if args.plotstyle == "grouped":
-        logger.info("plotting")
-        make_classification_radar(
-            textCategories, classification_results.AMP_dvaluesList, args.o + "_amp_class",
-            classification_results.sampNames
-        )
-
-    elif args.plotstyle == "individual":
-        logger.info("plotting")
-        for a, s in zip(classification_results.AMP_dvaluesList, classification_results.sampNames):
-            # print(textCategories, a)
-            make_classification_radar(textCategories, [a[:len(textCategories)], ], args.o + "_" + s + "_amp_class",
-                                      classification_results.sampNames)
-
-
 FEATURE_SIMILARITY_TYPES = {"ecDNA", "BFB", "Complex-non-cyclic", "Linear", "FAN"}
 FILTER_SIMILARITY_TYPES = {"ecDNA", "BFB", "Complex-non-cyclic", "Linear", "FAN"}
 AMPLICON_SCOPE_FILTER_TYPES = {"FAN"}
@@ -2402,8 +2383,6 @@ if __name__ == "__main__":
     parser.add_argument("--decomposition_strictness", help="Value between 0 and 1 reflecting how strictly to filter "
                         "low CN decompositions (default = 0.1). Higher values filter more of the low-weight "
                         "decompositions.", type=float, default=0.1)
-    parser.add_argument("--plotstyle", help="Type of visualizations to produce.",
-                        choices=["grouped", "individual", "noplot"], default="noplot")
     parser.add_argument("--force", help="Disable No-FSCNA/Invalid class if possible", action='store_true')
     parser.add_argument("--add_chr_tag", help="Add \'chr\' to the beginning of chromosome names in input files.",
                         action='store_true')
@@ -2678,9 +2657,6 @@ if __name__ == "__main__":
             len(flist), args.filter_pval, classification_results.feature_registry,
             read_feature_similarity_scores(args.o), classification_results
         )
-
-    # make any requested visualizations
-    plotting(classification_results)
 
     logger.info("Writing outputs...")
     write_classification_results(args, classification_results, categories, summary_map)

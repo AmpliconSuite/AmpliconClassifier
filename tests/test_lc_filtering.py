@@ -5,6 +5,7 @@ from pathlib import Path
 
 from intervaltree import IntervalTree
 
+import _pathfix  # noqa: F401
 from ampclasslib.ac_util import ConfigVars, parseCycle
 
 

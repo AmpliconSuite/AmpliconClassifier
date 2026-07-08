@@ -4,6 +4,7 @@ from collections import defaultdict
 from types import SimpleNamespace
 from tempfile import NamedTemporaryFile
 
+import _pathfix  # noqa: F401
 import amplicon_classifier as ac
 from ampclasslib.classification_records import Feature
 from amplicon_classifier import (

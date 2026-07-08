@@ -1,9 +1,6 @@
-import os
-import tempfile
 import unittest
 
-os.environ.setdefault("MPLCONFIGDIR", tempfile.mkdtemp(prefix="ac-test-mpl-"))
-
+import _pathfix  # noqa: F401
 import amplicon_classifier as ac
 
 

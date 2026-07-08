@@ -5,6 +5,7 @@ from pathlib import Path
 
 from intervaltree import IntervalTree
 
+import _pathfix  # noqa: F401
 from ampclasslib.ac_annotation import amplicon_annotation
 from amplicon_classifier import (
     INVALID_CLASS,

@@ -1,5 +1,5 @@
 intervaltree
-matplotlib
 numpy
 pandas
 scipy
+BFBArchitect>=1.0.0

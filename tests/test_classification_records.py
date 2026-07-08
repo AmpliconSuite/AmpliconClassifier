@@ -1,5 +1,6 @@
 import unittest
 
+import _pathfix  # noqa: F401
 from ampclasslib.classification_records import AmpliconRecord, collect_amplicon_records
 
 

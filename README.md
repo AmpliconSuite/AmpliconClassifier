@@ -1,8 +1,8 @@
 # AmpliconClassifier
-![GitHub release (latest by date)](https://img.shields.io/github/v/release/jluebeck/AmpliconClassifier?display_name=release)
-![GitHub](https://img.shields.io/github/license/jluebeck/AmpliconClassifier)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/AmpliconSuite/AmpliconClassifier?display_name=release)
+![GitHub](https://img.shields.io/github/license/AmpliconSuite/AmpliconClassifier)
 
-### Classify [AmpliconArchitect](https://github.com/jluebeck/AmpliconArchitect) outputs to predict types of focal amplifications present.
+### Classify [AmpliconArchitect](https://github.com/AmpliconSuite/AmpliconArchitect) outputs to predict types of focal amplifications present.
 
 This tool classifies the outputs of [AmpliconArchitect](https://github.com/AmpliconSuite/AmpliconSuite-pipeline).
 
@@ -42,7 +42,7 @@ conda activate ampliconclassifier
 #### Step 2: Install dependencies
 ```bash
 # Required
-conda install -c conda-forge -c bioconda intervaltree scipy pandas numpy matplotlib-base
+conda install -c conda-forge -c bioconda intervaltree scipy pandas numpy
 
 # Optional: needed only for check_SV_support.py and BAM-based SV validation
 conda install -c bioconda pysam
@@ -51,7 +51,9 @@ conda install -c bioconda pysam
 conda install -c conda-forge pyliftover
 ```
 
-If you prefer pip, clone the repository first and then install from the source tree in Step 3. The pip dependency list is also available in `requirements.txt`:
+[BFBArchitect](https://github.com/AmpliconSuite/BFBArchitect), used for additional BFB detection, is a core dependency but is only published on PyPI (not conda-forge/bioconda), so it is installed via pip in Step 3 regardless of which path you take here.
+
+If you prefer pip for everything, clone the repository first and then install from the source tree in Step 3. The pip dependency list is also available in `requirements.txt`:
 
 ```bash
 pip install -r requirements.txt
@@ -60,10 +62,14 @@ pip install -r requirements.txt
 
 #### Step 3: Clone and install AmpliconClassifier
 ```bash
-git clone https://github.com/jluebeck/AmpliconClassifier.git
+git clone https://github.com/AmpliconSuite/AmpliconClassifier.git
 cd AmpliconClassifier
 python -m pip install -e .
 ```
+
+This also installs BFBArchitect from PyPI, since it is a core dependency. BFBArchitect-positive regions are integrated into `BFB+` calls and reported BFB feature intervals; use `--no_bfbarchitect` to disable this integration at runtime. When `--verbose_classification` is set, BFBArchitect scores and the BFB call source are reported in the classification profile.
+
+BFBArchitect uses the free, open-source **CBC** solver by default. If a **Gurobi** or **Mosek** license is present (`$HOME/gurobi.lic` or `$HOME/mosek/mosek.lic`), it is used automatically for faster BFB reconstruction; a license is not required. In our testing the BFB calls agree across solvers in the large majority of cases, though in rare borderline instances the choice of solver can shift a BFB score across the `BFB+`/`BFB-` threshold. See the [AmpliconSuite-pipeline README](https://github.com/AmpliconSuite/AmpliconSuite-pipeline#optimizer-licenses--do-i-need-one-short-answer-no) for details.
 
 For older workflows that call scripts directly from the source tree, you may still set `$AC_SRC`:
 
@@ -79,18 +85,6 @@ Mac users will also need:
 ```bash
 brew install coreutils
 ```
-
-#### Optional: BFBArchitect
-
-AmpliconClassifier uses BFBArchitect for additional BFB detection when it is installed. BFBArchitect is not installed as an AmpliconClassifier dependency yet, so install it separately:
-
-```bash
-python -m pip install -e /path/to/BFBArchitect
-```
-
-BFBArchitect-positive regions are integrated into `BFB+` calls and reported BFB feature intervals. Use `--no_bfbarchitect` to disable this integration. When `--verbose_classification` is set, BFBArchitect scores and the BFB call source are reported in the classification profile.
-
-BFBArchitect uses the free, open-source **CBC** solver by default. If a **Gurobi** or **Mosek** license is present (`$HOME/gurobi.lic` or `$HOME/mosek/mosek.lic`), it is used automatically for faster BFB reconstruction; a license is not required. In our testing the BFB calls agree across solvers in the large majority of cases, though in rare borderline instances the choice of solver can shift a BFB score across the `BFB+`/`BFB-` threshold. See the [AmpliconSuite-pipeline README](https://github.com/AmpliconSuite/AmpliconSuite-pipeline#optimizer-licenses--do-i-need-one-short-answer-no) for details.
 
 
 ### 2. Usage
@@ -257,7 +251,6 @@ Else if running on multiple amplicons, use argument
 | `--verbose_classification`                      | Add verbose columns (raw classification scores, and BFBArchitect score summaries / `BFB_source` when BFBArchitect is enabled) to the `amplicon_classification_profiles.tsv` file. Useful for debugging.              |
 | `--report_complexity`                           | [Deprecated — on by default] Compute an amplicon entropy/complexity measure for each amplicon (written to `_feature_complexity.tsv`).                                                                                |
 | `--force`                                       | Disable No-FSCNA/Invalid class, if possible. Use only when extremely large CN seeds were used in AA amplicon generation (>10 Mbp intervals) or if debugging.                                                           |
-| `--plotstyle [noplot, individual]`              | \[experimental] Produce a radar-style plot of classification strengths. Default `noplot`.                                                                                                                            |
 | `--decomposition_strictness`                    | Value between 0 and 1 reflecting how strictly to filter low CN decompositions (default = 0.1). Higher values filter more of the low-weight decompositions.                                                           |
 | `--exclude_bed`                                 | Provide a bed file of regions to ignore during classification. Useful for separating linked amplicons or augmenting existing low-complexity annotations.                                                             |
 | `--no_LC_filter`                                | Set this to turn off filtering low-complexity & poor mappability genome region paths & cycles based on the regions in the AA data repo.                                                                              |
