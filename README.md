@@ -79,7 +79,28 @@ source ~/.bashrc
 ```
 
 #### Step 4: Set up the AA data repo
-Set the `$AA_DATA_REPO` environment variable pointing to the reference genome data. See setup instructions [here](https://github.com/AmpliconSuite/AmpliconArchitect#setting-up-the-aa-data-repo).
+AmpliconClassifier reads a small set of reference annotation files (mappability/low-complexity regions, gene models, oncogene list, centromeres) from a per-genome-build directory pointed to by `$AA_DATA_REPO`. First, set the environment variable and create the directory if needed:
+
+```bash
+echo 'export AA_DATA_REPO=~/data_repo/' >> ~/.bashrc
+source ~/.bashrc
+mkdir -p $AA_DATA_REPO
+```
+
+**Easiest: if you have [AmpliconSuite-pipeline](https://github.com/AmpliconSuite/AmpliconSuite-pipeline) installed**, fetch a reference build with:
+```bash
+AmpliconSuite-pipeline.py --download_repo GRCh38   # or hg19, GRCh37, mm10, GRCh38_viral
+```
+
+**Without AmpliconSuite-pipeline**, the same data is a plain, unauthenticated download — no need to install AmpliconSuite-pipeline just for this:
+```bash
+ref=GRCh38   # or hg19, GRCh37, mm10, GRCh38_viral
+wget https://refs.ampliconrepository.org/data/module_support_files/AmpliconArchitect/${ref}.tar.gz -P $AA_DATA_REPO
+tar -xzf $AA_DATA_REPO/${ref}.tar.gz -C $AA_DATA_REPO
+rm $AA_DATA_REPO/${ref}.tar.gz
+```
+
+Use the plain reference name (e.g. `GRCh38`), not the `_indexed` variant — the `_indexed` builds add a BWA index used only for AmpliconArchitect's read alignment step, which AmpliconClassifier never needs.
 
 Mac users will also need:
 ```bash
