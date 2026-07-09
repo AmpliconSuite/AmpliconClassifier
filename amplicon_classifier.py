@@ -1426,7 +1426,7 @@ def build_bfb_features(bfb_cycle_inds, bfbarchitect_summary, cycleList, segSeqD,
 
     passing_intervals = bfbarchitect_summary.get("passing_intervals", [])
     if passing_intervals:
-        seq_edges, _sv_edges = parse_graph_edges_raw(graphFile, args.add_chr_tag)
+        seq_edges, _sv_edges, _concordant_positions = parse_graph_edges_raw(graphFile, args.add_chr_tag)
         snapped_intervals = snap_bfbarchitect_intervals(passing_intervals, seq_edges, args.add_chr_tag)
         for ind, region in enumerate(snapped_intervals, 1):
             interval_dict = interval_dict_from_intervals([region])
@@ -1852,9 +1852,9 @@ def filter_similar_amplicons(n_files, pval, feature_registry, similarity_rows, c
             classification_results.AMP_classifications[ind] = (ampClass, ecStat, bfbStat, ecAmpliconCount)
 
 
-def _run_fan_from_edges(seq_edges, sv_edges):
+def _run_fan_from_edges(seq_edges, sv_edges, concordant_positions=None):
     try:
-        return _fan_classify_from_edges(seq_edges, sv_edges)
+        return _fan_classify_from_edges(seq_edges, sv_edges, concordant_positions=concordant_positions)
     except Exception as e:
         logger.warning("FAN classifier failed: {}".format(e))
         return {"decision": "not_FAN", "probability": 0.0, "features": {}}
@@ -2128,7 +2128,7 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
         )
 
     # Parse graph edges once here; used for FAN and the post-ecStat TID check.
-    _ca_seq_edges, _ca_sv_edges = parse_graph_edges_raw(graphFile, args.add_chr_tag)
+    _ca_seq_edges, _ca_sv_edges, _ca_concordant_positions = parse_graph_edges_raw(graphFile, args.add_chr_tag)
 
     if bfb_suppressed_as_artifact:
         bfbarchitect_summary = empty_bfbarchitect_summary()
@@ -2155,7 +2155,7 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
     bfb_detected = bool(bfbClass) or bool(bfb_features)
     bfbarchitect_detected = BFBARCHITECT_SOURCE in bfb_sources
 
-    ca_result = _run_fan_from_edges(_ca_seq_edges, _ca_sv_edges)
+    ca_result = _run_fan_from_edges(_ca_seq_edges, _ca_sv_edges, _ca_concordant_positions)
     ca_result["amplicon_intervals"] = _get_intervals_from_seq_edges(_ca_seq_edges)
     is_fan = (ca_result["decision"] == "FAN")
     if is_fan:

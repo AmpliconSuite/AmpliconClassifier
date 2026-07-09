@@ -77,7 +77,8 @@ def bed_to_interval_dict(bedf, add_chr_tag):
 
 def parse_graph_edges_raw(graphf, add_chr_tag=False):
     """
-    Read an AA graph file once and return raw sequence and discordant edges.
+    Read an AA graph file once and return raw sequence, discordant, and
+    concordant edges.
 
     Used to feed the FAN classifier without re-reading the file.
 
@@ -86,6 +87,11 @@ def parse_graph_edges_raw(graphf, add_chr_tag=False):
     seq_edges : list of dict  — keys: chrom, start, end, cn, size_bp
     sv_edges  : list of dict  — keys: chrom1, pos1, strand1,
                                       chrom2, pos2, strand2, cn, sv_type
+    concordant_positions : set of (chrom, pos) — both endpoints of every
+        concordant edge. Concordant edges always join two real segment
+        boundaries (never the -1/unknown vertex), so this set identifies
+        segments that are genuinely chained to a neighboring segment as
+        opposed to segments only reachable via a "source" edge.
     """
     def _sv_type(c1, p1, s1, c2, p2, s2):
         if c1 != c2:
@@ -98,6 +104,7 @@ def parse_graph_edges_raw(graphf, add_chr_tag=False):
 
     seq_edges = []
     sv_edges  = []
+    concordant_positions = set()
     with open(graphf) as fh:
         for line in fh:
             parts = line.rstrip("\n").split("\t")
@@ -135,7 +142,23 @@ def parse_graph_edges_raw(graphf, add_chr_tag=False):
                 sv_edges.append({"chrom1": c1, "pos1": p1, "strand1": s1,
                                   "chrom2": c2, "pos2": p2, "strand2": s2,
                                   "cn": cn, "sv_type": _sv_type(c1, p1, s1, c2, p2, s2)})
-    return seq_edges, sv_edges
+            elif parts[0] == "concordant":
+                try:
+                    left, right = parts[1].split("->", 1)
+                    c1, pd1 = left.rsplit(":", 1)
+                    c2, pd2 = right.rsplit(":", 1)
+                    p1 = int(pd1[:-1])
+                    p2 = int(pd2[:-1])
+                    if add_chr_tag:
+                        if not c1.startswith("chr"):
+                            c1 = "chr" + c1
+                        if not c2.startswith("chr"):
+                            c2 = "chr" + c2
+                except (ValueError, IndexError):
+                    continue
+                concordant_positions.add((c1, p1))
+                concordant_positions.add((c2, p2))
+    return seq_edges, sv_edges, concordant_positions
 
 
 def parse_bpg(bpgf, add_chr_tag, lcD=None, subset_ivald=None, cn_cut=0, cg5D=None, min_de=0, min_de_size=0):

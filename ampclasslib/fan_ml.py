@@ -7,7 +7,7 @@ Balanced accuracy: 0.961 (TCGA CV, grouped by patient), PR-AUC: 0.988
 Public API
 ----------
     # AC integration — pass pre-parsed edges to avoid re-reading the graph file:
-    result = classify_from_edges(seq_edges, sv_edges)
+    result = classify_from_edges(seq_edges, sv_edges, concordant_positions=concordant_positions)
 
     # standalone / CLI — reads the file internally:
     result = classify_graph(graph_path)
@@ -18,6 +18,10 @@ Public API
 seq_edges format: list of dicts with keys chrom, start, end, cn, size_bp
 sv_edges  format: list of dicts with keys chrom1, pos1, strand1,
                                           chrom2, pos2, strand2, cn, sv_type
+concordant_positions format (optional): set of (chrom, pos) tuples covering
+    both endpoints of every concordant edge in the graph. Used to tell a
+    segment genuinely chained to a real neighbor apart from one reachable
+    only via a "source" edge to the unknown vertex.
 """
 
 from __future__ import annotations
@@ -84,9 +88,18 @@ def _sv_type(chrom1, pos1, strand1, chrom2, pos2, strand2) -> str:
 
 
 def _parse_graph_and_sv_edges(graph_path: str) -> tuple:
-    """Read a graph file once, returning (seq_edges, sv_edges)."""
+    """
+    Read a graph file once, returning (seq_edges, sv_edges, concordant_positions).
+
+    concordant_positions is a set of (chrom, pos) covering both endpoints of
+    every concordant edge — concordant edges always join two real segment
+    boundaries (never the -1/unknown vertex), so this identifies segments
+    genuinely chained to a neighbor as opposed to ones only reachable via a
+    "source" edge to the unknown vertex.
+    """
     seq_edges = []
     sv_edges  = []
+    concordant_positions = set()
     with open(graph_path) as fh:
         for line in fh:
             parts = line.rstrip("\n").split("\t")
@@ -114,7 +127,16 @@ def _parse_graph_and_sv_edges(graph_path: str) -> tuple:
                 sv_edges.append({"chrom1": chrom1, "pos1": pos1, "strand1": strand1,
                                   "chrom2": chrom2, "pos2": pos2, "strand2": strand2,
                                   "cn": cn, "sv_type": svt})
-    return seq_edges, sv_edges
+            elif parts[0] == "concordant":
+                try:
+                    v1_tok, v2_tok = parts[1].split("->", 1)
+                    chrom1, pos1, _ = _parse_vertex(v1_tok)
+                    chrom2, pos2, _ = _parse_vertex(v2_tok)
+                except (ValueError, IndexError):
+                    continue
+                concordant_positions.add((chrom1, pos1))
+                concordant_positions.add((chrom2, pos2))
+    return seq_edges, sv_edges, concordant_positions
 
 
 # ── Feature extraction ────────────────────────────────────────────────────────
@@ -134,9 +156,24 @@ def _is_inter_or_large(edge: dict) -> bool:
     )
 
 
-def _envelope_span_mb(edges: list) -> float:
+# Segments smaller than this are dropped from envelope-boundary calculations
+# unless a concordant or discordant edge touches one of their endpoints, i.e.
+# they're chained to a real neighboring segment or split by a real SV. Older
+# AA callsets can emit tiny fragments reachable only via a "source" edge to
+# the unknown vertex (no real attachment at all) that otherwise inflate
+# amplified_span_mb by tens of Mb.
+_MIN_BOUNDARY_SEG_BP = 1000
+
+
+def _envelope_span_mb(edges: list, attachment_positions: set | None = None) -> float:
     if not edges:
         return 0.0
+    if attachment_positions is not None:
+        edges = [e for e in edges if e["size_bp"] >= _MIN_BOUNDARY_SEG_BP
+                 or (e["chrom"], e["start"]) in attachment_positions
+                 or (e["chrom"], e["end"]) in attachment_positions]
+        if not edges:
+            return 0.0
     by_chrom: dict = defaultdict(list)
     for e in edges:
         by_chrom[e["chrom"]].append(e)
@@ -148,13 +185,26 @@ def _envelope_span_mb(edges: list) -> float:
 
 
 def extract_features_from_edges(seq_edges: list, sv_edges: list,
-                                 cn_floor: float = 4.0) -> dict:
+                                 cn_floor: float = 4.0,
+                                 concordant_positions: set | None = None) -> dict:
     """Compute the 5 model features from pre-parsed graph edges."""
     amp_edges    = [e for e in seq_edges if e["cn"] > cn_floor]
     amp_cn40     = [e for e in seq_edges if e["cn"] > 40.0]
     qualifying   = [e for e in sv_edges  if not _is_short_intrachrom_del_dup(e)]
 
-    amplified_span_mb = round(_envelope_span_mb(amp_edges), 4)
+    # A segment genuinely tied into the amplicon structure has one of its own
+    # endpoints exactly at a discordant edge's position (an SV always splits
+    # the reference at its breakpoint) or a concordant edge's position (chained
+    # to a real neighboring segment). Only segments unsupported at BOTH ends --
+    # reachable only via a "source" edge to the unknown vertex -- are slivers.
+    attachment_positions = set()
+    for sv in sv_edges:
+        attachment_positions.add((sv["chrom1"], sv["pos1"]))
+        attachment_positions.add((sv["chrom2"], sv["pos2"]))
+    if concordant_positions:
+        attachment_positions |= concordant_positions
+
+    amplified_span_mb = round(_envelope_span_mb(amp_edges, attachment_positions), 4)
 
     sv_inter_large = sum(1 for e in qualifying if _is_inter_or_large(e))
 
@@ -187,7 +237,7 @@ def extract_features_from_edges(seq_edges: list, sv_edges: list,
     else:
         sv_crossing = 0.0
 
-    cn40_span_mb = round(_envelope_span_mb(amp_cn40), 4)
+    cn40_span_mb = round(_envelope_span_mb(amp_cn40, attachment_positions), 4)
 
     return {
         "amplified_span_mb":            amplified_span_mb,
@@ -220,13 +270,19 @@ def _score(feats: dict) -> float:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def classify_from_edges(seq_edges: list, sv_edges: list,
-                        cn_floor: float = 4.0) -> dict:
+                        cn_floor: float = 4.0,
+                        concordant_positions: set | None = None) -> dict:
     """
     Classify an amplicon given pre-parsed graph edges.
     Preferred entry point for AmpliconClassifier integration —
     avoids re-reading the graph file.
+
+    concordant_positions (optional): set of (chrom, pos) covering both
+    endpoints of every concordant edge in the graph. Pass this when
+    available so the sliver-envelope filter can tell a segment chained to
+    a real neighbor apart from one reachable only via a "source" edge.
     """
-    feats = extract_features_from_edges(seq_edges, sv_edges, cn_floor)
+    feats = extract_features_from_edges(seq_edges, sv_edges, cn_floor, concordant_positions)
     prob  = _score(feats)
     label = "FAN" if prob >= _THRESHOLD else "not_FAN"
     return {"decision": label, "probability": round(prob, 4), "features": feats}
@@ -238,8 +294,8 @@ def classify_graph(graph_path: str, cn_floor: float = 4.0) -> dict:
     Reads the file once internally. Prefer classify_from_edges when data
     is already parsed (e.g. inside AmpliconClassifier).
     """
-    seq_edges, sv_edges = _parse_graph_and_sv_edges(str(graph_path))
-    return classify_from_edges(seq_edges, sv_edges, cn_floor)
+    seq_edges, sv_edges, concordant_positions = _parse_graph_and_sv_edges(str(graph_path))
+    return classify_from_edges(seq_edges, sv_edges, cn_floor, concordant_positions)
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
