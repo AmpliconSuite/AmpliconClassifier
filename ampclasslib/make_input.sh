@@ -51,6 +51,15 @@ if [ "${#resolved_paths[@]}" -eq 0 ]; then
 fi
 
 is_excluded_path() {
+    local normalized_path
+    normalized_path=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+
+    case "$normalized_path" in
+        */bfbarchitect_outputs/*|*/*_bfbarchitect_outputs/*)
+            return 0
+            ;;
+    esac
+
     case "$1" in
         */._*|*BPG_converted*|*_classification/files/*)
             return 0

@@ -65,6 +65,38 @@ class MakeInputTests(unittest.TestCase):
             self.assertIn("Missing graph file for cycles file", result.stderr)
             self.assertIn("sampleB_amplicon1_graph.txt", result.stderr)
 
+    def test_make_input_excludes_bfbarchitect_output_directories(self):
+        with tempfile.TemporaryDirectory(prefix="ac-make-input-") as tmpdir:
+            root = Path(tmpdir)
+            aa_dir = root / "sampleC_AA_results"
+            touch(aa_dir / "sampleC_amplicon1_cycles.txt")
+            touch(aa_dir / "sampleC_amplicon1_graph.txt")
+
+            for dirname in ("bfbarchitect_outputs", "rerun_BFBArchitect_outputs"):
+                output_dir = root / dirname
+                touch(output_dir / "sampleC_BFB_cycles.txt")
+                touch(output_dir / "sampleC_BFB_graph.txt")
+                touch(output_dir / "sampleC_summary.txt")
+
+            outpre = root / "collection"
+            result = subprocess.run(
+                ["bash", str(MAKE_INPUT), str(root), str(outpre)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            input_lines = (root / "collection.input").read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(input_lines), 1)
+            self.assertIn(str(aa_dir / "sampleC_amplicon1_cycles.txt"), input_lines[0])
+            self.assertNotIn("BFBArchitect", input_lines[0])
+            self.assertNotIn("bfbarchitect", input_lines[0])
+            self.assertEqual(
+                (root / "collection_summary_map.txt").read_text(encoding="utf-8"),
+                "",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
