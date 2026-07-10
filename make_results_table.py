@@ -194,10 +194,28 @@ def cycles_graph_amp_lookup(input_file_path):
     return lookup
 
 
-def get_version_info(run_meta_dict):
+def read_ac_version_from_log(classBase):
+    # Standalone AC runs have no run_metadata.json, but amplicon_classifier.py logs its own
+    # version as the first line of "{output_prefix}.log" (format: "<ts> - INFO - AmpliconClassifier <version>").
+    log_file = classBase + ".log"
+    if not os.path.exists(log_file):
+        return None
+
+    marker = "AmpliconClassifier "
+    with open(log_file) as infile:
+        for line in infile:
+            if marker in line:
+                return line.rstrip().rsplit(marker, 1)[-1].strip()
+
+    return None
+
+
+def get_version_info(run_meta_dict, log_ac_version=None):
     asp, aa, ac = "NA", "NA", "NA"
     if "AC_version" in run_meta_dict and run_meta_dict["AC_version"]:
         ac = run_meta_dict["AC_version"]
+    elif log_ac_version:
+        ac = log_ac_version
 
     if "PAA_version" in run_meta_dict and run_meta_dict["PAA_version"]:
         asp = run_meta_dict["PAA_version"]
@@ -388,6 +406,7 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
         sys.exit(1)
 
     classBase = classification_file.rsplit("_amplicon_classification_profiles.tsv")[0]
+    log_ac_version = read_ac_version_from_log(classBase)
     ldir = os.path.dirname(classBase) + "/files/"
     if ldir == "/files/": ldir = "files/"
     if not os.path.exists(ldir): os.makedirs(ldir)
@@ -535,7 +554,7 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
             curr_run_metadata = run_metadata_dict[sample_name]
             if curr_run_metadata['ref_genome'] == "NA" and ref:
                 curr_run_metadata['ref_genome'] = ref
-            versions = get_version_info(curr_run_metadata)
+            versions = get_version_info(curr_run_metadata, log_ac_version)
             summary_files = (sumf, run_metadata_path[sample_name], sample_metadata_path[sample_name])
 
             feature_specs = discover_feature_specs(classD, ampliconID, classBedDir)
@@ -561,7 +580,7 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
             if curr_run_metadata['ref_genome'] == "NA" and ref:
                 curr_run_metadata["ref_genome"] = ref
 
-            versions = get_version_info(curr_run_metadata)
+            versions = get_version_info(curr_run_metadata, log_ac_version)
             summary_files = (sumf, run_metadata_path[sample_name], sample_metadata_path[sample_name])
             result_rows.append(build_no_feature_row(
                 sample_name, sumf, curr_sample_metadata, curr_run_metadata, cnv_bed_path, versions, summary_files
