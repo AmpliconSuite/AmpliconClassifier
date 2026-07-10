@@ -485,6 +485,15 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
             shutil.copy(cycles_file, ldir)
             shutil.copy(graph_file, ldir)
 
+            # CoRAL also emits "<prefix>_cycles.png"/"_cycles.pdf" (the cycle-decomposition plot;
+            # no AA equivalent, so there's no result-table column for it) - copy alongside the
+            # cycles/graph text files if present.
+            cycles_prefix = cycles_file.rsplit("_cycles.txt")[0]
+            for ext in (".png", ".pdf"):
+                cycles_image = cycles_prefix + "_cycles" + ext
+                if os.path.exists(cycles_image):
+                    shutil.copy(cycles_image, ldir)
+
             # what is the directory of the cycles file?
             cfile_dir = os.path.dirname(cycles_file)
             if (sample_name, cfile_dir) in sumf_dict:
@@ -512,6 +521,12 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
             image_locs = [AA_png_loc, AA_pdf_loc]
             for ind, f in enumerate(image_locs):
                 if not os.path.exists(f):
+                    # CoRAL emits "<prefix>_graph.png"/"_graph.pdf" instead of a bare "<prefix>.png" -
+                    # that's the structural-plot analogue of AA's sashimi image.
+                    fallback = amplicon_prefix + "_graph" + os.path.splitext(f)[1]
+                    if os.path.exists(fallback):
+                        image_locs[ind] = fallback
+                        continue
                     sys.stderr.write("Warning: image file " + f + " not found!\n")
                     image_locs[ind] = "Not found"
 
