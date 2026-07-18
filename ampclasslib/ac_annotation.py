@@ -91,7 +91,7 @@ def get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d):
     with open(ongene) as infile:
         for line in infile:
             fields = line.rstrip().rsplit()
-            ongene_set.add(fields[0])
+            ongene_set.add(fields[0].upper())
 
     feat_to_amped_gene = defaultdict(dict)
     for feat_name, curr_fd in feature_dict.items():
@@ -108,7 +108,7 @@ def get_genes_from_intervals(gene_lookup, feature_dict, gseg_cn_d):
                     else:
                         gene_cn = "unknown"
 
-                    is_oncogene = gname in ongene_set
+                    is_oncogene = gname.upper() in ongene_set
                     if gname not in feat_to_amped_gene[feat_name]:
                         ag_obj = amped_gene(gname, ncbi_id, has5p, has3p, gene_cn, is_oncogene)
                         feat_to_amped_gene[feat_name][gname] = ag_obj
