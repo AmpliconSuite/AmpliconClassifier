@@ -336,7 +336,7 @@ def compute_f_from_AA_graph(graphf, lcD):
     return fbEdges, fb_readcount, fb_readcount / max(1.0, float(fb_readcount + nonFbCount)), maxCN, tot_over_min_cn, total_seq_len
 
 
-def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs, graph_cns):
+def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs, graph_cns, amp_id=None):
     for ind in non_bfb_cycle_inds:
         cycle = cycleList[ind]
         length = get_size(cycle, segSeqD)
@@ -347,8 +347,8 @@ def nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs, gr
 
             else:
                 minSeg, maxSeg, (ca, pal), (cb, pbr) = min_max_cycle_posns(cycle, segSeqD)
-                change_al = pos_lies_on_cn_change(ca, pal, graph_cns)
-                change_br = pos_lies_on_cn_change(cb, pbr, graph_cns)
+                change_al = pos_lies_on_cn_change(ca, pal, graph_cns, amp_id=amp_id)
+                change_br = pos_lies_on_cn_change(cb, pbr, graph_cns, amp_id=amp_id)
                 return change_al and change_br
 
         elif args.ref == "GRCh38_viral" and is_human_viral_hybrid(args.ref, cycle, segSeqD):
@@ -379,7 +379,7 @@ def cycle_contains_foldback(cycle, segSeqD):
 
 
 # proportion of cycles with foldbacks
-def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, graph_cns):
+def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, graph_cns, amp_id=None):
     FB_breaks = 0.0
     distal_breaks = 0.0
     lin_breaks = 0.0
@@ -474,7 +474,7 @@ def cycles_file_bfb_props(cycleList, segSeqD, cycleCNs, invalidInds, graphf, gra
             non_bfb_cycle_weight += cycleCNs[ind]
             non_bfb_cycle_inds.append(ind)
 
-    hasEC = nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs, graph_cns)
+    hasEC = nonbfb_cycles_are_ecdna(non_bfb_cycle_inds, cycleList, segSeqD, cycleCNs, graph_cns, amp_id=amp_id)
     minBFBCyclesRequired = 2
 
     if set(bfb_cycle_inds).issubset(set(invalidInds)):
@@ -655,7 +655,7 @@ def clusterECCycles(cycleList, cycleCNs, segSeqD, graph_cns, excludableCycleIndi
 # Classifications
 
 # returns True if the cycle is no-amp or invalid
-def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, onlyCycle, maxCN, graph_cns):
+def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, onlyCycle, maxCN, graph_cns, amp_id=None):
     # check if contains viral sequence
     if is_viral(args.ref, cycle, segSeqD):
         return False
@@ -665,8 +665,8 @@ def cycleIsNoAmpInvalid(cycle, cn, segSeqD, isSingleton, onlyCycle, maxCN, graph
         # print("sig_amp is " + str(ConfigVars.sig_amp))
         if isCircular(cycle) and not isRearranged(cycle, segSeqD) and maxCN < ConfigVars.sig_amp:
             _, _, (ca, pal), (cb, pbr) = min_max_cycle_posns(cycle, segSeqD)
-            change_al = pos_lies_on_cn_change(ca, pal, graph_cns)
-            change_br = pos_lies_on_cn_change(cb, pbr, graph_cns)
+            change_al = pos_lies_on_cn_change(ca, pal, graph_cns, amp_id=amp_id)
+            change_br = pos_lies_on_cn_change(cb, pbr, graph_cns, amp_id=amp_id)
             if not change_al and not change_br:
                 return True
 
@@ -1893,7 +1893,7 @@ def find_fan_ecdna_cycles(cycleList, cycleCNs, segSeqD, graph_cns, invalidInds, 
     return qualifying
 
 
-def get_raw_cycle_props(cycleList, cycleCNs, segSeqD, maxCN, rearr_e, tot_over_min_cn, graph_cns):
+def get_raw_cycle_props(cycleList, cycleCNs, segSeqD, maxCN, rearr_e, tot_over_min_cn, graph_cns, amp_id=None):
     cycleTypes = []
     cycleWeights = []
     rearrCycleInds = set()
@@ -1908,7 +1908,7 @@ def get_raw_cycle_props(cycleList, cycleCNs, segSeqD, maxCN, rearr_e, tot_over_m
         chromSet |= set([segSeqD[abs(ind)][0] for ind in cycle if ind != 0])
         is_only_decomp = (len(cycleList) == 1)
         isSingleton = True if len(cycle) == 3 and cycle[0] == 0 else False
-        if cycleIsNoAmpInvalid(cycle, cycleCNs[ind], segSeqD, isSingleton, is_only_decomp, maxCN, graph_cns) and not args.force:
+        if cycleIsNoAmpInvalid(cycle, cycleCNs[ind], segSeqD, isSingleton, is_only_decomp, maxCN, graph_cns, amp_id=amp_id) and not args.force:
             invalidInds.append(ind)
             cycleTypes.append("No amp/Invalid")
 
@@ -2062,7 +2062,8 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
     fb_edges, fb_readcount, fb_read_prop, maxCN, tot_over_min_cn, total_seq_len = compute_f_from_AA_graph(graphFile, lcD)
     rearr_e = tot_rearr_edges(graphFile)
     (totalCompCyclicCont, totCyclicCont, ampClass, totalWeight, AMP_dvaluesDict, invalidInds, cycleTypes, cycleWeights,
-     rearrCycleInds) = get_raw_cycle_props(cycleList, cycleCNs, segSeqD, maxCN, rearr_e, tot_over_min_cn, graph_cns)
+     rearrCycleInds) = get_raw_cycle_props(cycleList, cycleCNs, segSeqD, maxCN, rearr_e, tot_over_min_cn, graph_cns,
+                                            amp_id=amplicon_log_id(sName, ampN))
 
     # decomposition/amplicon complexity
     totalEnt, decompEnt, nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD, range(len(cycleList)),
@@ -2072,7 +2073,7 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
     AMP_dvaluesDict["Amp_nseg_complexity"] = nEnt
 
     fb_bwp, nfb_bwp, bfb_cwp, bfbHasEC, non_bfb_cycle_inds, bfb_cycle_inds = cycles_file_bfb_props(cycleList, segSeqD,
-        cycleCNs, invalidInds, graphFile, graph_cns)
+        cycleCNs, invalidInds, graphFile, graph_cns, amp_id=amplicon_log_id(sName, ampN))
 
     # "foldback_read_prop", "BFB_bwp", "Distal_bwp", "BFB_cwp"
     AMP_dvaluesDict["foldback_read_prop"] = fb_read_prop
@@ -2192,7 +2193,8 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
             updated_non_bfb_inds = [i for i in non_bfb_cycle_inds
                                     if i not in final_bfb_set
                                     and not cycle_contains_foldback(cycleList[i], segSeqD)]
-            if nonbfb_cycles_are_ecdna(updated_non_bfb_inds, cycleList, segSeqD, cycleCNs, graph_cns):
+            if nonbfb_cycles_are_ecdna(updated_non_bfb_inds, cycleList, segSeqD, cycleCNs, graph_cns,
+                                       amp_id=amplicon_log_id(sName, ampN)):
                 ecStat = True
 
         else:
@@ -2600,6 +2602,27 @@ if __name__ == "__main__":
             sys.exit(1)
 
         amplicon_inputs.append(amplicon_input)
+
+    missing_files = []
+    for amplicon_input in amplicon_inputs:
+        if not os.path.exists(amplicon_input.cycles_file):
+            missing_files.append(amplicon_input.cycles_file)
+        if not os.path.exists(amplicon_input.graph_file):
+            missing_files.append(amplicon_input.graph_file)
+
+    if args.input and isinstance(summary_map, str):
+        with open(summary_map) as infile:
+            for line in infile:
+                fields = line.rsplit()
+                if len(fields) > 1 and not os.path.exists(fields[1]):
+                    missing_files.append(fields[1])
+
+    if missing_files:
+        logger.error("Found {} missing input file(s) referenced in {}:".format(
+            len(missing_files), args.input if args.input else "cycles/graph arguments"))
+        for f in missing_files:
+            logger.error("  Missing: {}".format(f))
+        sys.exit(1)
 
     if amplicon_inputs:
         first_amplicon = amplicon_inputs[0]

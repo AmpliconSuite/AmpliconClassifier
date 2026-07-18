@@ -358,13 +358,17 @@ def get_diff(e1, e2, segSeqD):
     return abs(p2_start - p1_end)
 
 
-def pos_lies_on_cn_change(chrom, pos, graph_cns, min_delta=2, tol=150):
+def pos_lies_on_cn_change(chrom, pos, graph_cns, min_delta=2, tol=150, amp_id=None):
     hits = graph_cns[chrom][pos-tol:pos+tol+1]
     if not hits:
         warnings.warn("Attempted to check boundary on CN change, but region not found in graph.")
         return False
 
     cns = [hit.data for hit in hits if hit.end - hit.begin > tol]
+    if not cns:
+        logger.debug("[{}] CN change at {}:{} could not be computed".format(amp_id if amp_id else "?", chrom, pos))
+        return False
+
     return max(cns) - min(cns) >= min_delta
 
 
