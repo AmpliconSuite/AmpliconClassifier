@@ -259,6 +259,49 @@ class BFBFeatureTests(unittest.TestCase):
         self.assertEqual(summary["whole_graph_used"], "False")
         self.assertEqual(summary["reverse_polarity_used"], "False")
 
+    def test_visualize_uses_centromere_path_for_released_bfbarchitect(self):
+        calls = []
+
+        def fake_visualize(cycle_file, graph_file, cnr_file, output_prefix, multiple=False, centromere=None):
+            calls.append((cycle_file, graph_file, cnr_file, output_prefix, multiple, centromere))
+
+        old_visualize = ac.BFBARCHITECT_VISUALIZE
+        old_centromere_path = ac.BFBARCHITECT_CENTROMERE_PATH
+        try:
+            ac.BFBARCHITECT_VISUALIZE = fake_visualize
+            ac.BFBARCHITECT_CENTROMERE_PATH = "/data/GRCh38_centromere.bed"
+
+            ac.run_bfbarchitect_visualize("cycles.txt", "graph.txt", "output")
+        finally:
+            ac.BFBARCHITECT_VISUALIZE = old_visualize
+            ac.BFBARCHITECT_CENTROMERE_PATH = old_centromere_path
+
+        self.assertEqual(calls, [
+            ("cycles.txt", "graph.txt", None, "output", False, "/data/GRCh38_centromere.bed")
+        ])
+
+    def test_visualize_uses_centromere_dict_for_legacy_bfbarchitect(self):
+        calls = []
+
+        def fake_visualize(cycle_file, graph_file, cnr_file, output_prefix, multiple=False,
+                           centromere_dict=None):
+            calls.append((cycle_file, graph_file, cnr_file, output_prefix, multiple, centromere_dict))
+
+        old_visualize = ac.BFBARCHITECT_VISUALIZE
+        old_centromeres = ac.BFBARCHITECT_CENTROMERES
+        try:
+            ac.BFBARCHITECT_VISUALIZE = fake_visualize
+            ac.BFBARCHITECT_CENTROMERES = {"chr1": 100000000}
+
+            ac.run_bfbarchitect_visualize("cycles.txt", "graph.txt", "output")
+        finally:
+            ac.BFBARCHITECT_VISUALIZE = old_visualize
+            ac.BFBARCHITECT_CENTROMERES = old_centromeres
+
+        self.assertEqual(calls, [
+            ("cycles.txt", "graph.txt", None, "output", False, {"chr1": 100000000})
+        ])
+
     def test_run_bfbarchitect_reconstruct_warns_for_unsupported_expected_kwargs(self):
         calls = []
 

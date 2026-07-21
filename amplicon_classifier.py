@@ -55,6 +55,7 @@ BFBARCHITECT_WRITE_GRAPH = None
 BFBARCHITECT_WRITE_CYCLES = None
 BFBARCHITECT_VISUALIZE = None
 BFBARCHITECT_CENTROMERES = None
+BFBARCHITECT_CENTROMERE_PATH = None
 NO_AMP_INVALID_INTERNAL_CLASS = "No amp/Invalid"
 NO_FSCNA_CLASS = "No-FSCNA"
 INVALID_CLASS = "Invalid"
@@ -1072,11 +1073,33 @@ def write_bfbarchitect_outputs(results, output_prefix, whole_graph_used):
                 BFBARCHITECT_WRITE_GRAPH(graph_out, res["new_segments"], res["svs"], res["sv_info"])
                 BFBARCHITECT_WRITE_CYCLES(cycles_out, res["new_segments"], res["bfb_strings"], res["scores"],
                                           res["multiplicity"])
-                BFBARCHITECT_VISUALIZE(cycle_file=cycles_out, graph_file=graph_out, cnr_file=None,
-                                       output_prefix="{}_BFB".format(region_prefix), multiple=False,
-                                       centromere_dict=BFBARCHITECT_CENTROMERES)
+                run_bfbarchitect_visualize(cycles_out, graph_out, "{}_BFB".format(region_prefix))
         except Exception as e:
             logger.warning("Could not write BFBArchitect outputs for {}: {}".format(region_prefix, str(e)))
+
+
+def run_bfbarchitect_visualize(cycles_file, graph_file, output_prefix):
+    kwargs = {
+        "cycle_file": cycles_file,
+        "graph_file": graph_file,
+        "cnr_file": None,
+        "output_prefix": output_prefix,
+        "multiple": False,
+    }
+
+    try:
+        sig_params = inspect.signature(BFBARCHITECT_VISUALIZE).parameters
+    except (TypeError, ValueError):
+        sig_params = {}
+
+    if "centromere" in sig_params:
+        kwargs["centromere"] = BFBARCHITECT_CENTROMERE_PATH
+    elif "centromere_dict" in sig_params:
+        kwargs["centromere_dict"] = BFBARCHITECT_CENTROMERES
+    elif any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig_params.values()):
+        kwargs["centromere"] = BFBARCHITECT_CENTROMERE_PATH
+
+    return BFBARCHITECT_VISUALIZE(**kwargs)
 
 
 def run_bfbarchitect_reconstruct(graphf, whole_graph, reverse_polarity=False, region=None):
@@ -2561,6 +2584,7 @@ if __name__ == "__main__":
             BFBARCHITECT_WRITE_GRAPH = write_bfb_graph
             BFBARCHITECT_WRITE_CYCLES = write_bfb_cycles
             BFBARCHITECT_VISUALIZE = visualize_BFB
+            BFBARCHITECT_CENTROMERE_PATH = get_bfbarchitect_centromere_path(AA_DATA_REPO_BASE, args.ref)
             BFBARCHITECT_CENTROMERES = load_bfbarchitect_centromeres(AA_DATA_REPO_BASE, args.ref)
             if BFBARCHITECT_CENTROMERES:
                 args.bfbarchitect = True
