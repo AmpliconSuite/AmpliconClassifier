@@ -64,6 +64,10 @@ AC_SOURCE = "AC"
 BFBARCHITECT_UNSUPPORTED_KWARGS_WARNED = set()
 
 
+def get_bfbarchitect_version(bfbarchitect_module):
+    return str(getattr(bfbarchitect_module, "__version__", None) or "unknown")
+
+
 def is_non_feature_amplicon_class(amp_class):
     return amp_class in {NO_AMP_INVALID_INTERNAL_CLASS, NO_FSCNA_CLASS, INVALID_CLASS}
 
@@ -1046,9 +1050,6 @@ def suppress_bfbarchitect_chatter():
 
 
 def write_bfbarchitect_outputs(results, output_prefix, whole_graph_used):
-    if not args.verbose_classification:
-        return
-
     if not results:
         return
 
@@ -2413,7 +2414,8 @@ if __name__ == "__main__":
                         action='store_true')
     parser.add_argument("--report_complexity", help="[Deprecated - on by default] Compute a measure of amplicon entropy"
                         " for each amplicon.", action='store_true', default=True)
-    parser.add_argument("--verbose_classification", help="Generate verbose output with raw classification scores.",
+    parser.add_argument("--verbose_classification", help="Generate verbose output with raw classification scores "
+                        "and extended BFBArchitect diagnostics.",
                         action='store_true')
     parser.add_argument("--no_LC_filter", help="Do not filter low-complexity cycles. Not recommended to set this flag.",
                         action='store_true', default=False)
@@ -2579,6 +2581,7 @@ if __name__ == "__main__":
 
     if not args.no_bfbarchitect:
         try:
+            import bfbarchitect
             from bfbarchitect import reconstruct_bfb_from_graph, write_bfb_graph, write_bfb_cycles, visualize_BFB
             BFBARCHITECT_RECONSTRUCT = reconstruct_bfb_from_graph
             BFBARCHITECT_WRITE_GRAPH = write_bfb_graph
@@ -2588,7 +2591,9 @@ if __name__ == "__main__":
             BFBARCHITECT_CENTROMERES = load_bfbarchitect_centromeres(AA_DATA_REPO_BASE, args.ref)
             if BFBARCHITECT_CENTROMERES:
                 args.bfbarchitect = True
-                logger.info("BFBArchitect integration enabled.")
+                logger.info("BFBArchitect {} integration enabled.".format(
+                    get_bfbarchitect_version(bfbarchitect)
+                ))
             else:
                 logger.warning("BFBArchitect is installed but centromeres could not be loaded. Skipping BFBArchitect.")
 

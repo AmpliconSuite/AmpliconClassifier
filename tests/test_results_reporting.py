@@ -2,11 +2,13 @@ import tempfile
 import unittest
 from collections import defaultdict
 from pathlib import Path
+from types import SimpleNamespace
 
 from intervaltree import IntervalTree
 
 import _pathfix  # noqa: F401
 from ampclasslib.ac_annotation import amplicon_annotation
+from ampclasslib.ac_io import bfbarchitect_profile_values, classification_profile_header
 from amplicon_classifier import (
     INVALID_CLASS,
     NO_FSCNA_CLASS,
@@ -26,6 +28,48 @@ def class_row(decomp, ecdna="None detected", bfb="None detected", chromo="None d
 
 
 class ResultsReportingTests(unittest.TestCase):
+    def test_default_profile_reports_bfbarchitect_score_and_source(self):
+        args = SimpleNamespace(verbose_classification=False, bfbarchitect=True)
+        header = classification_profile_header(args, ["raw_score"])
+        values = bfbarchitect_profile_values(args, {
+            "min_score": "1.09",
+            "bfb_sources": "AC|BFBArchitect",
+        })
+
+        self.assertEqual(header[-2:], ["BFBArchitect_min_score", "BFB_source"])
+        self.assertEqual(values, ["1.09", "AC|BFBArchitect"])
+
+    def test_default_profile_reports_native_source_when_bfbarchitect_is_disabled(self):
+        args = SimpleNamespace(verbose_classification=False, bfbarchitect=False)
+        header = classification_profile_header(args, ["raw_score"])
+        values = bfbarchitect_profile_values(args, {"bfb_sources": "AC"})
+
+        self.assertEqual(header[-2:], ["BFBArchitect_min_score", "BFB_source"])
+        self.assertEqual(values, ["NA", "AC"])
+
+    def test_verbose_profile_preserves_extended_bfbarchitect_diagnostics(self):
+        args = SimpleNamespace(verbose_classification=True, bfbarchitect=True)
+        header = classification_profile_header(args, ["raw_score"])
+        values = bfbarchitect_profile_values(args, {
+            "min_score": "1.09",
+            "passing_region_count": "1",
+            "multiplicities": "1",
+            "regions": "chr9:1-2:1.09:1",
+            "whole_graph_used": "False",
+            "reverse_polarity_used": "False",
+            "bfb_sources": "BFBArchitect",
+        })
+
+        self.assertEqual(header, [
+            "sample_name", "amplicon_number", "amplicon_decomposition_class", "ecDNA+", "BFB+", "FAN+",
+            "ecDNA_amplicons", "contains_viral", "raw_score", "BFBArchitect_min_score",
+            "BFBArchitect_passing_region_count", "BFBArchitect_multiplicities", "BFBArchitect_regions",
+            "BFBArchitect_whole_graph_used", "BFBArchitect_reverse_polarity_used", "BFB_source",
+        ])
+        self.assertEqual(values, [
+            "1.09", "1", "1", "chr9:1-2:1.09:1", "False", "False", "BFBArchitect",
+        ])
+
     def test_fan_prevents_cyclic_fallback_result_row(self):
         specs = discover_feature_specs(
             class_row("Cyclic", chromo="Positive"),

@@ -1,8 +1,9 @@
 import logging
+import os
 import unittest
 from collections import defaultdict
 from types import SimpleNamespace
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 import _pathfix  # noqa: F401
 import amplicon_classifier as ac
@@ -56,6 +57,12 @@ class BFBFeatureTests(unittest.TestCase):
         self.assertTrue(is_foldback_qc_artifact(16, 0.81))
         self.assertFalse(is_foldback_qc_artifact(100, 0.1))
         self.assertFalse(is_foldback_qc_artifact(16, 0.8))
+
+    def test_bfbarchitect_version_uses_module_version(self):
+        self.assertEqual(ac.get_bfbarchitect_version(SimpleNamespace(__version__="1.0.1")), "1.0.1")
+
+    def test_bfbarchitect_version_falls_back_when_module_version_is_missing(self):
+        self.assertEqual(ac.get_bfbarchitect_version(SimpleNamespace()), "unknown")
 
     def test_snap_bfbarchitect_interval_to_nearest_graph_segment_endpoints(self):
         seq_edges = [
@@ -301,6 +308,63 @@ class BFBFeatureTests(unittest.TestCase):
         self.assertEqual(calls, [
             ("cycles.txt", "graph.txt", None, "output", False, {"chr1": 100000000})
         ])
+
+    def test_bfbarchitect_outputs_are_written_without_verbose_classification(self):
+        calls = []
+
+        def fake_write_graph(path, new_segments, svs, sv_info):
+            calls.append(("graph", path, new_segments, svs, sv_info))
+
+        def fake_write_cycles(path, new_segments, bfb_strings, scores, multiplicity):
+            calls.append(("cycles", path, new_segments, bfb_strings, scores, multiplicity))
+
+        def fake_visualize(cycles_file, graph_file, output_prefix):
+            calls.append(("visualize", cycles_file, graph_file, output_prefix))
+
+        had_args = hasattr(ac, "args")
+        old_args = getattr(ac, "args", None)
+        old_write_graph = ac.BFBARCHITECT_WRITE_GRAPH
+        old_write_cycles = ac.BFBARCHITECT_WRITE_CYCLES
+        old_visualize_impl = ac.BFBARCHITECT_VISUALIZE
+        old_visualize = ac.run_bfbarchitect_visualize
+        try:
+            with TemporaryDirectory() as tmpdir:
+                ac.args = SimpleNamespace(
+                    verbose_classification=False,
+                    o=os.path.join(tmpdir, "classification", "sample")
+                )
+                ac.BFBARCHITECT_WRITE_GRAPH = fake_write_graph
+                ac.BFBARCHITECT_WRITE_CYCLES = fake_write_cycles
+                ac.BFBARCHITECT_VISUALIZE = fake_visualize
+                ac.run_bfbarchitect_visualize = fake_visualize
+
+                ac.write_bfbarchitect_outputs([{
+                    "new_segments": ["segment"],
+                    "svs": ["sv"],
+                    "sv_info": {"sv": "info"},
+                    "bfb_strings": ["+-"],
+                    "scores": [1.0],
+                    "multiplicity": 1,
+                }], "sample_amplicon1", whole_graph_used=False)
+
+                output_prefix = os.path.join(
+                    tmpdir, "classification", "bfbarchitect_outputs",
+                    "sample_amplicon1_region1_BFB"
+                )
+                self.assertEqual(calls, [
+                    ("graph", output_prefix + "_graph.txt", ["segment"], ["sv"], {"sv": "info"}),
+                    ("cycles", output_prefix + "_cycles.txt", ["segment"], ["+-"], [1.0], 1),
+                    ("visualize", output_prefix + "_cycles.txt", output_prefix + "_graph.txt", output_prefix),
+                ])
+        finally:
+            if had_args:
+                ac.args = old_args
+            else:
+                del ac.args
+            ac.BFBARCHITECT_WRITE_GRAPH = old_write_graph
+            ac.BFBARCHITECT_WRITE_CYCLES = old_write_cycles
+            ac.BFBARCHITECT_VISUALIZE = old_visualize_impl
+            ac.run_bfbarchitect_visualize = old_visualize
 
     def test_run_bfbarchitect_reconstruct_warns_for_unsupported_expected_kwargs(self):
         calls = []

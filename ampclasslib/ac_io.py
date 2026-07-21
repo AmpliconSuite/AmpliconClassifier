@@ -9,6 +9,41 @@ from ampclasslib.ecDNA_context import *
 
 logger = logging.getLogger(__name__)
 
+CLASSIFICATION_PROFILE_BASE_COLUMNS = [
+    "sample_name", "amplicon_number", "amplicon_decomposition_class", "ecDNA+", "BFB+",
+    "FAN+", "ecDNA_amplicons", "contains_viral"
+]
+BFBARCHITECT_VERBOSE_PROFILE_COLUMNS = [
+    "BFBArchitect_passing_region_count", "BFBArchitect_multiplicities", "BFBArchitect_regions",
+    "BFBArchitect_whole_graph_used", "BFBArchitect_reverse_polarity_used"
+]
+
+
+def classification_profile_header(args, categories):
+    header = list(CLASSIFICATION_PROFILE_BASE_COLUMNS)
+    if args.verbose_classification:
+        header += categories
+    header += ["BFBArchitect_min_score"]
+    if args.verbose_classification and args.bfbarchitect:
+        header += BFBARCHITECT_VERBOSE_PROFILE_COLUMNS
+    header += ["BFB_source"]
+    return header
+
+
+def bfbarchitect_profile_values(args, summary):
+    summary = summary or {}
+    values = [str(summary.get("min_score", "NA"))]
+    if args.verbose_classification and args.bfbarchitect:
+        values += [
+            str(summary.get("passing_region_count", "NA")),
+            summary.get("multiplicities", "NA"),
+            summary.get("regions", "NA"),
+            str(summary.get("whole_graph_used", "NA")),
+            str(summary.get("reverse_polarity_used", "NA"))
+        ]
+    values += [str(summary.get("bfb_sources", "NA"))]
+    return values
+
 # getting genes from the genes .gff file
 # if both add_chr_tag and strip_chr_tag are given, will default to adding the tag
 def parse_genes(gene_file, add_chr_tag=False, strip_chr_tag=False, keep_all=False):
@@ -462,16 +497,7 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featComplexityD, catego
 
     # Amplicon profiles
     with open(args.o + "_amplicon_classification_profiles.tsv", 'w') as outfile:
-        oh = ["sample_name", "amplicon_number", "amplicon_decomposition_class", "ecDNA+", "BFB+",
-              "FAN+", "ecDNA_amplicons", "contains_viral"]
-        if args.verbose_classification:
-            oh += categories
-            if args.bfbarchitect:
-                oh += ["BFBArchitect_min_score", "BFBArchitect_passing_region_count",
-                       "BFBArchitect_multiplicities", "BFBArchitect_regions",
-                       "BFBArchitect_whole_graph_used", "BFBArchitect_reverse_polarity_used"]
-            oh += ["BFB_source"]
-
+        oh = classification_profile_header(args, categories)
         outfile.write("\t".join(oh) + "\n")
         for ind, sname in enumerate(sampNames):
             ampN = cyclesFiles[ind].rstrip("_cycles.txt").rsplit("_")[-1]
@@ -489,23 +515,11 @@ def write_outputs(args, ftgd_list, ftci_list, bpgi_list, featComplexityD, catego
             ov = [sname.rsplit("_amplicon")[0], ampN, ampClass, ecOut, bfbOut, caOut, str(ecAmpliconCount), viralOut]
             if args.verbose_classification:
                 ov += [str(x) for x in AMP_dvaluesList[ind]]
-                if args.bfbarchitect:
-                    curr_summary = {}
-                    if bfbarchitect_summaries and ind < len(bfbarchitect_summaries):
-                        curr_summary = bfbarchitect_summaries[ind]
 
-                    ov += [
-                        str(curr_summary.get("min_score", "NA")),
-                        str(curr_summary.get("passing_region_count", "NA")),
-                        curr_summary.get("multiplicities", "NA"),
-                        curr_summary.get("regions", "NA"),
-                        str(curr_summary.get("whole_graph_used", "NA")),
-                        str(curr_summary.get("reverse_polarity_used", "NA"))
-                    ]
-                curr_summary = {}
-                if bfbarchitect_summaries and ind < len(bfbarchitect_summaries):
-                    curr_summary = bfbarchitect_summaries[ind]
-                ov += [str(curr_summary.get("bfb_sources", "NA"))]
+            curr_summary = {}
+            if bfbarchitect_summaries and ind < len(bfbarchitect_summaries):
+                curr_summary = bfbarchitect_summaries[ind]
+            ov += bfbarchitect_profile_values(args, curr_summary)
 
             outfile.write("\t".join(ov) + "\n")
 
