@@ -1,13 +1,13 @@
 # Developer Setup
 
-Target: Linux or macOS with conda installed. BFBArchitect and Gurobi are optional, but required for integrated external BFB detection.
+Target: Linux or macOS with conda installed. BFBArchitect is a core dependency; Gurobi is an optional accelerator for its integrated BFB detection.
 
 ## Assumptions
 
 - AmpliconClassifier has been cloned locally.
 - `$AC_SRC` points to this repository.
 - `$AA_DATA_REPO` points to a populated AmpliconArchitect data repository.
-- If testing BFBArchitect integration, BFBArchitect has been cloned locally.
+- For BFBArchitect development, clone its repository locally; ordinary package installs normally resolve BFBArchitect from PyPI.
 
 Example shell setup:
 

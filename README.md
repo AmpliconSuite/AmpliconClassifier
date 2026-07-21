@@ -51,7 +51,7 @@ conda install -c bioconda pysam
 conda install -c conda-forge pyliftover
 ```
 
-[BFBArchitect](https://github.com/AmpliconSuite/BFBArchitect), used for additional BFB detection, is a core dependency but is only published on PyPI (not conda-forge/bioconda), so it is installed via pip in Step 3 regardless of which path you take here.
+[BFBArchitect](https://github.com/AmpliconSuite/BFBArchitect), used for additional BFB detection, is a core dependency. Its published package is available on PyPI (not conda-forge/bioconda), so the standard installation in Step 3 resolves it with pip. Developers may instead install a local checkout in editable mode.
 
 If you prefer pip for everything, clone the repository first and then install from the source tree in Step 3. The pip dependency list is also available in `requirements.txt`:
 
@@ -67,9 +67,9 @@ cd AmpliconClassifier
 python -m pip install -e .
 ```
 
-This also installs BFBArchitect from PyPI, since it is a core dependency. BFBArchitect-positive regions are integrated into `BFB+` calls and reported BFB feature intervals; use `--no_bfbarchitect` to disable this integration at runtime. When `--verbose_classification` is set, BFBArchitect scores and the BFB call source are reported in the classification profile.
+This normally installs BFBArchitect from PyPI, since it is a core dependency; a developer environment may substitute an editable local BFBArchitect checkout. BFBArchitect-positive regions are integrated into `BFB+` calls and reported BFB feature intervals; use `--no_bfbarchitect` to disable this integration at runtime. When `--verbose_classification` is set, BFBArchitect scores and the BFB call source are reported in the classification profile.
 
-BFBArchitect uses the free, open-source **CBC** solver by default. If a **Gurobi** or **Mosek** license is present (`$HOME/gurobi.lic` or `$HOME/mosek/mosek.lic`), it is used automatically for faster BFB reconstruction; a license is not required. In our testing the BFB calls agree across solvers in the large majority of cases, though in rare borderline instances the choice of solver can shift a BFB score across the `BFB+`/`BFB-` threshold. See the [AmpliconSuite-pipeline README](https://github.com/AmpliconSuite/AmpliconSuite-pipeline#optimizer-licenses--do-i-need-one-short-answer-no) for details.
+Supported AmpliconSuite installation and container paths wire BFBArchitect's **Gurobi**, **Mosek**, and free, open-source **CBC** backends. Users choose which commercial capability to enable by which license, if any, they provide: Gurobi is recommended for large cohorts (roughly 50 or more samples) because it was fastest in our tests; Mosek is a supported alternative; and CBC requires no license. BFBArchitect automatically tries Gurobi, then Mosek, then CBC, warning and retrying if a selected commercial solver later fails. Gurobi autodetection verifies that its environment starts, but a restricted license may still reject a larger model at solve time and trigger fallback. Standalone AC developers must install the Mosek Python package separately if they want that optional backend. In our testing the BFB calls agree across solvers in the large majority of cases, though in rare borderline instances the choice of solver can shift a BFB score across the `BFB+`/`BFB-` threshold. See the [AmpliconSuite-pipeline README](https://github.com/AmpliconSuite/AmpliconSuite-pipeline#optimizer-licenses--do-i-need-one-short-answer-no) for details.
 
 For older workflows that call scripts directly from the source tree, you may still set `$AC_SRC`:
 

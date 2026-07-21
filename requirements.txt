@@ -2,4 +2,4 @@ intervaltree
 numpy
 pandas
 scipy
-BFBArchitect>=1.0.0
+BFBArchitect>=1.0.1
