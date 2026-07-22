@@ -2,16 +2,7 @@
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/AmpliconSuite/AmpliconClassifier?display_name=release)
 ![GitHub](https://img.shields.io/github/license/AmpliconSuite/AmpliconClassifier)
 
-### Classify [AmpliconArchitect](https://github.com/AmpliconSuite/AmpliconArchitect) outputs to predict types of focal amplifications present.
-
-This tool classifies the outputs of [AmpliconArchitect](https://github.com/AmpliconSuite/AmpliconSuite-pipeline).
-
-If using AmpliconClassifier, please cite the following publication which describes the AmpliconClassifier methodology in the [Supplementary Information](https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-023-05937-5/MediaObjects/41586_2023_5937_MOESM1_ESM.pdf) section:
-
-Luebeck J, et al. [Extrachromosomal DNA in the cancerous transformation of Barrett’s oesophagus](https://www.nature.com/articles/s41586-023-05937-5). Nature. 2023. PMID: 37046089
-
-See the section at the end of the README for information about the legacy version.<br />
-<br />
+### Classifies outputs of [AmpliconArchitect](https://github.com/AmpliconSuite/AmpliconSuite-pipeline) or [CoRAL](https://github.com/AmpliconSuite/CoRAL), to predict types of focal amplifications present.
 
 ### Amplification types detected by AmpliconClassifier
 
@@ -387,6 +378,10 @@ check_SV_support.py -i sv_calls.tsv \
 - Only counts reads where both position AND orientation match the SV
 - If SV orientation is not available, counts based on position matching only
 
+### Citing AC:
+If using AmpliconClassifier, please cite the following publication which describes the AmpliconClassifier methodology in the [Supplementary Information](https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-023-05937-5/MediaObjects/41586_2023_5937_MOESM1_ESM.pdf) section:
+
+Luebeck J, et al. [Extrachromosomal DNA in the cancerous transformation of Barrett’s oesophagus](https://www.nature.com/articles/s41586-023-05937-5). Nature. 2023. PMID: 37046089
 
 ### Info about accessing the legacy version of AmpliconClassifier:
 
