@@ -41,7 +41,7 @@ def summarize_breakpoints(graphf, add_chr_tag, feature_dict, lcD):
                 etype = "duplication-like"
 
             else:
-                if p2 - p1 < 25000:
+                if p2 - p1 <= ConfigVars.fb_dist_cut:
                     etype = "foldback"
                 else:
                     etype = "inversion"

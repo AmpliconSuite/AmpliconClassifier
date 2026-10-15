@@ -2653,6 +2653,19 @@ if __name__ == "__main__":
             logger.error("  Missing: {}".format(f))
         sys.exit(1)
 
+    empty_files = []
+    for amplicon_input in amplicon_inputs:
+        for f in (amplicon_input.cycles_file, amplicon_input.graph_file):
+            if os.path.getsize(f) == 0:
+                empty_files.append(f)
+
+    if empty_files:
+        logger.error("Found {} empty cycles/graph file(s) referenced in {}:".format(
+            len(empty_files), args.input if args.input else "cycles/graph arguments"))
+        for f in empty_files:
+            logger.error("  Empty: {}".format(f))
+        sys.exit(1)
+
     if amplicon_inputs:
         first_amplicon = amplicon_inputs[0]
         last_amplicon = amplicon_inputs[-1]
