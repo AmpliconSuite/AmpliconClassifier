@@ -768,7 +768,7 @@ def classifyBFB(fb_read_prop, fb_bwp, nonbfb_sig, bfb_cyc_ratio, maxCN, tot_over
     elif nonbfb_sig > ConfigVars.max_nonbfb_break_weight and bfb_cyc_ratio < ConfigVars.min_bfb_cycle_weight_ratio:
         return None
 
-    # too small
+    # too small: less amplified sequence than one foldback span (fb_dist_cut reused as a size floor)
     elif tot_over_min_cn < ConfigVars.fb_dist_cut:
         return None
 
