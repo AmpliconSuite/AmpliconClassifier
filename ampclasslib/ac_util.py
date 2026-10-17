@@ -36,7 +36,7 @@ class ConfigVars:
         min_bp_per_foldback = 50000
         max_nonbfb_break_weight = 0.5
         min_bfb_cycle_weight_ratio = 0.6
-        min_bfb_feature_size = 5000  # BFB features smaller than this (bp) are dropped; cf. ampLenOverMinCN
+        min_bfb_feature_size = 5000
         bfbarchitect_max_score = 2.8
         bfbarchitect_cycle_overlap_threshold = 0.95
         bfbarchitect_min_lp_bound = 25
