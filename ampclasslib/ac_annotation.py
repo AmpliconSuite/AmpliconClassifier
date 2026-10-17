@@ -331,7 +331,9 @@ def amplicon_annotation(cycleList, segSeqD, bfb_cycle_inds, ecIndexClusters, inv
                 else:
                     ampClass = "No-FSCNA"
             else:
-                if other_interval_dict and ampClass in {"Linear", "Complex-non-cyclic", "Virus"}:
+                # FAN_1 spans the whole amplicon, so a Linear/Complex-non-cyclic feature would duplicate it.
+                if other_interval_dict and (ampClass == "Virus" or
+                                            (ampClass in {"Linear", "Complex-non-cyclic"} and not fan_intervals)):
                     feature_dict[ampClass + "_1"] = other_interval_dict
                 elif other_interval_dict and ampClass == "Cyclic" and not fan_intervals:
                     logger.warning(

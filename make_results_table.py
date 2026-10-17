@@ -264,8 +264,16 @@ def discover_feature_specs(classD, amplicon_id, class_bed_dir):
             feature_specs.append((feature_id, "ecDNA", feature_bed))
 
     if classD["BFB+"] == "Positive":
-        feature_id = "_".join([amplicon_id, "BFB", "1"])
-        feature_specs.append((feature_id, "BFB", os.path.join(class_bed_dir, feature_id + "_intervals.bed")))
+        # An amplicon can carry several disjoint BFB features (BFB_1, BFB_2, ...).
+        BFB_files = sorted(
+            [x for x in os.listdir(class_bed_dir)
+             if x.startswith(amplicon_id + "_") and x.rsplit("_")[-3] == "BFB"],
+            key=feature_sort_key
+        )
+        if not BFB_files:
+            BFB_files = ["_".join([amplicon_id, "BFB", "1"]) + "_intervals.bed"]
+        for BFB_file in BFB_files:
+            feature_specs.append((BFB_file[:-14], "BFB", os.path.join(class_bed_dir, BFB_file)))
 
     if classD.get("FAN+", "None detected") == "Positive":
         feature_id = "_".join([amplicon_id, "FAN", "1"])
