@@ -60,6 +60,7 @@ NO_AMP_INVALID_INTERNAL_CLASS = "No amp/Invalid"
 NO_FSCNA_CLASS = "No-FSCNA"
 INVALID_CLASS = "Invalid"
 BFBARCHITECT_SOURCE = "BFBArchitect"
+BFBARCHITECT_FB_DIST_CUT = 50000  # foldback cutoff hardcoded in BFBArchitect; keep fb_dist_cut matched to it
 AC_SOURCE = "AC"
 BFBARCHITECT_UNSUPPORTED_KWARGS_WARNED = set()
 
@@ -2578,6 +2579,11 @@ if __name__ == "__main__":
         logger.error("BFBArchitect cannot be used with --ref hg19 --add_chr_tag because BFBArchitect reads raw "
                      "graph chromosome names and the matching hg19/GRCh37 centromere source is ambiguous.")
         sys.exit(1)
+
+    if not args.no_bfbarchitect and ConfigVars.fb_dist_cut != BFBARCHITECT_FB_DIST_CUT:
+        logger.warning("fb_dist_cut is {} but BFBArchitect uses a fixed {} bp foldback cutoff; AC and BFBArchitect "
+                       "will disagree on which SVs are foldbacks. Setting fb_dist_cut to {} is recommended.".format(
+                           ConfigVars.fb_dist_cut, BFBARCHITECT_FB_DIST_CUT, BFBARCHITECT_FB_DIST_CUT))
 
     patch_links = read_patch_regions(args.ref)
     ncRNAFileLoc = get_ncrna_file_loc(args.ref)

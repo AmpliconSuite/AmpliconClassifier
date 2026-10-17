@@ -33,6 +33,8 @@ class ConfigVars:
         # Max distance (bp) between the two ends of a same-chromosome, same-orientation SV for it to count
         # as a foldback; a BFB foldback folds back on itself near the breakage point. Also reused in
         # classifyBFB as the minimum amplified size (tot_over_min_cn) for a native BFB call.
+        # BFBArchitect currently hardcodes its own 50 kbp foldback cutoff, so keeping this at 50000 is
+        # recommended; AC warns at startup when they differ.
         fb_dist_cut = 50000
         min_flow = 1.0
         max_foldback_edges_qc = 100

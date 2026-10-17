@@ -33,7 +33,7 @@ DEFAULT_CONFIG = {
     # bfb-related items
     "min_fb_read_prop": 0.25,          # min proportion of SV reads in foldbacks to call BFB
     "fb_break_weight_prop": 0.3,       # min proportion of utilized path/cycle SVs supporting BFB foldbacks (weighted by flow)
-    "fb_dist_cut": 50000,              # max distance between ends for inversion to be foldback
+    "fb_dist_cut": 50000,              # max distance between ends for inversion to be foldback (BFBArchitect is fixed at 50000; keep matched)
     "max_foldback_edges_qc": 100,      # max foldback edge count before treating the amplicon as a QC artifact
     "max_nonbfb_break_weight": 0.5,    # max proportion of utilized path/cycle SVs supporting non-foldback connections
     "min_bfb_cycle_weight_ratio": 0.6,  # minimum flow*length weighted proportion of BFB-like paths/cycles for BFB

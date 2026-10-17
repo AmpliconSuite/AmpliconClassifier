@@ -279,6 +279,8 @@ Else if running on multiple amplicons, use argument
 | `--jobs`                                        | Number of amplicons to classify in parallel. Default is 1. Output rows are collected in input order.                                                                                                                   |
 | `-i/--input`                                    | If you have already run `make_input.sh`, you can give the resulting .input file instead of setting `--AA_results`                                                                                                    | 
 
+**Note on `fb_dist_cut`:** BFBArchitect currently uses a fixed 50 kbp foldback cutoff. If you supply a custom `--config`, keeping `fb_dist_cut` at `50000` is recommended so that AC and BFBArchitect agree on which SVs are foldbacks; AC prints a warning when they differ.
+
 ### 5. Other utilities:
 
 ### Feature Similarity
