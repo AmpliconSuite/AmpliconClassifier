@@ -379,7 +379,11 @@ check_SV_support.py -i sv_calls.tsv \
 - If SV orientation is not available, counts based on position matching only
 
 ### Citing AC:
-If using AmpliconClassifier, please cite the following publication which describes the AmpliconClassifier methodology in the [Supplementary Information](https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-023-05937-5/MediaObjects/41586_2023_5937_MOESM1_ESM.pdf) section:
+If using AmpliconClassifier, please cite:
+
+Luebeck J, Liefeld T, Wong ITL, Huang E, et al. [AmpliconSuite: an end-to-end workflow for analyzing focal amplifications in cancer genomes](https://doi.org/10.1038/s41592-026-03264-x). *Nature Methods*. 2026.
+
+The AmpliconClassifier methodology was first described in the [Supplementary Information](https://static-content.springer.com/esm/art%3A10.1038%2Fs41586-023-05937-5/MediaObjects/41586_2023_5937_MOESM1_ESM.pdf) of:
 
 Luebeck J, et al. [Extrachromosomal DNA in the cancerous transformation of Barrett’s oesophagus](https://www.nature.com/articles/s41586-023-05937-5). Nature. 2023. PMID: 37046089
 
