@@ -2513,9 +2513,6 @@ if __name__ == "__main__":
 
     set_config_vars(config, args)
 
-    if args.make_results_table and not args.input and not args.AA_results:
-        args.make_results_table = False  # results table requires multi-amplicon input mode
-
     if args.jobs < 1:
         logger.error("--jobs must be >= 1")
         sys.exit(1)
@@ -2566,6 +2563,14 @@ if __name__ == "__main__":
         else:
             logger.info("Found summary map file %s", summary_map)
     else:  # one cycle + graph provided only
+        # make_input.sh skips these when discovering files; explicit paths are honored, but flag them
+        for fpath in (args.cycles, args.graph):
+            lpath = fpath.lower()
+            if ("annotated_cycles" in os.path.basename(lpath) or "features_to_graph" in os.path.basename(lpath)
+                    or "feature_to_graph" in os.path.basename(lpath) or "bfbarchitect_outputs/" in lpath
+                    or "_classification/files/" in fpath or "bpg_converted" in lpath):
+                logger.warning("%s looks like a BFBArchitect/AC-derived file, which make_input.sh would exclude. "
+                               "Classifying it as given, but results may not be meaningful.", fpath)
         bname = os.path.basename(args.cycles)
         sname = re.split("_amplicon[0-9]*", bname)[0]
         summary_map = {sname}
@@ -2770,10 +2775,16 @@ if __name__ == "__main__":
             import make_results_table
 
             classification_file = args.o + "_amplicon_classification_profiles.tsv"
+            single_lookup = None
+            if not args.input:  # single amplicon mode: no .input file, build the lookup directly
+                a_id = os.path.basename(args.cycles).rsplit("_cycles.txt")[0]
+                single_lookup = {a_id: (args.cycles, args.graph)}
+
             make_results_table.make_results_table(
                 input_file=args.input,
                 classification_file=classification_file,
-                ref=args.ref
+                ref=args.ref,
+                cycles_graph_lookup=single_lookup
             )
             logger.info("Results table created successfully")
         except ImportError:
