@@ -145,11 +145,12 @@ BFB is a specific type of genomic amplification mechanism characterized by inver
 - **Usage:** In `classifyBFB()`, if `fb_bwp < fb_break_weight_prop`, BFB classification is rejected.
 
 ### `fb_dist_cut`
-- **Default:** 25000 (bp)
+- **Default:** 50000 (bp)
 - **Description:** Maximum distance between breakpoint ends for an inversion to be classified as a foldback. Foldbacks are short-range inversions, so inversions spanning longer distances are not considered foldbacks.
 - **Usage:** 
   - In `compute_f_from_AA_graph()`, inversions are only counted as foldbacks if they are on the same chromosome and within this distance
   - In `cycles_file_bfb_props()`, used to distinguish foldback breaks from distal breaks
+  - In `summarize_breakpoints()` (`ac_annotation.py`), same-orientation inversions within this distance are labeled `foldback` in the `*_SV_summaries/` tables
 
 ### `max_foldback_edges_qc`
 - **Default:** 100
@@ -165,6 +166,11 @@ BFB is a specific type of genomic amplification mechanism characterized by inver
 - **Default:** 0.6
 - **Description:** Minimum cycle CN × length-weighted proportion of BFB-like paths/cycles required for BFB classification when non-BFB content is also present. This ensures BFB structures dominate the amplicon.
 - **Usage:** In `classifyBFB()`, when non-BFB signal is high, `bfb_cyc_ratio` must exceed this threshold to maintain BFB classification.
+
+### `min_bfb_feature_size`
+- **Default:** 5000 (bp)
+- **Description:** Minimum total size of a BFB feature after its intervals are limited to AA graph segments with copy number ≥ 4. Applies to BFB features from AC's own detection and from BFBArchitect.
+- **Usage:** BFB features below this size are dropped. An amplicon is reported as `BFB+` only if at least one BFB feature remains.
 
 ### `bfbarchitect_max_score`
 - **Default:** 2.8

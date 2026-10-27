@@ -198,6 +198,43 @@ class ResultsReportingTests(unittest.TestCase):
             INVALID_CLASS,
         )
 
+    def test_multiple_bfb_features_are_reported(self):
+        with tempfile.TemporaryDirectory(prefix="ac-reporting-") as tmpdir:
+            for name in ("sample_amplicon1_BFB_1", "sample_amplicon1_BFB_2", "sample_amplicon10_BFB_1"):
+                (Path(tmpdir) / (name + "_intervals.bed")).write_text("chr1\t1\t2\n", encoding="utf-8")
+
+            specs = discover_feature_specs(class_row("Cyclic", bfb="Positive"), "sample_amplicon1", tmpdir)
+
+        self.assertEqual(
+            [(feature_id, feature) for feature_id, feature, _ in specs],
+            [("sample_amplicon1_BFB_1", "BFB"), ("sample_amplicon1_BFB_2", "BFB")],
+        )
+
+    def test_annotation_fan_does_not_create_fallback_feature(self):
+        with tempfile.TemporaryDirectory(prefix="ac-reporting-") as tmpdir:
+            graph = Path(tmpdir) / "sample_amplicon1_graph.txt"
+            graph.write_text("sequence chr1:100+ chr1:20000- 10\n", encoding="utf-8")
+
+            _, _, _, feature_dict, _, amp_class = amplicon_annotation(
+                cycleList=[[1]],
+                segSeqD={0: ("", 0, 0), 1: ("chr1", 100, 20000)},
+                bfb_cycle_inds=[],
+                ecIndexClusters=[],
+                invalidInds=[],
+                bfbStat=False,
+                ecStat=False,
+                ampClass="Complex-non-cyclic",
+                graphf=str(graph),
+                add_chr_tag=False,
+                lcD=defaultdict(IntervalTree),
+                ref="GRCh38",
+                fan_intervals={"chr1": [(100, 20000)]},
+            )
+
+        self.assertEqual(amp_class, "Complex-non-cyclic")
+        self.assertNotIn("Complex-non-cyclic_1", feature_dict)
+        self.assertIn("FAN_1", feature_dict)
+
 
 if __name__ == "__main__":
     unittest.main()

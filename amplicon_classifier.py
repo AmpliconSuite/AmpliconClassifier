@@ -60,6 +60,7 @@ NO_AMP_INVALID_INTERNAL_CLASS = "No amp/Invalid"
 NO_FSCNA_CLASS = "No-FSCNA"
 INVALID_CLASS = "Invalid"
 BFBARCHITECT_SOURCE = "BFBArchitect"
+BFBARCHITECT_FB_DIST_CUT = 50000  # foldback cutoff hardcoded in BFBArchitect; keep fb_dist_cut matched to it
 AC_SOURCE = "AC"
 BFBARCHITECT_UNSUPPORTED_KWARGS_WARNED = set()
 
@@ -768,7 +769,7 @@ def classifyBFB(fb_read_prop, fb_bwp, nonbfb_sig, bfb_cyc_ratio, maxCN, tot_over
     elif nonbfb_sig > ConfigVars.max_nonbfb_break_weight and bfb_cyc_ratio < ConfigVars.min_bfb_cycle_weight_ratio:
         return None
 
-    # too small
+    # too small: less amplified sequence than one foldback span (fb_dist_cut reused as a size floor)
     elif tot_over_min_cn < ConfigVars.fb_dist_cut:
         return None
 
@@ -1336,6 +1337,25 @@ def snap_bfbarchitect_intervals(intervals, seq_edges, add_chr_tag):
     return snapped
 
 
+def interval_dict_size(interval_dict):
+    return sum(end - start for intervals in interval_dict.values() for start, end in intervals)
+
+
+def restrict_to_amplified_graph_segments(interval_dict, graph_cns, min_cn=4):
+    # Same CN floor that native BFB intervals use (bfb_intervals_from_cycles).
+    restricted = defaultdict(list)
+    for chrom, intervals in interval_dict.items():
+        for start, end in intervals:
+            for seg in graph_cns[chrom][start:end]:
+                if seg.data >= min_cn:
+                    clipped_start, clipped_end = max(start, seg.begin), min(end, seg.end)
+                    if clipped_start < clipped_end:
+                        restricted[chrom].append((clipped_start, clipped_end))
+
+    merge_intervals({"_": restricted})
+    return restricted
+
+
 def interval_overlap_bp(intervals, chrom, start, end):
     overlap = 0
     for int_start, int_end in intervals.get(chrom, []):
@@ -1431,7 +1451,8 @@ def build_bfb_features(bfb_cycle_inds, bfbarchitect_summary, cycleList, segSeqD,
     # Cycles that native scoring placed in the non-BFB (ecDNA-candidate) pool must not be absorbed
     # by a BFBArchitect region just because they overlap it. Native only attributes true foldback
     # cycles to BFB; mirroring that here keeps the ecDNA call independent of which method made the
-    # BFB call. BFBArchitect's reported interval is unaffected (it comes from the snapped region).
+    # BFB call. BFBArchitect's reported interval comes from the snapped region, restricted to the
+    # amplified graph segments it contains.
     native_non_bfb_set = set(native_non_bfb_inds) if native_non_bfb_inds else set()
     features = []
     if bfb_cycle_inds:
@@ -1458,6 +1479,12 @@ def build_bfb_features(bfb_cycle_inds, bfbarchitect_summary, cycleList, segSeqD,
                 cycleList, segSeqD, interval_dict, ConfigVars.bfbarchitect_cycle_overlap_threshold
             )
             cycle_indices -= native_non_bfb_set
+            # The region spans graph gaps that BFBArchitect bridges for its CN vector; report only
+            # the amplified graph segments inside it.
+            feature_intervals = restrict_to_amplified_graph_segments(interval_dict, graph_cns)
+            if not feature_intervals:
+                continue
+
             score = None
             passing_scores = bfbarchitect_summary.get("passing_scores", [])
             if ind - 1 < len(passing_scores):
@@ -1466,14 +1493,19 @@ def build_bfb_features(bfb_cycle_inds, bfbarchitect_summary, cycleList, segSeqD,
             features.append(Feature(
                 feature_id="BFB_{}".format(len(features) + 1),
                 feature_type="BFB",
-                intervals=interval_dict,
+                intervals=feature_intervals,
                 cycle_indices=cycle_indices,
                 sources={BFBARCHITECT_SOURCE},
                 score=score,
                 metadata={"snapped_region": region},
             ))
 
-    return merge_bfb_features(features)
+    merged = [f for f in merge_bfb_features(features)
+              if interval_dict_size(f.intervals) >= ConfigVars.min_bfb_feature_size]
+    for ind, feature in enumerate(merged, 1):
+        feature.feature_id = "BFB_{}".format(ind)
+
+    return merged
 
 
 def get_bfbarchitect_centromere_path(aa_data_repo_base, ref):
@@ -2177,7 +2209,8 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
     if bfbClass and AC_SOURCE not in bfb_sources:
         bfb_sources.append(AC_SOURCE)
     bfbarchitect_summary["bfb_sources"] = "|".join(sorted(bfb_sources)) if bfb_sources else "NA"
-    bfb_detected = bool(bfbClass) or bool(bfb_features)
+    # A BFB call needs a reportable feature (non-empty after CN trimming, >= min_bfb_feature_size).
+    bfb_detected = bool(bfb_features)
     bfbarchitect_detected = BFBARCHITECT_SOURCE in bfb_sources
 
     ca_result = _run_fan_from_edges(_ca_seq_edges, _ca_sv_edges, _ca_concordant_positions)
@@ -2300,10 +2333,10 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
         feature_complexity[(sName, ampN, "ecDNA_" + str(ind + 1))] = etup
 
     if bfbStat:
-        bfb_entropy_cycle_inds = bfb_cycle_inds if bfb_cycle_inds else range(len(cycleList))
-        bfb_totalEnt, bfb_decompEnt, bfb_nEnt = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
-                                                                        bfb_entropy_cycle_inds, set())
-        feature_complexity[(sName, ampN, "BFB_1")] = (bfb_totalEnt, bfb_decompEnt, bfb_nEnt)
+        for feature in bfb_features:
+            bfb_entropy_cycle_inds = feature.cycle_indices if feature.cycle_indices else range(len(cycleList))
+            feature_complexity[(sName, ampN, feature.feature_id)] = decompositionComplexity(
+                graphFile, cycleList, cycleCNs, segSeqD, bfb_entropy_cycle_inds, set())
 
     if is_fan:
         fan_cycle_inds = set(range(len(cycleList))) - set(invalidInds)
@@ -2324,7 +2357,7 @@ def run_classification(amplicon_input, segSeqD, cycleList, cycleCNs, lc_filtered
             full_featname_to_intervals[full_fname] = curr_fd
             register_feature(feature_registry, full_fname, trim_sname, ampN, feat_name, graphFile, cyclesFile, curr_fd)
 
-    if not bfbStat and not ecStat and ampClass in {"Linear", "Complex-non-cyclic", "Virus"}:
+    if not bfbStat and not ecStat and ampClass + "_1" in feature_dict:
         feature_complexity[(sName, ampN, ampClass + "_1")] = decompositionComplexity(graphFile, cycleList, cycleCNs, segSeqD,
             other_class_c_inds, set())
 
@@ -2480,9 +2513,6 @@ if __name__ == "__main__":
 
     set_config_vars(config, args)
 
-    if args.make_results_table and not args.input and not args.AA_results:
-        args.make_results_table = False  # results table requires multi-amplicon input mode
-
     if args.jobs < 1:
         logger.error("--jobs must be >= 1")
         sys.exit(1)
@@ -2533,6 +2563,14 @@ if __name__ == "__main__":
         else:
             logger.info("Found summary map file %s", summary_map)
     else:  # one cycle + graph provided only
+        # make_input.sh skips these when discovering files; explicit paths are honored, but flag them
+        for fpath in (args.cycles, args.graph):
+            lpath = fpath.lower()
+            if ("annotated_cycles" in os.path.basename(lpath) or "features_to_graph" in os.path.basename(lpath)
+                    or "feature_to_graph" in os.path.basename(lpath) or "bfbarchitect_outputs/" in lpath
+                    or "_classification/files/" in fpath or "bpg_converted" in lpath):
+                logger.warning("%s looks like a BFBArchitect/AC-derived file, which make_input.sh would exclude. "
+                               "Classifying it as given, but results may not be meaningful.", fpath)
         bname = os.path.basename(args.cycles)
         sname = re.split("_amplicon[0-9]*", bname)[0]
         summary_map = {sname}
@@ -2546,6 +2584,11 @@ if __name__ == "__main__":
         logger.error("BFBArchitect cannot be used with --ref hg19 --add_chr_tag because BFBArchitect reads raw "
                      "graph chromosome names and the matching hg19/GRCh37 centromere source is ambiguous.")
         sys.exit(1)
+
+    if not args.no_bfbarchitect and ConfigVars.fb_dist_cut != BFBARCHITECT_FB_DIST_CUT:
+        logger.warning("fb_dist_cut is {} but BFBArchitect uses a fixed {} bp foldback cutoff; AC and BFBArchitect "
+                       "will disagree on which SVs are foldbacks. Setting fb_dist_cut to {} is recommended.".format(
+                           ConfigVars.fb_dist_cut, BFBARCHITECT_FB_DIST_CUT, BFBARCHITECT_FB_DIST_CUT))
 
     patch_links = read_patch_regions(args.ref)
     ncRNAFileLoc = get_ncrna_file_loc(args.ref)
@@ -2653,6 +2696,19 @@ if __name__ == "__main__":
             logger.error("  Missing: {}".format(f))
         sys.exit(1)
 
+    empty_files = []
+    for amplicon_input in amplicon_inputs:
+        for f in (amplicon_input.cycles_file, amplicon_input.graph_file):
+            if os.path.getsize(f) == 0:
+                empty_files.append(f)
+
+    if empty_files:
+        logger.error("Found {} empty cycles/graph file(s) referenced in {}:".format(
+            len(empty_files), args.input if args.input else "cycles/graph arguments"))
+        for f in empty_files:
+            logger.error("  Empty: {}".format(f))
+        sys.exit(1)
+
     if amplicon_inputs:
         first_amplicon = amplicon_inputs[0]
         last_amplicon = amplicon_inputs[-1]
@@ -2719,10 +2775,16 @@ if __name__ == "__main__":
             import make_results_table
 
             classification_file = args.o + "_amplicon_classification_profiles.tsv"
+            single_lookup = None
+            if not args.input:  # single amplicon mode: no .input file, build the lookup directly
+                a_id = os.path.basename(args.cycles).rsplit("_cycles.txt")[0]
+                single_lookup = {a_id: (args.cycles, args.graph)}
+
             make_results_table.make_results_table(
                 input_file=args.input,
                 classification_file=classification_file,
-                ref=args.ref
+                ref=args.ref,
+                cycles_graph_lookup=single_lookup
             )
             logger.info("Results table created successfully")
         except ImportError:

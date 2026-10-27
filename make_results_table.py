@@ -264,8 +264,16 @@ def discover_feature_specs(classD, amplicon_id, class_bed_dir):
             feature_specs.append((feature_id, "ecDNA", feature_bed))
 
     if classD["BFB+"] == "Positive":
-        feature_id = "_".join([amplicon_id, "BFB", "1"])
-        feature_specs.append((feature_id, "BFB", os.path.join(class_bed_dir, feature_id + "_intervals.bed")))
+        # An amplicon can carry several disjoint BFB features (BFB_1, BFB_2, ...).
+        BFB_files = sorted(
+            [x for x in os.listdir(class_bed_dir)
+             if x.startswith(amplicon_id + "_") and x.rsplit("_")[-3] == "BFB"],
+            key=feature_sort_key
+        )
+        if not BFB_files:
+            BFB_files = ["_".join([amplicon_id, "BFB", "1"]) + "_intervals.bed"]
+        for BFB_file in BFB_files:
+            feature_specs.append((BFB_file[:-14], "BFB", os.path.join(class_bed_dir, BFB_file)))
 
     if classD.get("FAN+", "None detected") == "Positive":
         feature_id = "_".join([amplicon_id, "FAN", "1"])
@@ -385,12 +393,12 @@ def write_html_table(output_table_lines, html_ofname):
 
 def make_results_table(input_file, classification_file, summary_map=None, sample_metadata_file="",
                        run_metadata_file="", cnv_bed="", sample_metadata_list="", run_metadata_list="",
-                       sample_cnv_bed_list="", ref=None):
+                       sample_cnv_bed_list="", ref=None, cycles_graph_lookup=None):
     """
     Main function to create results table from AC outputs.
 
     Args:
-        input_file: Path to .input file produced by make_input.sh
+        input_file: Path to .input file produced by make_input.sh (may be None if cycles_graph_lookup is given)
         classification_file: Path of amplicon_classification_profiles.tsv file
         summary_map: Path to the _summary_map.txt file (optional)
         sample_metadata_file: Path of sample metadata json (optional)
@@ -400,6 +408,8 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
         run_metadata_list: Path of file mapping sample name to run json (optional)
         sample_cnv_bed_list: Path of file mapping sample name to CNV bed (optional)
         ref: Reference genome name (optional if metadata files provided)
+        cycles_graph_lookup: Optional dict of amplicon ID -> (cycles, graph) paths, used in place of input_file
+            (e.g. single-amplicon runs with no .input file)
     """
     if not run_metadata_file and not run_metadata_list and not ref:
         sys.stderr.write("One of the following must be provided: --ref | --run_metadata_list | --run_metadata_file\n")
@@ -411,7 +421,8 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
     if ldir == "/files/": ldir = "files/"
     if not os.path.exists(ldir): os.makedirs(ldir)
 
-    if not summary_map:
+    input_label = input_file if input_file else "single-amplicon run"
+    if not summary_map and input_file:
         summary_map = input_file.rsplit(".input", 1)[0] + "_summary_map.txt"
 
     sumf_used = set()
@@ -450,7 +461,7 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
                 sample_cnv_calls_path[fields[0]] = fields[1]
 
     result_rows = []
-    cyc_graph_lookup_dct = cycles_graph_amp_lookup(input_file)
+    cyc_graph_lookup_dct = cycles_graph_lookup if cycles_graph_lookup else cycles_graph_amp_lookup(input_file)
     with open(classification_file) as classification_file_handle:
         classBedDir = classBase + "_classification_bed_files/"
         gene_file = classBase + "_gene_list.tsv"
@@ -499,7 +510,7 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
             sample_name = classD['sample_name']
             ampliconID = "_".join([classD["sample_name"], classD["amplicon_number"]])
             if ampliconID not in cyc_graph_lookup_dct:
-                raise ValueError("Classification amplicon {} not found in input {}".format(ampliconID, input_file))
+                raise ValueError("Classification amplicon {} not found in input {}".format(ampliconID, input_label))
             cycles_file, graph_file = cyc_graph_lookup_dct[ampliconID]
             shutil.copy(cycles_file, ldir)
             shutil.copy(graph_file, ldir)
@@ -529,7 +540,7 @@ def make_results_table(input_file, classification_file, summary_map=None, sample
             # TODO: REVISE THIS ERROR AFTER NEW MATCHING OF INPUTS TO CLASSIFICATIONS
             if sample_name + "_amplicon" + AA_amplicon_number != ampliconID:
                 sys.stderr.write(sample_name + "_amplicon" + AA_amplicon_number + " | " + ampliconID + "\n")
-                sys.stderr.write("Amplicon names in " + input_file + " do not match "
+                sys.stderr.write("Amplicon names in " + input_label + " do not match "
                                  + classification_file + "\n")
                 sys.exit(1)
 

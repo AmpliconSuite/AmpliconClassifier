@@ -33,10 +33,11 @@ DEFAULT_CONFIG = {
     # bfb-related items
     "min_fb_read_prop": 0.25,          # min proportion of SV reads in foldbacks to call BFB
     "fb_break_weight_prop": 0.3,       # min proportion of utilized path/cycle SVs supporting BFB foldbacks (weighted by flow)
-    "fb_dist_cut": 50000,              # max distance between ends for inversion to be foldback
+    "fb_dist_cut": 50000,              # max distance between ends for inversion to be foldback (BFBArchitect is fixed at 50000; keep matched)
     "max_foldback_edges_qc": 100,      # max foldback edge count before treating the amplicon as a QC artifact
     "max_nonbfb_break_weight": 0.5,    # max proportion of utilized path/cycle SVs supporting non-foldback connections
     "min_bfb_cycle_weight_ratio": 0.6,  # minimum flow*length weighted proportion of BFB-like paths/cycles for BFB
+    "min_bfb_feature_size": 5000,      # minimum BFB feature size (bp) after CN trimming; smaller features are dropped
     "bfbarchitect_max_score": 2.8,     # maximum BFBArchitect score considered passing
     "bfbarchitect_cycle_overlap_threshold": 0.95,  # min cycle overlap with BFBArchitect intervals to mark BFB
     "bfbarchitect_min_lp_bound": 25,  # stop Gurobi early when the root LP relaxation bound exceeds this value

@@ -30,12 +30,22 @@ class ConfigVars:
         # bfb-related items
         min_fb_read_prop = 0.25
         fb_break_weight_prop = 0.3
+        # Max distance (bp) between the two ends of a same-chromosome, same-orientation SV for it to count
+        # as a foldback; a BFB foldback folds back on itself near the breakage point. Also reused in
+        # classifyBFB as the minimum amplified size (tot_over_min_cn) for a native BFB call.
+        # BFBArchitect currently hardcodes its own 50 kbp foldback cutoff, so keeping this at 50000 is
+        # recommended; AC warns at startup when they differ.
         fb_dist_cut = 50000
         min_flow = 1.0
         max_foldback_edges_qc = 100
+        # Foldback density limit for the dense_foldback_artifact QC: more than 2 foldbacks at more than
+        # one per min_bp_per_foldback bp of amplicon sequence is taken as artifactual inversions (e.g.
+        # library/alignment artifacts), not BFB, and suppresses BFB/ecDNA calls and BFBArchitect.
+        # Deliberately not exposed in the config JSON.
         min_bp_per_foldback = 50000
         max_nonbfb_break_weight = 0.5
         min_bfb_cycle_weight_ratio = 0.6
+        min_bfb_feature_size = 5000
         bfbarchitect_max_score = 2.8
         bfbarchitect_cycle_overlap_threshold = 0.95
         bfbarchitect_min_lp_bound = 25

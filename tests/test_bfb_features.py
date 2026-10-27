@@ -16,8 +16,10 @@ from amplicon_classifier import (
     is_foldback_qc_artifact,
     interval_dict_from_intervals,
     merge_bfb_features,
+    restrict_to_amplified_graph_segments,
     snap_bfbarchitect_intervals,
 )
+from intervaltree import IntervalTree
 
 
 class BFBFeatureTests(unittest.TestCase):
@@ -406,6 +408,42 @@ class BFBFeatureTests(unittest.TestCase):
         self.assertEqual(result, [])
         self.assertEqual(calls, [True])
         self.assertIn("min_lp_bound", logs.output[0])
+
+    def test_bfbarchitect_region_is_restricted_to_amplified_graph_segments(self):
+        graph_cns = defaultdict(IntervalTree)
+        graph_cns["chr1"].addi(100, 200, 6.0)
+        graph_cns["chr1"].addi(500, 600, 6.0)
+        graph_cns["chr1"].addi(600, 700, 2.0)
+        region = interval_dict_from_intervals([("chr1", 150, 700)])
+
+        restricted = restrict_to_amplified_graph_segments(region, graph_cns)
+
+        self.assertEqual(restricted["chr1"], [(150, 200), (500, 600)])
+
+    def _build_native_bfb(self, seg_lengths):
+        segSeqD = {0: (None, 0, 0)}
+        graph_cns = defaultdict(IntervalTree)
+        cycleList, start = [], 1000
+        for ind, length in enumerate(seg_lengths, 1):
+            segSeqD[ind] = ("chr1", start, start + length - 1)
+            graph_cns["chr1"].addi(start, start + length, 10.0)
+            cycleList.append([ind])
+            start += length + 1000000
+
+        old_args = getattr(ac, "args", None)
+        try:
+            ac.args = SimpleNamespace(ref="GRCh38", add_chr_tag=False)
+            return ac.build_bfb_features(list(range(len(cycleList))), {}, cycleList, segSeqD, [], None, graph_cns)
+        finally:
+            ac.args = old_args
+
+    def test_bfb_feature_below_min_size_is_dropped(self):
+        self.assertEqual(self._build_native_bfb([3000]), [])
+
+    def test_bfb_feature_at_min_size_is_kept(self):
+        features = self._build_native_bfb([6000])
+
+        self.assertEqual([f.feature_id for f in features], ["BFB_1"])
 
 
 if __name__ == "__main__":
