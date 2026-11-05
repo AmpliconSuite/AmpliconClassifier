@@ -446,5 +446,26 @@ class BFBFeatureTests(unittest.TestCase):
         self.assertEqual([f.feature_id for f in features], ["BFB_1"])
 
 
+class BFBArchitectImportWarningTests(unittest.TestCase):
+    def test_missing_package_is_reported_as_not_installed(self):
+        error = ModuleNotFoundError("No module named 'bfbarchitect'", name="bfbarchitect")
+
+        self.assertIn("BFBArchitect is not installed.", ac.bfbarchitect_import_warning(error))
+
+    def test_missing_dependency_is_reported_with_its_cause(self):
+        error = ModuleNotFoundError("No module named 'pysam'", name="pysam")
+        warning = ac.bfbarchitect_import_warning(error)
+
+        self.assertNotIn("not installed", warning)
+        self.assertIn("No module named 'pysam'", warning)
+
+    def test_missing_name_in_installed_package_is_reported_with_its_cause(self):
+        error = ImportError("cannot import name 'visualize_BFB' from 'bfbarchitect'", name="bfbarchitect")
+        warning = ac.bfbarchitect_import_warning(error)
+
+        self.assertNotIn("not installed", warning)
+        self.assertIn("cannot import name 'visualize_BFB'", warning)
+
+
 if __name__ == "__main__":
     unittest.main()

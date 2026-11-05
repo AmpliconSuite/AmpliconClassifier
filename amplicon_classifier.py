@@ -69,6 +69,15 @@ def get_bfbarchitect_version(bfbarchitect_module):
     return str(getattr(bfbarchitect_module, "__version__", None) or "unknown")
 
 
+def bfbarchitect_import_warning(error):
+    """Describe a failed BFBArchitect import. An installed copy can fail too, from a broken dependency or old version."""
+    if isinstance(error, ModuleNotFoundError) and error.name == "bfbarchitect":
+        problem = "BFBArchitect is not installed."
+    else:
+        problem = "BFBArchitect could not be loaded ({}).".format(error)
+    return problem + " Skipping BFBArchitect integration. Use --no_bfbarchitect to suppress this warning."
+
+
 def is_non_feature_amplicon_class(amp_class):
     return amp_class in {NO_AMP_INVALID_INTERNAL_CLASS, NO_FSCNA_CLASS, INVALID_CLASS}
 
@@ -2640,9 +2649,8 @@ if __name__ == "__main__":
             else:
                 logger.warning("BFBArchitect is installed but centromeres could not be loaded. Skipping BFBArchitect.")
 
-        except ImportError:
-            logger.warning("BFBArchitect is not installed. Skipping BFBArchitect integration. Use --no_bfbarchitect "
-                           "to suppress this warning.")
+        except ImportError as e:
+            logger.warning(bfbarchitect_import_warning(e))
 
     if args.exclude_bed:
         addtnl_lcD = buildLCDatabase(args.exclude_bed, filtsize=0)
