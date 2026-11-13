@@ -1,5 +1,7 @@
 import gzip
 import logging
+import os
+import re
 
 from intervaltree import IntervalTree
 
@@ -629,3 +631,92 @@ def write_classification_results(args, classification_results, categories, summa
         classification_results.fan_results,
         classification_results.contains_viral_list,
     )
+
+
+# CoRAL writes one "Cycle Decomposition Status: <status>" line per amplicon in its summary file. PARTIAL means a
+# time limit stopped greedy cycle decomposition before it explained the usual share of the amplicon. AA and
+# ecSimulator summaries have no status lines, so nothing below applies to them.
+CORAL_AMPLICON_ID_RE = re.compile(r"^AmpliconID = (\d+)\s*$")
+CORAL_STATUS_PREFIX = "Cycle Decomposition Status:"
+CORAL_PARTIAL_DETAIL_PREFIXES = ("Stopped early:", "CN-weighted length explained:", "Path constraints satisfied:")
+
+
+def read_partial_decompositions(summary_path):
+    """Return {"amplicon<N>": [detail lines]} for amplicons CoRAL reported as PARTIAL in summary_path.
+
+    Returns {} for summaries without CoRAL status lines (AA, ecSimulator) and for unreadable files.
+    """
+    partial = {}
+    current_amp = None
+    in_partial_block = False
+    try:
+        with open(summary_path) as infile:
+            for line in infile:
+                stripped = line.strip()
+                id_match = CORAL_AMPLICON_ID_RE.match(line)
+                if id_match:
+                    current_amp = "amplicon" + id_match.group(1)
+                    in_partial_block = False
+                elif stripped.startswith(CORAL_STATUS_PREFIX):
+                    status = stripped[len(CORAL_STATUS_PREFIX):].strip()
+                    in_partial_block = status == "PARTIAL" and current_amp is not None
+                    if in_partial_block:
+                        partial[current_amp] = []
+                elif in_partial_block and line.startswith("\t") and stripped.startswith(CORAL_PARTIAL_DETAIL_PREFIXES):
+                    partial[current_amp].append(stripped)
+                elif not line.startswith("\t"):
+                    in_partial_block = False
+    except (OSError, UnicodeDecodeError) as e:
+        logger.debug("Could not read summary file %s to check decomposition status: %s", summary_path, e)
+        return {}
+
+    return partial
+
+
+def read_summary_paths(summary_map_file):
+    """Read a make_input.sh _summary_map.txt file into {sample_name: summary_path}."""
+    summary_paths = {}
+    with open(summary_map_file) as infile:
+        for line in infile:
+            fields = line.rstrip("\n").split("\t")
+            if len(fields) > 1 and fields[1]:
+                summary_paths[fields[0]] = fields[1]
+
+    return summary_paths
+
+
+def find_summary_beside_cycles(cycles_file, sample_name):
+    """Find the AA/CoRAL summary file next to a cycles file given on the command line, or return None."""
+    cycles_dir = os.path.dirname(os.path.abspath(cycles_file))
+    for fname in (sample_name + "_summary.txt", sample_name + "_amplicon_summary.txt"):
+        candidate = os.path.join(cycles_dir, fname)
+        if os.path.isfile(candidate):
+            return candidate
+
+    return None
+
+
+def warn_partial_decompositions(amplicon_inputs, summary_paths):
+    """Log one warning per input amplicon whose CoRAL cycle decomposition was PARTIAL.
+
+    summary_paths maps sample name to summary file. Classification is not changed. Returns the number of warnings.
+    """
+    partial_by_sample = {}
+    n_warned = 0
+    for amplicon_input in amplicon_inputs:
+        sname = amplicon_input.sample_name
+        summary_path = summary_paths.get(sname)
+        if not summary_path:
+            continue
+        if sname not in partial_by_sample:
+            partial_by_sample[sname] = read_partial_decompositions(summary_path)
+        details = partial_by_sample[sname].get(amplicon_input.amplicon_number)
+        if details is None:
+            continue
+        detail_str = (" " + "; ".join(d.rstrip(".") for d in details) + ".") if details else ""
+        logger.warning("%s %s: CoRAL cycle decomposition is PARTIAL (stopped early by a time limit).%s "
+                       "Classification uses an incomplete set of cycles/paths.",
+                       sname, amplicon_input.amplicon_number, detail_str)
+        n_warned += 1
+
+    return n_warned
