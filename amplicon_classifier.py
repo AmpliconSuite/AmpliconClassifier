@@ -2717,6 +2717,15 @@ if __name__ == "__main__":
             logger.error("  Empty: {}".format(f))
         sys.exit(1)
 
+    # Warn (without changing classification) about CoRAL decompositions that a time limit stopped early.
+    if isinstance(summary_map, str):
+        summary_paths = read_summary_paths(summary_map)
+    else:
+        sname = next(iter(summary_map))
+        found_summary = find_summary_beside_cycles(args.cycles, sname)
+        summary_paths = {sname: found_summary} if found_summary else {}
+    warn_partial_decompositions(amplicon_inputs, summary_paths)
+
     if amplicon_inputs:
         first_amplicon = amplicon_inputs[0]
         last_amplicon = amplicon_inputs[-1]
